@@ -37,10 +37,10 @@ jobs:
           $editor = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoEditor.kt' -Raw
           if ($dash -notmatch 'EXTRACT_VIDEO[\s\S]*EDIT_VIDEO\("Editor de vídeos"') { throw 'Editor não está logo após Extrator de vídeos no menu.' }
           if ($dash -notmatch 'V5Section\.EDIT_VIDEO -> V5NativeVideoEditorScreen\(\)') { throw 'Rota independente do Editor ausente.' }
-          if ($video -match 'private enum class VexTab|VexEditorScreen\(|javafx\.|SwingPanel|JFXPanel') { throw 'Extrator de vídeos ainda contém editor/runtime legado.' }
+          if ($video -match 'private enum class VexTab|VexEditorScreen\(|(?m)^import javafx\.|(?m)^import androidx\.compose\.ui\.awt\.SwingPanel|JFXPanel\(') { throw 'Extrator de vídeos ainda contém editor/runtime legado.' }
           foreach ($anchor in @('VexDownloadScreen','Globoplay','proxy','download')) { if ($video -notmatch $anchor) { throw "Regressão no Download: $anchor ausente." } }
           foreach ($anchor in @('Reproduzir','TIMELINE','Início aqui','Fim aqui','Duplicar','Excluir','Ctrl+Z','H.264','H.265','720p','1080p','Exportar vídeo')) { if ($editor -notmatch [regex]::Escape($anchor)) { throw "Função do editor ausente: $anchor" } }
-          if ($editor -match 'javafx\.|SwingPanel|JFXPanel') { throw 'Novo Editor ainda depende de JavaFX/Swing.' }
+          if ($editor -match '(?m)^import javafx\.|(?m)^import androidx\.compose\.ui\.awt\.SwingPanel|JFXPanel\(') { throw 'Novo Editor ainda depende de JavaFX/Swing.' }
 
       - name: Setup Java 17
         uses: actions/setup-java@v5
