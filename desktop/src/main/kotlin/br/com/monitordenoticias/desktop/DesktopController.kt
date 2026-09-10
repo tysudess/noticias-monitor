@@ -3,8 +3,12 @@ package br.com.monitordenoticias.desktop
 import android.content.Context
 import br.com.monitordenoticias.android.*
 import kotlinx.coroutines.*
+import org.jsoup.Jsoup
 import java.net.Authenticator
 import java.net.PasswordAuthentication
+import java.net.URI
+import java.net.URL
+import java.net.URLDecoder
 import java.security.Security
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -35,6 +39,14 @@ class DesktopController(
     @Volatile var status = "Pronto"
     @Volatile var videoStatus = "Pronto"
     @Volatile var unstableVideoSources: List<VideoSourceIssue> = emptyList()
+    @Volatile var newNewsLinks: Set<String> = emptySet()
+        private set
+    @Volatile var newVideoLinks: Set<String> = emptySet()
+        private set
+    @Volatile var lastNewsSearchDurationMs: Long = 0L
+        private set
+    @Volatile var lastVideoSearchDurationMs: Long = 0L
+        private set
 
     var newsAllSources: Boolean
         get() = prefs.getBoolean("desktop_news_all_sources", true)
@@ -48,13 +60,48 @@ class DesktopController(
         get() = prefs.getStringSet("desktop_video_source_ids", VideoSourceCatalog.defaultIds).orEmpty()
         set(v) { prefs.edit().putStringSet("desktop_video_source_ids", v).apply() }
 
+    var automaticMonitoring: Boolean
+        get() = prefs.getBoolean("desktop_automatic_monitoring", true)
+        set(v) { prefs.edit().putBoolean("desktop_automatic_monitoring", v).apply() }
+
+    var newsAutomatic: Boolean
+        get() = prefs.getBoolean("desktop_news_automatic", true)
+        set(v) { prefs.edit().putBoolean("desktop_news_automatic", v).apply() }
+
+    var demandAutomatic: Boolean
+        get() = prefs.getBoolean("desktop_demand_automatic", true)
+        set(v) { prefs.edit().putBoolean("desktop_demand_automatic", v).apply() }
+
+    var videoAutomatic: Boolean
+        get() = prefs.getBoolean("desktop_video_automatic", true)
+        set(v) { prefs.edit().putBoolean("desktop_video_automatic", v).apply() }
+
     var newsIntervalMinutes: Int
         get() = prefs.getInt("desktop_news_interval", 30).coerceAtLeast(15)
         set(v) { prefs.edit().putInt("desktop_news_interval", v.coerceAtLeast(15)).apply() }
 
-    var automaticMonitoring: Boolean
-        get() = prefs.getBoolean("desktop_automatic_monitoring", true)
-        set(v) { prefs.edit().putBoolean("desktop_automatic_monitoring", v).apply() }
+    var demandIntervalMinutes: Int
+        get() = prefs.getInt("desktop_demand_interval", 60).coerceAtLeast(15)
+        set(v) { prefs.edit().putInt("desktop_demand_interval", v.coerceAtLeast(15)).apply() }
+
+    var videoScheduleTimes: Set<String>
+        get() = prefs.getStringSet("desktop_video_schedule_times", setOf("08:00", "12:00", "15:00", "19:00", "21:00")).orEmpty()
+            .filter { runCatching { LocalTime.parse(it) }.isSuccess }.toSet()
+        set(v) {
+            val clean = v.mapNotNull { raw -> runCatching { LocalTime.parse(raw.trim()).format(DateTimeFormatter.ofPattern("HH:mm")) }.getOrNull() }.toSet()
+            prefs.edit().putStringSet("desktop_video_schedule_times", clean).apply()
+        }
+
+    val lastNewsAutoAt: Long get() = prefs.getLong("desktop_auto_news_at", 0L)
+    val lastDemandAutoAt: Long get() = prefs.getLong("desktop_auto_demands_at", 0L)
+    val lastVideoAutoAt: Long get() = prefs.getLong("desktop_auto_video_at", 0L)
+
+    var startWithWindows: Boolean
+        get() = prefs.getBoolean("desktop_start_with_windows", false)
+        set(v) {
+            prefs.edit().putBoolean("desktop_start_with_windows", v).apply()
+            configureWindowsStartup(v)
+        }
 
     var proxyEnabled: Boolean
         get() = prefs.getBoolean("desktop_proxy_enabled", false)
@@ -82,7 +129,7 @@ class DesktopController(
     val proxyStatusLabel: String
         get() = when {
             !proxyEnabled -> "Proxy desativado"
-            proxyReady -> "Proxy configurado"
+            proxyReady -> "Proxy pronto"
             else -> "Proxy requer configuração"
         }
 
@@ -130,23 +177,61 @@ class DesktopController(
             System.setProperty("http.proxyPassword", pass)
             System.setProperty("https.proxyPassword", pass)
         }
-
-        // Permite autenticação Basic também em túneis HTTPS quando o proxy exigir.
         runCatching { Security.setProperty("jdk.http.auth.tunneling.disabledSchemes", "") }
         runCatching { Security.setProperty("jdk.http.auth.proxying.disabledSchemes", "") }
-
-        if (user.isNotBlank() && pass.isNotBlank()) {
-            Authenticator.setDefault(object : Authenticator() {
-                override fun getPasswordAuthentication(): PasswordAuthentication? {
-                    return if (requestorType == RequestorType.PROXY) {
-                        PasswordAuthentication(user, pass.toCharArray())
-                    } else null
-                }
-            })
-        } else {
-            Authenticator.setDefault(null)
-        }
+        Authenticator.setDefault(
+            if (user.isNotBlank() && pass.isNotBlank()) object : Authenticator() {
+                override fun getPasswordAuthentication(): PasswordAuthentication? =
+                    if (requestorType == RequestorType.PROXY) PasswordAuthentication(user, pass.toCharArray()) else null
+            } else null
+        )
     }
+
+    suspend fun testProxyConnection(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        if (!proxyEnabled) return@withContext false to "Ative o proxy antes de testar."
+        if (!proxyReady) return@withContext false to "Informe usuário e senha do proxy."
+        runCatching {
+            applyProxySettings()
+            val response = Jsoup.connect("https://www.google.com/generate_204")
+                .userAgent("Mozilla/5.0 MonitorDeNoticias/4.0.2")
+                .timeout(12000)
+                .ignoreHttpErrors(true)
+                .execute()
+            if (response.statusCode() in 200..399) true to "Conexão pelo proxy realizada com sucesso."
+            else false to "Proxy respondeu HTTP ${response.statusCode()}."
+        }.getOrElse { false to "Falha no proxy: ${it.message ?: it.javaClass.simpleName}" }
+    }
+
+    suspend fun resolveVehicleUrl(link: String): String = withContext(Dispatchers.IO) {
+        if (!isGoogleNewsLink(link)) return@withContext link
+        queryParameter(link, "url")?.let { decoded -> if (decoded.startsWith("http")) return@withContext decoded }
+        runCatching {
+            val response = Jsoup.connect(link)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36")
+                .timeout(12000)
+                .followRedirects(true)
+                .ignoreHttpErrors(true)
+                .execute()
+            val redirected = response.url().toString()
+            if (!isGoogleNewsLink(redirected)) return@runCatching redirected
+            val doc = response.parse()
+            val candidates = buildList {
+                doc.selectFirst("link[rel=canonical]")?.absUrl("href")?.takeIf { it.isNotBlank() }?.let(::add)
+                doc.selectFirst("meta[property=og:url]")?.attr("content")?.takeIf { it.isNotBlank() }?.let(::add)
+                doc.select("a[href]").map { it.absUrl("href") }.filter { it.startsWith("http") }.forEach(::add)
+            }
+            candidates.firstOrNull { !isGoogleNewsLink(it) && !it.contains("google.com", true) } ?: link
+        }.getOrDefault(link)
+    }
+
+    private fun isGoogleNewsLink(link: String): Boolean = runCatching {
+        URI(link).host.orEmpty().contains("news.google.com", true)
+    }.getOrDefault(link.contains("news.google.com", true))
+
+    private fun queryParameter(link: String, key: String): String? = runCatching {
+        URI(link).rawQuery?.split('&')?.firstOrNull { it.substringBefore('=') == key }
+            ?.substringAfter('=', "")?.let { URLDecoder.decode(it, Charsets.UTF_8.name()) }
+    }.getOrNull()
 
     fun refresh() {
         news = newsDb.listRecent(24, 1000)
@@ -159,12 +244,14 @@ class DesktopController(
     private fun selectedNewsSources(): List<MediaSource> =
         if (newsAllSources) emptyList() else SourceCatalog.selected(selectedNewsSourceIds)
 
-    private fun selectedVideoSources(): List<VideoSource> =
-        VideoSourceCatalog.selected(selectedVideoSourceIds)
+    private fun selectedVideoSources(): List<VideoSource> = VideoSourceCatalog.selected(selectedVideoSourceIds)
 
     fun searchNews(from: Long? = null, to: Long? = null) {
         if (newsBusy) return
         scope.launch {
+            val started = System.currentTimeMillis()
+            val before = newsDb.listNews(5000).map { it.link }.toSet()
+            newNewsLinks = emptySet()
             newsBusy = true
             status = if (from == null) "Buscando notícias..." else "Buscando notícias no período..."
             try {
@@ -180,11 +267,13 @@ class DesktopController(
                     }
                 }
                 refresh()
+                newNewsLinks = newsDb.listNews(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 status = "✓ ${result.newCount} nova(s) notícia(s) • ${result.newDemandCount} demanda(s) • ${result.errors} falha(s)"
                 if (result.newCount + result.newDemandCount > 0) notify("Monitor de Notícias", status)
             } catch (t: Throwable) {
                 status = "Falha na busca de notícias: ${t.message ?: t.javaClass.simpleName}"
             } finally {
+                lastNewsSearchDurationMs = System.currentTimeMillis() - started
                 newsBusy = false
             }
         }
@@ -193,11 +282,14 @@ class DesktopController(
     fun searchDemand(demand: Demand) {
         if (newsBusy) return
         scope.launch {
+            val before = newsDb.listNews(5000).map { it.link }.toSet()
+            newNewsLinks = emptySet()
             newsBusy = true
             status = "Buscando demanda: ${demand.vehicle} • ${demand.subject}"
             try {
                 val result = newsRepository.searchDemand(demand)
                 refresh()
+                newNewsLinks = newsDb.listNews(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 status = "✓ Demanda: ${result.foundCount} resultado(s), ${result.newCount} novo(s)"
                 if (result.newCount > 0) notify("Nova demanda encontrada", "${demand.vehicle} • ${demand.subject}: ${result.newCount}")
             } catch (t: Throwable) {
@@ -209,11 +301,14 @@ class DesktopController(
     fun searchAllDemands() {
         if (newsBusy) return
         scope.launch {
+            val before = newsDb.listNews(5000).map { it.link }.toSet()
+            newNewsLinks = emptySet()
             newsBusy = true
             status = "Buscando todas as demandas..."
             try {
                 val result = newsRepository.searchAllDemands()
                 refresh()
+                newNewsLinks = newsDb.listNews(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 status = "✓ ${result.checkedCount} demanda(s) • ${result.foundCount} resultado(s) • ${result.newCount} novo(s)"
                 if (result.newCount > 0) notify("Demandas", "${result.newCount} novo(s) resultado(s)")
             } catch (t: Throwable) {
@@ -225,6 +320,9 @@ class DesktopController(
     fun searchVideos(from: Long? = null, to: Long? = null) {
         if (videoBusy) return
         scope.launch {
+            val started = System.currentTimeMillis()
+            val before = videoDb.listAll(5000).map { it.link }.toSet()
+            newVideoLinks = emptySet()
             videoBusy = true
             videoStatus = if (from == null) "Buscando vídeos..." else "Buscando vídeos no período..."
             try {
@@ -244,22 +342,26 @@ class DesktopController(
                 }
                 unstableVideoSources = result.unstableSources
                 refresh()
+                newVideoLinks = videoDb.listAll(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 videoStatus = "✓ ${result.relevantCount} relevante(s) • ${result.newRelevantCount} novo(s) • ${result.errors} fonte(s) instável(is)"
                 if (result.newRelevantCount > 0) notify("Novos vídeos", "${result.newRelevantCount} vídeo(s) relevante(s)")
             } catch (t: Throwable) {
                 videoStatus = "Falha na busca de vídeos: ${t.message ?: t.javaClass.simpleName}"
-            } finally { videoBusy = false }
+            } finally {
+                lastVideoSearchDurationMs = System.currentTimeMillis() - started
+                videoBusy = false
+            }
         }
     }
 
-    fun addTerm(value: String) { newsDb.addTerm(value); refresh() }
+    fun addTerm(value: String) { if (value.isNotBlank()) { newsDb.addTerm(value.trim()); refresh() } }
     fun removeTerm(value: String) { newsDb.removeTerm(value); refresh() }
-    fun addVideoTerm(value: String) { VideoTermStore.add(context, value, terms); refresh() }
+    fun addVideoTerm(value: String) { if (value.isNotBlank()) { VideoTermStore.add(context, value.trim(), terms); refresh() } }
     fun removeVideoTerm(value: String) { VideoTermStore.remove(context, value, terms); refresh() }
-    fun addDemand(vehicle: String, subject: String) { newsDb.addDemand(vehicle, subject); refresh() }
+    fun addDemand(vehicle: String, subject: String) { if (vehicle.isNotBlank() && subject.isNotBlank()) { newsDb.addDemand(vehicle.trim(), subject.trim()); refresh() } }
     fun removeDemand(id: Long) { newsDb.removeDemand(id); refresh() }
-    fun clearNewsHistory() { newsDb.clearHistory(); refresh() }
-    fun clearVideoHistory() { videoDb.clear(); refresh() }
+    fun clearNewsHistory() { newsDb.clearHistory(); newNewsLinks = emptySet(); refresh() }
+    fun clearVideoHistory() { videoDb.clear(); newVideoLinks = emptySet(); refresh() }
 
     fun setNewsSource(id: String, selected: Boolean) {
         val next = selectedNewsSourceIds.toMutableSet()
@@ -274,7 +376,7 @@ class DesktopController(
         selectedVideoSourceIds = next
     }
 
-    fun selectAllNewsSources() { newsAllSources = true; selectedNewsSourceIds = SourceCatalog.all.map { it.id }.toSet() }
+    fun selectAllNewsSources() { newsAllSources = false; selectedNewsSourceIds = SourceCatalog.all.map { it.id }.toSet() }
     fun clearNewsSources() { newsAllSources = false; selectedNewsSourceIds = emptySet() }
     fun selectAllVideoSources() { selectedVideoSourceIds = VideoSourceCatalog.all.map { it.id }.toSet() }
     fun clearVideoSources() { selectedVideoSourceIds = emptySet() }
@@ -289,30 +391,52 @@ class DesktopController(
         start to end
     }.getOrNull()
 
+    fun periodLastHours(hours: Int): Pair<Long, Long> {
+        val end = System.currentTimeMillis()
+        return (end - hours * 60L * 60L * 1000L) to end
+    }
+
     private suspend fun automationLoop() {
         while (currentCoroutineContext().isActive) {
             if (automaticMonitoring) {
                 val now = System.currentTimeMillis()
-                val lastNews = prefs.getLong("desktop_auto_news_at", 0L)
-                if (!newsBusy && now - lastNews >= newsIntervalMinutes * 60_000L) {
+                val newsDue = newsAutomatic && now - lastNewsAutoAt >= newsIntervalMinutes * 60_000L
+                val demandDue = demandAutomatic && now - lastDemandAutoAt >= demandIntervalMinutes * 60_000L
+                if (!newsBusy && newsDue) {
                     prefs.edit().putLong("desktop_auto_news_at", now).apply()
                     searchNews()
-                }
-                val lastDemand = prefs.getLong("desktop_auto_demands_at", 0L)
-                if (!newsBusy && now - lastDemand >= 60L * 60L * 1000L) {
+                } else if (!newsBusy && demandDue) {
                     prefs.edit().putLong("desktop_auto_demands_at", now).apply()
                     searchAllDemands()
                 }
-                val dt = LocalDateTime.now()
-                if (dt.minute < 2 && dt.hour in setOf(8, 12, 15, 19, 21) && !videoBusy) {
-                    val key = dt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH"))
-                    if (prefs.getString("desktop_auto_video_slot", "") != key) {
-                        prefs.edit().putString("desktop_auto_video_slot", key).apply()
-                        searchVideos()
+
+                if (videoAutomatic && !videoBusy) {
+                    val dt = LocalDateTime.now()
+                    val slot = dt.format(DateTimeFormatter.ofPattern("HH:mm"))
+                    if (slot in videoScheduleTimes) {
+                        val key = dt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm"))
+                        if (prefs.getString("desktop_auto_video_slot", "") != key) {
+                            prefs.edit().putString("desktop_auto_video_slot", key).putLong("desktop_auto_video_at", now).apply()
+                            searchVideos()
+                        }
                     }
                 }
             }
-            delay(60_000L)
+            delay(30_000L)
+        }
+    }
+
+    private fun configureWindowsStartup(enabled: Boolean) {
+        if (!System.getProperty("os.name", "").contains("Windows", true)) return
+        runCatching {
+            val command = ProcessHandle.current().info().command().orElse("")
+            if (command.isBlank()) return@runCatching
+            val args = if (enabled) {
+                listOf("reg", "add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "MonitorDeNoticias", "/t", "REG_SZ", "/d", "\"$command\"", "/f")
+            } else {
+                listOf("reg", "delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "MonitorDeNoticias", "/f")
+            }
+            ProcessBuilder(args).redirectErrorStream(true).start().waitFor()
         }
     }
 
