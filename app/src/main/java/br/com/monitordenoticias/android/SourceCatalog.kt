@@ -280,6 +280,20 @@ object SourceCatalog {
             aliases = listOf("Tecnologia & Defesa", "Tecnologia e Defesa", "tecnodefesa.com.br")
         ),
         MediaSource(
+            id = "especializada-defesa-aerea-naval",
+            name = "Defesa Aérea & Naval",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf(
+                "Defesa Aérea e Naval",
+                "Defesa Aerea e Naval",
+                "DAN",
+                "defesaaereanaval.com.br"
+            )
+        ),
+        MediaSource(
             id = "especializada-agencia-marinha",
             name = "Agência Marinha de Notícias",
             region = NATIONAL_REGION,
