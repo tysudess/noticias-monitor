@@ -344,6 +344,38 @@ private object VexFxRuntime {
     }
 }
 
+private object VexFxRuntime {
+    private val started = AtomicBoolean(false)
+    private val ready = CompletableFuture<Unit>()
+
+    private fun ensureStarted() {
+        if (!started.compareAndSet(false, true)) return
+        Thread({
+            try {
+                Platform.startup {
+                    Platform.setImplicitExit(false)
+                    ready.complete(Unit)
+                }
+            } catch (_: IllegalStateException) {
+                // JavaFX was already initialized by another component.
+                ready.complete(Unit)
+            } catch (t: Throwable) {
+                ready.completeExceptionally(t)
+            }
+        }, "monitor-video-javafx-startup").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    fun run(action: () -> Unit) {
+        ensureStarted()
+        ready.whenComplete { _, error ->
+            if (error == null) runCatching { Platform.runLater(action) }
+        }
+    }
+}
+
 private class VexFxPreview {
     private var player: MediaPlayer? = null
     private var mediaView: MediaView? = null
@@ -391,7 +423,7 @@ private class VexFxPreview {
                 playing = false
                 frame = null
 
-                val timer = Timeline(KeyFrame(javafx.util.Duration.millis(125.0)) { captureFrameFx() }).apply {
+                val timer = Timeline(KeyFrame(javafx.util.Duration.millis(125.0), javafx.event.EventHandler { captureFrameFx() })).apply {
                     cycleCount = Timeline.INDEFINITE
                 }
                 frameTimer = timer
@@ -452,7 +484,7 @@ private class VexFxPreview {
     fun pause() = VexFxRuntime.run { player?.pause() }
     fun seek(ms: Long) = VexFxRuntime.run {
         player?.seek(javafx.util.Duration.millis(ms.coerceAtLeast(0L).toDouble()))
-        Timeline(KeyFrame(javafx.util.Duration.millis(80.0)) { captureFrameFx() }).play()
+        Timeline(KeyFrame(javafx.util.Duration.millis(80.0), javafx.event.EventHandler { captureFrameFx() })).play()
     }
     fun toggle() = VexFxRuntime.run {
         if (player?.status == MediaPlayer.Status.PLAYING) player?.pause() else player?.play()
