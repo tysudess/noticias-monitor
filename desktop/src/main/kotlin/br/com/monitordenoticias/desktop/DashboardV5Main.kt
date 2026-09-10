@@ -68,6 +68,7 @@ private enum class V5Section(val label: String, val subtitle: String, val icon: 
     DEMANDS("Demandas", "Assuntos prioritários acompanhados por veículo", Icons.Default.Assignment),
     SOURCES("Fontes", "Fontes nacionais, regionais e mídias especializadas", Icons.Default.Storage),
     EXTRACT_NEWS("Extrator de notícias", "Extração de matérias integrada ao Monitor", Icons.Default.Description),
+    EXTRACT_VIDEO("Extrator de vídeos", "Download e edição em timeline integrados ao Monitor", Icons.Default.VideoLibrary),
     HISTORY("Histórico", "Histórico local das buscas e resultados", Icons.Default.History),
     TERMS("Termos", "Termos independentes para notícias e vídeos", Icons.Default.Search),
     STOP("Parar buscas", "Interrompa buscas manuais em andamento", Icons.Default.StopCircle),
@@ -159,6 +160,7 @@ private fun V5App(c: DesktopControllerV5) {
                             V5Section.DEMANDS -> V5DemandsScreen(c, tick)
                             V5Section.SOURCES -> V5SourcesScreen(c, tick)
                             V5Section.EXTRACT_NEWS -> V5NativeNewsExtractorScreen()
+                            V5Section.EXTRACT_VIDEO -> V5NativeVideoExtractorScreen()
                             V5Section.HISTORY -> V5HistoryScreen(c, tick)
                             V5Section.TERMS -> V5TermsScreen(c, tick)
                             V5Section.STOP -> V5StopScreen(c, tick)
