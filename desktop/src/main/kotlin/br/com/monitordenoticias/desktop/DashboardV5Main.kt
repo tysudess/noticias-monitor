@@ -67,6 +67,7 @@ private enum class V5Section(val label: String, val subtitle: String, val icon: 
     VIDEOS("Vídeos", "Busca e acompanhamento de vídeos relevantes", Icons.Default.PlayCircle),
     DEMANDS("Demandas", "Assuntos prioritários acompanhados por veículo", Icons.Default.Assignment),
     SOURCES("Fontes", "Fontes nacionais, regionais e mídias especializadas", Icons.Default.Storage),
+    EXTRACT_NEWS("Extrator de notícias", "Extrator de Matérias Windows v1.25.19 integrado", Icons.Default.Description),
     HISTORY("Histórico", "Histórico local das buscas e resultados", Icons.Default.History),
     TERMS("Termos", "Termos independentes para notícias e vídeos", Icons.Default.Search),
     STOP("Parar buscas", "Interrompa buscas manuais em andamento", Icons.Default.StopCircle),
@@ -98,7 +99,7 @@ fun main() = application {
             Item("Buscar demandas agora", onClick = { controller.searchAllDemands() })
             Item("Parar buscas", onClick = { controller.stopAllSearches() })
             Separator()
-            Item("Sair", onClick = { controller.close(); exitApplication() })
+            Item("Sair", onClick = { shutdownIntegratedTools(); controller.close(); exitApplication() })
         }
     )
 
@@ -157,6 +158,7 @@ private fun V5App(c: DesktopControllerV5) {
                             V5Section.VIDEOS -> V5VideosScreen(c, tick)
                             V5Section.DEMANDS -> V5DemandsScreen(c, tick)
                             V5Section.SOURCES -> V5SourcesScreen(c, tick)
+                            V5Section.EXTRACT_NEWS -> V5IntegratedNewsExtractorScreen()
                             V5Section.HISTORY -> V5HistoryScreen(c, tick)
                             V5Section.TERMS -> V5TermsScreen(c, tick)
                             V5Section.STOP -> V5StopScreen(c, tick)
