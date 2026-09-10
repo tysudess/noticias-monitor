@@ -31,6 +31,48 @@ jobs:
       - name: Create Windows distributable
         run: gradle :desktop:createDistributable --stacktrace
 
+      - name: Verify packaged JVM modules
+        shell: pwsh
+        run: |
+          $release = Get-Content 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/runtime/release' -Raw
+          Write-Host $release
+          foreach ($module in @('java.sql', 'java.instrument', 'jdk.unsupported')) {
+            if ($release -notmatch [regex]::Escape($module)) {
+              throw "Required JVM module missing from packaged runtime: $module"
+            }
+          }
+
+      - name: Smoke test packaged Windows launcher
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/MonitorDeNoticias.exe'
+          $p = Start-Process -FilePath $exe -PassThru
+          try {
+            $expected = 'Monitor de Notícias - Windows Portable v4.0.2'
+            $opened = $false
+            for ($i = 0; $i -lt 20; $i++) {
+              Start-Sleep -Seconds 1
+              $p.Refresh()
+              if ($p.HasExited) {
+                throw "Packaged launcher exited early with code $($p.ExitCode)"
+              }
+              Write-Host "Window title: '$($p.MainWindowTitle)'"
+              if ($p.MainWindowTitle -eq $expected) {
+                $opened = $true
+                break
+              }
+              if ($p.MainWindowTitle -like '*MonitorDeNoticias.exe*') {
+                throw "Launcher opened an error dialog instead of the application window: $($p.MainWindowTitle)"
+              }
+            }
+            if (-not $opened) {
+              throw "Application window did not open within 20 seconds. Last title: '$($p.MainWindowTitle)'"
+            }
+          }
+          finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
       - name: Upload Windows portable app image
         uses: actions/upload-artifact@v4
         with:
