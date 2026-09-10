@@ -3,6 +3,9 @@ package br.com.monitordenoticias.desktop
 import android.content.Context
 import br.com.monitordenoticias.android.*
 import kotlinx.coroutines.*
+import java.net.Authenticator
+import java.net.PasswordAuthentication
+import java.security.Security
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -53,9 +56,96 @@ class DesktopController(
         get() = prefs.getBoolean("desktop_automatic_monitoring", true)
         set(v) { prefs.edit().putBoolean("desktop_automatic_monitoring", v).apply() }
 
+    var proxyEnabled: Boolean
+        get() = prefs.getBoolean("desktop_proxy_enabled", false)
+        set(v) { prefs.edit().putBoolean("desktop_proxy_enabled", v).apply(); applyProxySettings() }
+
+    var proxyHost: String
+        get() = prefs.getString("desktop_proxy_host", "proxy-7db.mb").orEmpty().ifBlank { "proxy-7db.mb" }
+        set(v) { prefs.edit().putString("desktop_proxy_host", v.trim()).apply() }
+
+    var proxyPort: Int
+        get() = prefs.getInt("desktop_proxy_port", 6060).coerceIn(1, 65535)
+        set(v) { prefs.edit().putInt("desktop_proxy_port", v.coerceIn(1, 65535)).apply() }
+
+    var proxyUsername: String
+        get() = prefs.getString("desktop_proxy_username", "").orEmpty()
+        set(v) { prefs.edit().putString("desktop_proxy_username", v).apply() }
+
+    var proxyPassword: String
+        get() = prefs.getString("desktop_proxy_password", "").orEmpty()
+        set(v) { prefs.edit().putString("desktop_proxy_password", v).apply() }
+
+    val proxyReady: Boolean
+        get() = proxyEnabled && proxyHost.isNotBlank() && proxyPort in 1..65535 && proxyUsername.isNotBlank() && proxyPassword.isNotBlank()
+
+    val proxyStatusLabel: String
+        get() = when {
+            !proxyEnabled -> "Proxy desativado"
+            proxyReady -> "Proxy configurado"
+            else -> "Proxy requer configuração"
+        }
+
     init {
+        applyProxySettings()
         refresh()
         scope.launch { automationLoop() }
+    }
+
+    fun saveProxy(enabled: Boolean, host: String, port: Int, username: String, password: String) {
+        prefs.edit()
+            .putBoolean("desktop_proxy_enabled", enabled)
+            .putString("desktop_proxy_host", host.trim().ifBlank { "proxy-7db.mb" })
+            .putInt("desktop_proxy_port", port.coerceIn(1, 65535))
+            .putString("desktop_proxy_username", username.trim())
+            .putString("desktop_proxy_password", password)
+            .apply()
+        applyProxySettings()
+    }
+
+    fun applyProxySettings() {
+        val enabled = prefs.getBoolean("desktop_proxy_enabled", false)
+        val host = prefs.getString("desktop_proxy_host", "proxy-7db.mb").orEmpty().ifBlank { "proxy-7db.mb" }
+        val port = prefs.getInt("desktop_proxy_port", 6060).coerceIn(1, 65535)
+        val user = prefs.getString("desktop_proxy_username", "").orEmpty()
+        val pass = prefs.getString("desktop_proxy_password", "").orEmpty()
+
+        if (!enabled) {
+            listOf("http.proxyHost", "http.proxyPort", "https.proxyHost", "https.proxyPort", "http.proxyUser", "http.proxyPassword", "https.proxyUser", "https.proxyPassword")
+                .forEach(System::clearProperty)
+            Authenticator.setDefault(null)
+            return
+        }
+
+        System.setProperty("http.proxyHost", host)
+        System.setProperty("http.proxyPort", port.toString())
+        System.setProperty("https.proxyHost", host)
+        System.setProperty("https.proxyPort", port.toString())
+        System.setProperty("http.nonProxyHosts", "localhost|127.*|[::1]")
+        if (user.isNotBlank()) {
+            System.setProperty("http.proxyUser", user)
+            System.setProperty("https.proxyUser", user)
+        }
+        if (pass.isNotBlank()) {
+            System.setProperty("http.proxyPassword", pass)
+            System.setProperty("https.proxyPassword", pass)
+        }
+
+        // Permite autenticação Basic também em túneis HTTPS quando o proxy exigir.
+        runCatching { Security.setProperty("jdk.http.auth.tunneling.disabledSchemes", "") }
+        runCatching { Security.setProperty("jdk.http.auth.proxying.disabledSchemes", "") }
+
+        if (user.isNotBlank() && pass.isNotBlank()) {
+            Authenticator.setDefault(object : Authenticator() {
+                override fun getPasswordAuthentication(): PasswordAuthentication? {
+                    return if (requestorType == RequestorType.PROXY) {
+                        PasswordAuthentication(user, pass.toCharArray())
+                    } else null
+                }
+            })
+        } else {
+            Authenticator.setDefault(null)
+        }
     }
 
     fun refresh() {
@@ -172,52 +262,52 @@ class DesktopController(
     fun clearVideoHistory() { videoDb.clear(); refresh() }
 
     fun setNewsSource(id: String, selected: Boolean) {
-        val next=selectedNewsSourceIds.toMutableSet()
-        if(selected) next += id else next -= id
-        selectedNewsSourceIds=next
-        newsAllSources=false
+        val next = selectedNewsSourceIds.toMutableSet()
+        if (selected) next += id else next -= id
+        selectedNewsSourceIds = next
+        newsAllSources = false
     }
 
     fun setVideoSource(id: String, selected: Boolean) {
-        val next=selectedVideoSourceIds.toMutableSet()
-        if(selected) next += id else next -= id
-        selectedVideoSourceIds=next
+        val next = selectedVideoSourceIds.toMutableSet()
+        if (selected) next += id else next -= id
+        selectedVideoSourceIds = next
     }
 
-    fun selectAllNewsSources() { newsAllSources=true; selectedNewsSourceIds=SourceCatalog.all.map { it.id }.toSet() }
-    fun clearNewsSources() { newsAllSources=false; selectedNewsSourceIds=emptySet() }
-    fun selectAllVideoSources() { selectedVideoSourceIds=VideoSourceCatalog.all.map { it.id }.toSet() }
-    fun clearVideoSources() { selectedVideoSourceIds=emptySet() }
+    fun selectAllNewsSources() { newsAllSources = true; selectedNewsSourceIds = SourceCatalog.all.map { it.id }.toSet() }
+    fun clearNewsSources() { newsAllSources = false; selectedNewsSourceIds = emptySet() }
+    fun selectAllVideoSources() { selectedVideoSourceIds = VideoSourceCatalog.all.map { it.id }.toSet() }
+    fun clearVideoSources() { selectedVideoSourceIds = emptySet() }
 
-    fun parsePeriod(startDate:String,startTime:String,endDate:String,endTime:String):Pair<Long,Long>? = runCatching {
-        val zone=ZoneId.systemDefault()
-        val start=LocalDateTime.of(LocalDate.parse(startDate), LocalTime.parse(startTime.ifBlank { "00:00" }))
+    fun parsePeriod(startDate: String, startTime: String, endDate: String, endTime: String): Pair<Long, Long>? = runCatching {
+        val zone = ZoneId.systemDefault()
+        val start = LocalDateTime.of(LocalDate.parse(startDate), LocalTime.parse(startTime.ifBlank { "00:00" }))
             .atZone(zone).toInstant().toEpochMilli()
-        val end=LocalDateTime.of(LocalDate.parse(endDate), LocalTime.parse(endTime.ifBlank { "23:59" }))
+        val end = LocalDateTime.of(LocalDate.parse(endDate), LocalTime.parse(endTime.ifBlank { "23:59" }))
             .atZone(zone).toInstant().toEpochMilli()
-        require(end>=start)
+        require(end >= start)
         start to end
     }.getOrNull()
 
     private suspend fun automationLoop() {
         while (currentCoroutineContext().isActive) {
             if (automaticMonitoring) {
-                val now=System.currentTimeMillis()
-                val lastNews=prefs.getLong("desktop_auto_news_at",0L)
-                if(!newsBusy && now-lastNews >= newsIntervalMinutes*60_000L) {
-                    prefs.edit().putLong("desktop_auto_news_at",now).apply()
+                val now = System.currentTimeMillis()
+                val lastNews = prefs.getLong("desktop_auto_news_at", 0L)
+                if (!newsBusy && now - lastNews >= newsIntervalMinutes * 60_000L) {
+                    prefs.edit().putLong("desktop_auto_news_at", now).apply()
                     searchNews()
                 }
-                val lastDemand=prefs.getLong("desktop_auto_demands_at",0L)
-                if(!newsBusy && now-lastDemand >= 60L*60L*1000L) {
-                    prefs.edit().putLong("desktop_auto_demands_at",now).apply()
+                val lastDemand = prefs.getLong("desktop_auto_demands_at", 0L)
+                if (!newsBusy && now - lastDemand >= 60L * 60L * 1000L) {
+                    prefs.edit().putLong("desktop_auto_demands_at", now).apply()
                     searchAllDemands()
                 }
-                val dt=LocalDateTime.now()
-                if(dt.minute < 2 && dt.hour in setOf(8,12,15,19,21) && !videoBusy) {
-                    val key=dt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH"))
-                    if(prefs.getString("desktop_auto_video_slot","") != key) {
-                        prefs.edit().putString("desktop_auto_video_slot",key).apply()
+                val dt = LocalDateTime.now()
+                if (dt.minute < 2 && dt.hour in setOf(8, 12, 15, 19, 21) && !videoBusy) {
+                    val key = dt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH"))
+                    if (prefs.getString("desktop_auto_video_slot", "") != key) {
+                        prefs.edit().putString("desktop_auto_video_slot", key).apply()
                         searchVideos()
                     }
                 }
@@ -226,11 +316,11 @@ class DesktopController(
         }
     }
 
-    private fun mergeNewsForUi(old:List<News>,fresh:List<News>):List<News> =
-        (fresh+old).distinctBy { it.link }.sortedWith(compareByDescending<News>{it.capturedAt}.thenByDescending{it.date}).take(1500)
+    private fun mergeNewsForUi(old: List<News>, fresh: List<News>): List<News> =
+        (fresh + old).distinctBy { it.link }.sortedWith(compareByDescending<News> { it.capturedAt }.thenByDescending { it.date }).take(1500)
 
-    private fun mergeVideosForUi(old:List<VideoItem>,fresh:List<VideoItem>):List<VideoItem> =
-        (fresh+old).distinctBy { it.link }.sortedWith(compareByDescending<VideoItem>{it.capturedAt}.thenByDescending{it.publishedAt}).take(2000)
+    private fun mergeVideosForUi(old: List<VideoItem>, fresh: List<VideoItem>): List<VideoItem> =
+        (fresh + old).distinctBy { it.link }.sortedWith(compareByDescending<VideoItem> { it.capturedAt }.thenByDescending { it.publishedAt }).take(2000)
 
     override fun close() {
         scope.cancel()
