@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,9 +28,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
 import br.com.monitordenoticias.android.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.awt.Desktop as AwtDesktop
 import java.net.URI
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -39,6 +44,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 private val Navy = Color(0xFF062B55)
 private val NavyDark = Color(0xFF031D3A)
@@ -64,6 +70,21 @@ private enum class ReferenceSection(val label: String, val icon: ImageVector) {
     TERMS("Termos de busca", Icons.Default.Search),
     SETTINGS("Configurações", Icons.Default.Settings)
 }
+
+private data class SearchHit(
+    val title: String,
+    val subtitle: String,
+    val icon: ImageVector,
+    val action: () -> Unit
+)
+
+private data class WeatherInfo(val temperature: Int, val description: String)
+
+private data class DashboardSeries(
+    val news: List<Float>,
+    val videos: List<Float>,
+    val demands: List<Float>
+)
 
 fun main() = application {
     val trayState = rememberTrayState()
@@ -127,7 +148,7 @@ private fun ReferenceApp(c: DesktopController) {
         Row(Modifier.weight(1f).fillMaxWidth()) {
             ReferenceSidebar(section, { section = it }, c)
             Column(Modifier.weight(1f).fillMaxHeight()) {
-                ReferenceHeader(section)
+                ReferenceHeader(section, c, onNavigate = { section = it })
                 if (section == ReferenceSection.HOME) {
                     ReferenceHome(c, onNavigate = { section = it })
                 } else {
@@ -146,7 +167,7 @@ private fun ReferenceApp(c: DesktopController) {
                 }
             }
         }
-        ReferenceFooter()
+        ReferenceFooter(c)
     }
 }
 
@@ -207,13 +228,13 @@ private fun ReferenceSidebar(
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(16.dp).clip(CircleShape).background(Color(0xFF7CE85E)))
+                    Box(Modifier.size(16.dp).clip(CircleShape).background(if (c.automaticMonitoring) Color(0xFF7CE85E) else Yellow))
                     Spacer(Modifier.width(9.dp))
-                    Text("Sistema operacional", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (c.automaticMonitoring) "Sistema operacional" else "Monitoramento pausado", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Text("Dados locais • modo portátil", color = Color(0xFFB6CAE3), fontSize = 12.sp)
-                StatusLine("Proxy autenticado")
-                StatusLine(if (c.automaticMonitoring) "Sistema pronto" else "Monitoramento pausado")
+                StatusLine("Dados persistentes")
+                StatusLine(if (c.automaticMonitoring) "Sistema pronto" else "Automação pausada")
                 HorizontalDivider(color = Color(0xFF1E4E79))
                 Text("Windows Portable v4.0.2", color = Color(0xFFC4D5E9), fontSize = 12.sp)
             }
@@ -233,10 +254,41 @@ private fun StatusLine(text: String) {
 }
 
 @Composable
-private fun ReferenceHeader(section: ReferenceSection) {
+private fun ReferenceHeader(section: ReferenceSection, c: DesktopController, onNavigate: (ReferenceSection) -> Unit) {
     val now = Date()
     val dateText = SimpleDateFormat("EEEE, dd 'de' MMMM 'de' yyyy", Locale("pt", "BR")).format(now)
     val timeText = SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(now)
+    var query by remember { mutableStateOf("") }
+    var searchExpanded by remember { mutableStateOf(false) }
+    var notificationsOpen by remember { mutableStateOf(false) }
+    var weather by remember { mutableStateOf<WeatherInfo?>(null) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            weather = fetchWeather()
+            delay(15L * 60L * 1000L)
+        }
+    }
+
+    val q = query.trim()
+    val hits = if (q.length < 2) emptyList() else buildList {
+        c.news.asSequence().filter { "${it.title} ${it.source} ${it.matchedTerm} ${it.matchedDemand}".contains(q, true) }.take(3).forEach { n ->
+            add(SearchHit(n.title, "Notícia • ${n.source}", Icons.Default.Article) { openUrl(n.link) })
+        }
+        c.videos.asSequence().filter { "${it.title} ${it.sourceName} ${it.matchedTerm} ${it.matchedDemand}".contains(q, true) }.take(2).forEach { v ->
+            add(SearchHit(v.title, "Vídeo • ${v.sourceName}", Icons.Default.PlayCircle) { openUrl(v.link) })
+        }
+        c.demands.asSequence().filter { "${it.vehicle} ${it.subject}".contains(q, true) }.take(2).forEach { d ->
+            add(SearchHit("${d.vehicle} • ${d.subject}", "Demanda", Icons.Default.Assignment) { onNavigate(ReferenceSection.DEMANDS) })
+        }
+        SourceCatalog.all.asSequence().filter { "${it.name} ${it.group} ${it.stateName}".contains(q, true) }.take(2).forEach { s ->
+            add(SearchHit(s.name, "Fonte • ${s.group}", Icons.Default.Storage) { onNavigate(ReferenceSection.SOURCES) })
+        }
+        c.terms.asSequence().filter { it.contains(q, true) }.take(2).forEach { term ->
+            add(SearchHit(term, "Termo de busca", Icons.Default.Search) { onNavigate(ReferenceSection.TERMS) })
+        }
+    }.take(8)
+
     Row(
         Modifier.fillMaxWidth().height(95.dp).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -260,29 +312,93 @@ private fun ReferenceHeader(section: ReferenceSection) {
             }
         }
 
-        Surface(
-            modifier = Modifier.width(455.dp).height(48.dp).shadow(7.dp, RoundedCornerShape(13.dp)),
-            color = Color.White,
-            shape = RoundedCornerShape(13.dp),
-            border = BorderStroke(1.dp, Color(0xFFD8E6F8))
-        ) {
-            Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Search, null, tint = Color(0xFF164B93), modifier = Modifier.size(25.dp))
-                Spacer(Modifier.width(12.dp))
-                Text("Buscar notícias, vídeos, demandas ou fontes...", color = Muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                Surface(color = Color(0xFFEAF2FC), shape = RoundedCornerShape(9.dp)) {
-                    Text("Ctrl + K", color = Color(0xFF34537C), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
+        Box {
+            Surface(
+                modifier = Modifier.width(455.dp).height(48.dp).shadow(7.dp, RoundedCornerShape(13.dp)),
+                color = Color.White,
+                shape = RoundedCornerShape(13.dp),
+                border = BorderStroke(1.dp, Color(0xFFD8E6F8))
+            ) {
+                Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search, null, tint = Color(0xFF164B93), modifier = Modifier.size(25.dp))
+                    Spacer(Modifier.width(12.dp))
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it; searchExpanded = it.isNotBlank() },
+                        singleLine = true,
+                        textStyle = LocalTextStyle.current.copy(color = Ink, fontSize = 12.sp),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { inner ->
+                            if (query.isBlank()) Text("Buscar notícias, vídeos, demandas ou fontes...", color = Muted, fontSize = 12.sp)
+                            inner()
+                        }
+                    )
+                    if (query.isNotBlank()) {
+                        IconButton(onClick = { query = ""; searchExpanded = false }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        }
+                    } else {
+                        Surface(color = Color(0xFFEAF2FC), shape = RoundedCornerShape(9.dp)) {
+                            Text("buscar", color = Color(0xFF34537C), fontSize = 10.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
+                        }
+                    }
+                }
+            }
+            DropdownMenu(
+                expanded = searchExpanded && q.length >= 2,
+                onDismissRequest = { searchExpanded = false },
+                modifier = Modifier.width(455.dp)
+            ) {
+                if (hits.isEmpty()) {
+                    DropdownMenuItem(text = { Text("Nenhum resultado encontrado") }, onClick = { searchExpanded = false })
+                } else {
+                    hits.forEach { hit ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(hit.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                                    Text(hit.subtitle, color = Muted, fontSize = 10.sp)
+                                }
+                            },
+                            leadingIcon = { Icon(hit.icon, null, tint = Blue) },
+                            onClick = { searchExpanded = false; hit.action() }
+                        )
+                    }
                 }
             }
         }
 
         Spacer(Modifier.width(22.dp))
-        Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.NotificationsNone, null, tint = Color(0xFF184D91), modifier = Modifier.size(27.dp))
-            Box(Modifier.align(Alignment.TopEnd).offset((-1).dp, 2.dp).size(9.dp).clip(CircleShape).background(Color(0xFFE81F31)))
+        Box {
+            Box(Modifier.size(42.dp).clickable { notificationsOpen = true }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.NotificationsNone, null, tint = Color(0xFF184D91), modifier = Modifier.size(27.dp))
+                if (c.newsBusy || c.videoBusy || c.status != "Pronto" || c.videoStatus != "Pronto") {
+                    Box(Modifier.align(Alignment.TopEnd).offset((-1).dp, 2.dp).size(9.dp).clip(CircleShape).background(Color(0xFFE81F31)))
+                }
+            }
+            DropdownMenu(expanded = notificationsOpen, onDismissRequest = { notificationsOpen = false }, modifier = Modifier.width(360.dp)) {
+                DropdownMenuItem(
+                    text = { Column { Text("Notícias", fontWeight = FontWeight.Bold); Text(c.status, fontSize = 11.sp, color = Muted, maxLines = 2) } },
+                    leadingIcon = { Icon(Icons.Default.Article, null, tint = Blue) },
+                    onClick = { notificationsOpen = false; onNavigate(ReferenceSection.NEWS) }
+                )
+                DropdownMenuItem(
+                    text = { Column { Text("Vídeos", fontWeight = FontWeight.Bold); Text(c.videoStatus, fontSize = 11.sp, color = Muted, maxLines = 2) } },
+                    leadingIcon = { Icon(Icons.Default.PlayCircle, null, tint = Purple) },
+                    onClick = { notificationsOpen = false; onNavigate(ReferenceSection.VIDEOS) }
+                )
+                DropdownMenuItem(
+                    text = { Text(if (c.automaticMonitoring) "Monitoramento automático ativo" else "Monitoramento automático pausado") },
+                    leadingIcon = { Icon(if (c.automaticMonitoring) Icons.Default.CheckCircle else Icons.Default.PauseCircle, null, tint = if (c.automaticMonitoring) Green else Orange) },
+                    onClick = { notificationsOpen = false; onNavigate(ReferenceSection.SETTINGS) }
+                )
+            }
         }
         Spacer(Modifier.width(14.dp))
-        Box(Modifier.size(42.dp).clip(CircleShape).background(Color(0xFF164B8C)), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(42.dp).clip(CircleShape).background(Color(0xFF164B8C)).clickable { onNavigate(ReferenceSection.SETTINGS) },
+            contentAlignment = Alignment.Center
+        ) {
             Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(27.dp))
         }
         Spacer(Modifier.width(16.dp))
@@ -295,35 +411,59 @@ private fun ReferenceHeader(section: ReferenceSection) {
             color = Color(0xFFF7FBFF),
             shape = RoundedCornerShape(16.dp),
             border = BorderStroke(1.dp, Color(0xFFE1ECF9)),
-            modifier = Modifier.width(126.dp).height(60.dp)
+            modifier = Modifier.width(126.dp).height(60.dp).clickable { openUrl("https://www.google.com/search?q=tempo+S%C3%A3o+Paulo+SP") }
         ) {
             Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.WbSunny, null, tint = Color(0xFFFFB21A), modifier = Modifier.size(29.dp))
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text("São Paulo - SP", color = Muted, fontSize = 8.sp)
-                    Text("24°C", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("Tempo limpo", color = Muted, fontSize = 8.sp)
+                    Text(weather?.let { "${it.temperature}°C" } ?: "--°C", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(weather?.description ?: "Atualizando...", color = Muted, fontSize = 8.sp, maxLines = 1)
                 }
             }
         }
     }
 }
 
+private suspend fun fetchWeather(): WeatherInfo? = withContext(Dispatchers.IO) {
+    runCatching {
+        val text = URL("https://api.open-meteo.com/v1/forecast?latitude=-23.5505&longitude=-46.6333&current=temperature_2m,weather_code&timezone=America%2FSao_Paulo").readText()
+        val current = JSONObject(text).getJSONObject("current")
+        val temp = current.getDouble("temperature_2m").roundToInt()
+        val code = current.getInt("weather_code")
+        WeatherInfo(temp, weatherDescription(code))
+    }.getOrNull()
+}
+
+private fun weatherDescription(code: Int): String = when (code) {
+    0 -> "Tempo limpo"
+    1, 2 -> "Parcialmente nublado"
+    3 -> "Nublado"
+    45, 48 -> "Neblina"
+    51, 53, 55, 56, 57 -> "Garoa"
+    61, 63, 65, 66, 67, 80, 81, 82 -> "Chuva"
+    71, 73, 75, 77, 85, 86 -> "Neve"
+    95, 96, 99 -> "Trovoadas"
+    else -> "Condição atual"
+}
+
 @Composable
 private fun ReferenceHome(c: DesktopController, onNavigate: (ReferenceSection) -> Unit) {
     val now = System.currentTimeMillis()
     val todayVideos = c.videos.count { now - it.capturedAt < 24L * 60 * 60 * 1000 }
+    val selectedNewsCount = if (c.newsAllSources) SourceCatalog.all.size else c.selectedNewsSourceIds.size
+    val selectedSources = selectedNewsCount + c.selectedVideoSourceIds.size
     Column(
         Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 0.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(Modifier.fillMaxWidth().height(102.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            DashboardMetric("Notícias 24h", c.news.size.toString(), "na janela atual", Icons.Default.Article, Blue, Color(0xFFD9EBFF), Modifier.weight(1f))
-            DashboardMetric("Vídeos armazenados", c.videos.size.toString(), "relevantes na base", Icons.Default.PlayCircleFilled, Purple, Color(0xFFECE0FF), Modifier.weight(1f))
-            DashboardMetric("Vídeos hoje", todayVideos.toString(), "capturados hoje", Icons.Default.Videocam, Green, Color(0xFFD3F8EC), Modifier.weight(1f))
-            DashboardMetric("Demandas", c.demands.count { it.active }.toString(), "${c.demands.count { it.active }} ativas", Icons.Default.Assignment, Orange, Color(0xFFFFEDD1), Modifier.weight(1f))
-            DashboardMetric("Fontes", (SourceCatalog.all.size + VideoSourceCatalog.all.size).toString(), "8 especializadas", Icons.Default.Storage, Pink, Color(0xFFFFDDEA), Modifier.weight(1f), positive = true)
+            DashboardMetric("Notícias 24h", c.news.size.toString(), "na janela atual", Icons.Default.Article, Blue, Color(0xFFD9EBFF), Modifier.weight(1f), if (c.newsBusy) "Buscando" else "Atual", if (c.newsBusy) Orange else Muted) { onNavigate(ReferenceSection.NEWS) }
+            DashboardMetric("Vídeos armazenados", c.videos.size.toString(), "relevantes na base", Icons.Default.PlayCircleFilled, Purple, Color(0xFFECE0FF), Modifier.weight(1f), if (c.videoBusy) "Buscando" else "Atual", if (c.videoBusy) Orange else Muted) { onNavigate(ReferenceSection.VIDEOS) }
+            DashboardMetric("Vídeos hoje", todayVideos.toString(), "capturados hoje", Icons.Default.Videocam, Green, Color(0xFFD3F8EC), Modifier.weight(1f), "24h", Muted) { onNavigate(ReferenceSection.VIDEOS) }
+            DashboardMetric("Demandas", c.demands.count { it.active }.toString(), "${c.demands.count { it.active }} ativas", Icons.Default.Assignment, Orange, Color(0xFFFFEDD1), Modifier.weight(1f), if (c.newsBusy) "Buscando" else "Ativas", if (c.newsBusy) Orange else Muted) { onNavigate(ReferenceSection.DEMANDS) }
+            DashboardMetric("Fontes", (SourceCatalog.all.size + VideoSourceCatalog.all.size).toString(), "$selectedSources selecionadas", Icons.Default.Storage, Pink, Color(0xFFFFDDEA), Modifier.weight(1f), "Catálogo", Green) { onNavigate(ReferenceSection.SOURCES) }
         }
 
         Row(Modifier.fillMaxWidth().height(244.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -332,13 +472,13 @@ private fun ReferenceHome(c: DesktopController, onNavigate: (ReferenceSection) -
         }
 
         Row(Modifier.fillMaxWidth().height(158.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            ScheduleCard(c, Modifier.weight(0.94f))
+            ScheduleCard(c, onNavigate, Modifier.weight(0.94f))
             DaySummaryCard(c, Modifier.weight(1.06f))
         }
 
         Row(Modifier.fillMaxWidth().height(220.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            RelevantSourcesCard(Modifier.weight(0.92f))
-            LatestActivitiesCard(c, Modifier.weight(0.88f))
+            RelevantSourcesCard(c, onNavigate, Modifier.weight(0.92f))
+            LatestActivitiesCard(c, onNavigate, Modifier.weight(0.88f))
             TipsCard(Modifier.weight(0.80f))
         }
         Spacer(Modifier.height(4.dp))
@@ -354,9 +494,11 @@ private fun DashboardMetric(
     accent: Color,
     iconBg: Color,
     modifier: Modifier,
-    positive: Boolean = false
+    statusText: String,
+    statusColor: Color,
+    onClick: () -> Unit
 ) {
-    DashboardCard(modifier) {
+    DashboardCard(modifier.clickable(onClick = onClick)) {
         Row(Modifier.fillMaxSize().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(58.dp).clip(RoundedCornerShape(13.dp)).background(iconBg), contentAlignment = Alignment.Center) {
                 Icon(icon, null, tint = accent, modifier = Modifier.size(32.dp))
@@ -368,7 +510,7 @@ private fun DashboardMetric(
                 Text(subtitle, color = Muted, fontSize = 10.sp, maxLines = 1)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(if (positive) "↗ +2%" else "— 0%", color = if (positive) Green else Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                Text(statusText, color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(10.dp))
                 MiniSparkline(accent)
             }
@@ -420,11 +562,27 @@ private fun IntelligenceHero(c: DesktopController, modifier: Modifier) {
             Spacer(Modifier.weight(1f))
             Surface(color = Color(0xFF074F55), shape = RoundedCornerShape(11.dp), border = BorderStroke(1.dp, Color(0xFF0A8A7B))) {
                 Row(Modifier.width(325.dp).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(17.dp).clip(CircleShape).background(Color(0xFF27E58D)))
+                    Box(Modifier.size(17.dp).clip(CircleShape).background(if (c.automaticMonitoring) Color(0xFF27E58D) else Yellow))
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("Status: ${if (c.automaticMonitoring) "Pronto" else "Pausado"}", color = Color(0xFF2AE795), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text("Monitoramento ativo e funcionando normalmente.", color = Color(0xFFB8D7E2), fontSize = 10.sp)
+                        val busy = c.newsBusy || c.videoBusy
+                        Text(
+                            "Status: ${when { busy -> "Buscando"; c.automaticMonitoring -> "Pronto"; else -> "Pausado" }}",
+                            color = if (c.automaticMonitoring) Color(0xFF2AE795) else Yellow,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            when {
+                                c.newsBusy -> c.status
+                                c.videoBusy -> c.videoStatus
+                                c.automaticMonitoring -> "Monitoramento ativo e funcionando normalmente."
+                                else -> "Ative o monitoramento em Configurações."
+                            },
+                            color = Color(0xFFB8D7E2),
+                            fontSize = 10.sp,
+                            maxLines = 1
+                        )
                     }
                 }
             }
@@ -485,12 +643,12 @@ private fun QuickActions(c: DesktopController, onNavigate: (ReferenceSection) ->
             Spacer(Modifier.height(16.dp))
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    QuickActionButton("Buscar notícias", "Iniciar varredura agora", Icons.Default.Search, listOf(Color(0xFF0587FF), Color(0xFF0D66E9)), { c.searchNews() }, Modifier.weight(1f))
-                    QuickActionButton("Buscar demandas", "Consultar demandas ativas", Icons.Default.Assignment, listOf(Color(0xFFFF850A), Color(0xFFFF9918)), { c.searchAllDemands() }, Modifier.weight(1f))
+                    QuickActionButton("Buscar notícias", if (c.newsBusy) "Busca em andamento..." else "Iniciar varredura agora", Icons.Default.Search, listOf(Color(0xFF0587FF), Color(0xFF0D66E9)), { c.searchNews() }, Modifier.weight(1f), !c.newsBusy)
+                    QuickActionButton("Buscar demandas", if (c.newsBusy) "Aguarde a busca atual" else "Consultar demandas ativas", Icons.Default.Assignment, listOf(Color(0xFFFF850A), Color(0xFFFF9918)), { c.searchAllDemands() }, Modifier.weight(1f), !c.newsBusy)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    QuickActionButton("Buscar vídeos", "Pesquisar novos vídeos", Icons.Default.PlayCircleFilled, listOf(Color(0xFF6A30F3), Color(0xFF9147F8)), { c.searchVideos() }, Modifier.weight(1f))
-                    QuickActionButton("Termos de busca", "Gerenciar palavras-chave", Icons.Default.Search, listOf(Color(0xFF06AA70), Color(0xFF16C590)), { onNavigate(ReferenceSection.TERMS) }, Modifier.weight(1f))
+                    QuickActionButton("Buscar vídeos", if (c.videoBusy) "Busca em andamento..." else "Pesquisar novos vídeos", Icons.Default.PlayCircleFilled, listOf(Color(0xFF6A30F3), Color(0xFF9147F8)), { c.searchVideos() }, Modifier.weight(1f), !c.videoBusy)
+                    QuickActionButton("Termos de busca", "Gerenciar palavras-chave", Icons.Default.Search, listOf(Color(0xFF06AA70), Color(0xFF16C590)), { onNavigate(ReferenceSection.TERMS) }, Modifier.weight(1f), true)
                 }
             }
         }
@@ -504,10 +662,12 @@ private fun QuickActionButton(
     icon: ImageVector,
     colors: List<Color>,
     onClick: () -> Unit,
-    modifier: Modifier
+    modifier: Modifier,
+    enabled: Boolean
 ) {
+    val brush = if (enabled) Brush.horizontalGradient(colors) else Brush.horizontalGradient(colors.map { it.copy(alpha = .55f) })
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(Brush.horizontalGradient(colors)).clickable(onClick = onClick).padding(horizontal = 15.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(brush).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, null, tint = Color.White, modifier = Modifier.size(30.dp))
@@ -521,7 +681,7 @@ private fun QuickActionButton(
 }
 
 @Composable
-private fun ScheduleCard(c: DesktopController, modifier: Modifier) {
+private fun ScheduleCard(c: DesktopController, onNavigate: (ReferenceSection) -> Unit, modifier: Modifier) {
     DashboardCard(modifier) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -529,22 +689,22 @@ private fun ScheduleCard(c: DesktopController, modifier: Modifier) {
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("Agendamento automático", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("O sistema executa buscas automaticamente nos horários definidos.", color = Muted, fontSize = 10.sp)
+                    Text(if (c.automaticMonitoring) "O sistema executa buscas automaticamente nos horários definidos." else "O agendamento está pausado. Clique em um bloco para configurar.", color = Muted, fontSize = 10.sp)
                 }
             }
             Spacer(Modifier.height(12.dp))
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                ScheduleMini("Notícias", "a cada ${c.newsIntervalMinutes} min", Icons.Default.Article, Blue, Color(0xFFDCEEFF), Modifier.weight(1f))
-                ScheduleMini("Demandas", "a cada 60 min", Icons.Default.Assignment, Orange, Color(0xFFFFEBD6), Modifier.weight(1f))
-                ScheduleMini("Vídeos", "08:00, 12:00, 15:00, 19:00, 21:00", Icons.Default.PlayCircleFilled, Purple, Color(0xFFECE0FF), Modifier.weight(1.25f))
+                ScheduleMini("Notícias", "a cada ${c.newsIntervalMinutes} min", Icons.Default.Article, Blue, Color(0xFFDCEEFF), Modifier.weight(1f)) { onNavigate(ReferenceSection.SETTINGS) }
+                ScheduleMini("Demandas", "a cada 60 min", Icons.Default.Assignment, Orange, Color(0xFFFFEBD6), Modifier.weight(1f)) { onNavigate(ReferenceSection.SETTINGS) }
+                ScheduleMini("Vídeos", "08:00, 12:00, 15:00, 19:00, 21:00", Icons.Default.PlayCircleFilled, Purple, Color(0xFFECE0FF), Modifier.weight(1.25f)) { onNavigate(ReferenceSection.SETTINGS) }
             }
         }
     }
 }
 
 @Composable
-private fun ScheduleMini(title: String, value: String, icon: ImageVector, accent: Color, bg: Color, modifier: Modifier) {
-    Surface(modifier = modifier.fillMaxHeight(), color = Color(0xFFF8FBFF), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, Color(0xFFE5EEF9))) {
+private fun ScheduleMini(title: String, value: String, icon: ImageVector, accent: Color, bg: Color, modifier: Modifier, onClick: () -> Unit) {
+    Surface(modifier = modifier.fillMaxHeight().clickable(onClick = onClick), color = Color(0xFFF8FBFF), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, Color(0xFFE5EEF9))) {
         Row(Modifier.padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(43.dp).clip(RoundedCornerShape(10.dp)).background(bg), contentAlignment = Alignment.Center) {
                 Icon(icon, null, tint = accent, modifier = Modifier.size(26.dp))
@@ -560,6 +720,10 @@ private fun ScheduleMini(title: String, value: String, icon: ImageVector, accent
 
 @Composable
 private fun DaySummaryCard(c: DesktopController, modifier: Modifier) {
+    var days by remember { mutableIntStateOf(1) }
+    var menuOpen by remember { mutableStateOf(false) }
+    val series = remember(days, c.news, c.videos) { buildDashboardSeries(c, days) }
+    val rangeLabel = when (days) { 1 -> "Últimas 24 horas"; 7 -> "Últimos 7 dias"; else -> "Últimos 30 dias" }
     DashboardCard(modifier) {
         Column(Modifier.fillMaxSize().padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -567,32 +731,66 @@ private fun DaySummaryCard(c: DesktopController, modifier: Modifier) {
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text("Resumo do dia", color = Ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Panorama geral das últimas 24 horas.", color = Muted, fontSize = 10.sp)
+                    Text("Panorama real de notícias, vídeos e demandas.", color = Muted, fontSize = 10.sp)
                 }
                 Spacer(Modifier.weight(1f))
-                Surface(shape = RoundedCornerShape(10.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFD7E5F5))) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Últimas 24 horas", color = Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Default.ExpandMore, null, tint = Ink, modifier = Modifier.size(17.dp))
+                Box {
+                    Surface(shape = RoundedCornerShape(10.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFD7E5F5)), modifier = Modifier.clickable { menuOpen = true }) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(rangeLabel, color = Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.width(8.dp))
+                            Icon(Icons.Default.ExpandMore, null, tint = Ink, modifier = Modifier.size(17.dp))
+                        }
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        listOf(1 to "Últimas 24 horas", 7 to "Últimos 7 dias", 30 to "Últimos 30 dias").forEach { option ->
+                            DropdownMenuItem(text = { Text(option.second) }, onClick = { days = option.first; menuOpen = false })
+                        }
                     }
                 }
             }
             Spacer(Modifier.height(3.dp))
             Row(Modifier.weight(1f)) {
-                DayChart(Modifier.weight(1f).fillMaxHeight())
-                Column(Modifier.width(90.dp).padding(top = 19.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LegendDot(Blue, "Notícias")
-                    LegendDot(Purple, "Vídeos")
-                    LegendDot(Orange, "Demandas")
+                DayChart(series, Modifier.weight(1f).fillMaxHeight())
+                Column(Modifier.width(105.dp).padding(top = 19.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LegendDot(Blue, "Notícias ${series.news.sum().roundToInt()}")
+                    LegendDot(Purple, "Vídeos ${series.videos.sum().roundToInt()}")
+                    LegendDot(Orange, "Demandas ${series.demands.sum().roundToInt()}")
                 }
             }
         }
     }
 }
 
+private fun buildDashboardSeries(c: DesktopController, days: Int): DashboardSeries {
+    val now = System.currentTimeMillis()
+    val bucketCount = if (days == 1) 24 else days
+    val bucketMs = if (days == 1) 60L * 60L * 1000L else 24L * 60L * 60L * 1000L
+    val newsItems = if (days == 1) c.news else c.newsDb.listNews(5000)
+    val videoItems = if (days <= 7) c.videos else c.videoDb.listAll(5000)
+    val n = MutableList(bucketCount) { 0f }
+    val v = MutableList(bucketCount) { 0f }
+    val d = MutableList(bucketCount) { 0f }
+
+    fun bucket(ts: Long): Int? {
+        if (ts <= 0L) return null
+        val age = now - ts
+        if (age < 0L || age >= bucketMs * bucketCount) return null
+        return bucketCount - 1 - (age / bucketMs).toInt()
+    }
+
+    newsItems.forEach { item ->
+        bucket(item.capturedAt)?.let { index ->
+            n[index] += 1f
+            if (item.demand) d[index] += 1f
+        }
+    }
+    videoItems.forEach { item -> bucket(item.capturedAt)?.let { index -> v[index] += 1f } }
+    return DashboardSeries(n, v, d)
+}
+
 @Composable
-private fun DayChart(modifier: Modifier) {
+private fun DayChart(series: DashboardSeries, modifier: Modifier) {
     Canvas(modifier.padding(start = 14.dp, top = 4.dp, end = 8.dp)) {
         val left = 26f
         val top = 7f
@@ -606,19 +804,21 @@ private fun DayChart(modifier: Modifier) {
             val x = left + (right - left) * i / 8f
             drawLine(Color(0xFFEAF1F9), Offset(x, top), Offset(x, bottom), 1f)
         }
+        val peak = max(1f, max(series.news.maxOrNull() ?: 0f, max(series.videos.maxOrNull() ?: 0f, series.demands.maxOrNull() ?: 0f)))
         fun drawSeries(values: List<Float>, color: Color) {
+            if (values.isEmpty()) return
             val p = Path()
-            values.forEachIndexed { i, v ->
-                val x = left + (right - left) * i / (values.size - 1).toFloat()
-                val y = bottom - (bottom - top) * v
+            values.forEachIndexed { i, raw ->
+                val x = if (values.size == 1) left else left + (right - left) * i / (values.size - 1).toFloat()
+                val y = bottom - (bottom - top) * (raw / peak)
                 if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
                 drawCircle(color, 2.8f, Offset(x, y))
             }
             drawPath(p, color, style = Stroke(2.1f))
         }
-        drawSeries(listOf(.18f,.28f,.37f,.31f,.24f,.17f,.12f,.28f,.38f,.49f,.66f,.48f,.32f,.34f,.37f,.33f,.27f,.32f,.35f,.58f,.72f,.43f,.25f,.15f), Blue)
-        drawSeries(listOf(.03f,.05f,.08f,.06f,.04f,.05f,.03f,.04f,.05f,.06f,.08f,.07f,.09f,.06f,.05f,.07f,.06f,.05f,.04f,.06f,.08f,.05f,.04f,.03f), Purple)
-        drawSeries(listOf(.01f,.02f,.02f,.04f,.09f,.04f,.02f,.03f,.02f,.03f,.05f,.04f,.02f,.03f,.04f,.03f,.02f,.03f,.02f,.03f,.04f,.03f,.02f,.01f), Orange)
+        drawSeries(series.news, Blue)
+        drawSeries(series.videos, Purple)
+        drawSeries(series.demands, Orange)
     }
 }
 
@@ -627,13 +827,14 @@ private fun LegendDot(color: Color, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(7.dp))
-        Text(text, color = Muted, fontSize = 9.sp)
+        Text(text, color = Muted, fontSize = 9.sp, maxLines = 1)
     }
 }
 
 @Composable
-private fun RelevantSourcesCard(modifier: Modifier) {
-    val sources = listOf("Agência Brasil" to "1.245", "CNN Brasil" to "982", "UOL" to "876", "Folha de S.Paulo" to "754", "Estadão" to "689")
+private fun RelevantSourcesCard(c: DesktopController, onNavigate: (ReferenceSection) -> Unit, modifier: Modifier) {
+    val counts = c.news.groupingBy { it.source.ifBlank { "Fonte desconhecida" } }.eachCount().entries.sortedByDescending { it.value }
+    val sources = if (counts.isNotEmpty()) counts.take(5).map { it.key to it.value } else SourceCatalog.all.take(5).map { it.name to 0 }
     DashboardCard(modifier) {
         Column(Modifier.fillMaxSize().padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -641,28 +842,28 @@ private fun RelevantSourcesCard(modifier: Modifier) {
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text("Fontes mais relevantes", color = Ink, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Suas principais fontes monitoradas.", color = Muted, fontSize = 9.sp)
+                    Text("Ranking pelas notícias carregadas.", color = Muted, fontSize = 9.sp)
                 }
                 Spacer(Modifier.weight(1f))
-                Text("Ver todas", color = Blue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("Ver todas", color = Blue, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onNavigate(ReferenceSection.SOURCES) }.padding(4.dp))
             }
             Spacer(Modifier.height(8.dp))
             sources.forEachIndexed { index, pair ->
-                Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f).fillMaxWidth().clickable { onNavigate(ReferenceSection.SOURCES) }, verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(22.dp).clip(CircleShape).background(Color(0xFFE4EFFB)), contentAlignment = Alignment.Center) {
                         Text("${index + 1}", color = Color(0xFF345B8B), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(9.dp))
-                    Box(Modifier.size(19.dp).clip(RoundedCornerShape(4.dp)).background(if (index == 1) Color(0xFFB41018) else Color(0xFF0C4E90)), contentAlignment = Alignment.Center) {
-                        Text(if (index == 1) "CN" else "●", color = Color.White, fontSize = if (index == 1) 7.sp else 8.sp)
+                    Box(Modifier.size(19.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF0C4E90)), contentAlignment = Alignment.Center) {
+                        Text("●", color = Color.White, fontSize = 8.sp)
                     }
                     Spacer(Modifier.width(9.dp))
-                    Text(pair.first, color = Ink, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                    Text(pair.first, color = Ink, fontSize = 10.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Box(Modifier.size(6.dp).clip(CircleShape).background(Green))
                     Spacer(Modifier.width(5.dp))
                     Text("Ativa", color = Green, fontSize = 9.sp)
                     Spacer(Modifier.width(16.dp))
-                    Text(pair.second, color = Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    Text(pair.second.toString(), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
                 if (index < sources.lastIndex) HorizontalDivider(color = Color(0xFFE8EFF8))
             }
@@ -671,7 +872,7 @@ private fun RelevantSourcesCard(modifier: Modifier) {
 }
 
 @Composable
-private fun LatestActivitiesCard(c: DesktopController, modifier: Modifier) {
+private fun LatestActivitiesCard(c: DesktopController, onNavigate: (ReferenceSection) -> Unit, modifier: Modifier) {
     val time = SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(Date())
     DashboardCard(modifier) {
         Column(Modifier.fillMaxSize().padding(14.dp)) {
@@ -680,16 +881,16 @@ private fun LatestActivitiesCard(c: DesktopController, modifier: Modifier) {
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text("Últimas atividades", color = Ink, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Histórico recente de ações no sistema.", color = Muted, fontSize = 9.sp)
+                    Text("Estado recente de ações no sistema.", color = Muted, fontSize = 9.sp)
                 }
                 Spacer(Modifier.weight(1f))
-                Text("Ver histórico", color = Blue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("Ver histórico", color = Blue, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onNavigate(ReferenceSection.HISTORY) }.padding(4.dp))
             }
             Spacer(Modifier.height(8.dp))
-            ActivityLine(Icons.Default.CheckCircle, Green, "Sistema iniciado", "Monitor de Notícias v4.0.2", time)
-            ActivityLine(Icons.Default.Settings, Color(0xFF1B629B), "Configuração carregada", "Proxy autenticado", time)
-            ActivityLine(Icons.Default.Schedule, Orange, "Agendamento ativo", "Próxima busca em ${c.newsIntervalMinutes} min", time)
-            ActivityLine(Icons.Default.Search, Blue, "Busca de fontes concluída", "${SourceCatalog.all.size + VideoSourceCatalog.all.size} fontes verificadas", time)
+            ActivityLine(if (c.automaticMonitoring) Icons.Default.CheckCircle else Icons.Default.PauseCircle, if (c.automaticMonitoring) Green else Orange, if (c.automaticMonitoring) "Sistema operacional" else "Monitoramento pausado", "Monitor de Notícias v4.0.2", time)
+            ActivityLine(Icons.Default.Article, Blue, if (c.newsBusy) "Busca de notícias em andamento" else "Notícias", c.status, time)
+            ActivityLine(Icons.Default.PlayCircle, Purple, if (c.videoBusy) "Busca de vídeos em andamento" else "Vídeos", c.videoStatus, time)
+            ActivityLine(Icons.Default.Storage, Color(0xFF1B629B), "Fontes configuradas", "${if (c.newsAllSources) SourceCatalog.all.size else c.selectedNewsSourceIds.size} notícias • ${c.selectedVideoSourceIds.size} vídeos", time)
         }
     }
 }
@@ -700,8 +901,8 @@ private fun ActivityLine(icon: ImageVector, accent: Color, title: String, subtit
         Icon(icon, null, tint = accent, modifier = Modifier.size(23.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Muted, fontSize = 9.sp, maxLines = 1)
+            Text(title, color = Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(subtitle, color = Muted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(time, color = Muted, fontSize = 9.sp)
     }
@@ -709,6 +910,14 @@ private fun ActivityLine(icon: ImageVector, accent: Color, title: String, subtit
 
 @Composable
 private fun TipsCard(modifier: Modifier) {
+    data class Tip(val title: String, val body: String, val icon: ImageVector)
+    val tips = listOf(
+        Tip("Use termos de busca específicos", "Quanto mais específicos os termos, mais\nrelevantes serão os resultados.", Icons.Default.School),
+        Tip("Escolha suas fontes", "Em Fontes você define exatamente quais\nveículos entram em cada varredura.", Icons.Default.Storage),
+        Tip("Mantenha o app na bandeja", "Fechar a janela não encerra o monitor.\nEle continua executando a automação.", Icons.Default.NotificationsActive)
+    )
+    var index by remember { mutableIntStateOf(0) }
+    val tip = tips[index]
     DashboardCard(modifier) {
         Column(Modifier.fillMaxSize().padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -716,13 +925,13 @@ private fun TipsCard(modifier: Modifier) {
                 Spacer(Modifier.width(10.dp))
                 Text("Dicas e novidades", color = Ink, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
                 Spacer(Modifier.weight(1f))
-                Surface(shape = CircleShape, border = BorderStroke(1.dp, Color(0xFFDCE7F5)), color = Color.White) {
+                Surface(shape = CircleShape, border = BorderStroke(1.dp, Color(0xFFDCE7F5)), color = Color.White, modifier = Modifier.clickable { index = (index + tips.size - 1) % tips.size }) {
                     Icon(Icons.Default.ChevronLeft, null, tint = Ink, modifier = Modifier.padding(5.dp).size(15.dp))
                 }
                 Spacer(Modifier.width(12.dp))
-                Text("1/3", color = Muted, fontSize = 10.sp)
+                Text("${index + 1}/${tips.size}", color = Muted, fontSize = 10.sp)
                 Spacer(Modifier.width(12.dp))
-                Surface(shape = CircleShape, border = BorderStroke(1.dp, Color(0xFFDCE7F5)), color = Color.White) {
+                Surface(shape = CircleShape, border = BorderStroke(1.dp, Color(0xFFDCE7F5)), color = Color.White, modifier = Modifier.clickable { index = (index + 1) % tips.size }) {
                     Icon(Icons.Default.ChevronRight, null, tint = Ink, modifier = Modifier.padding(5.dp).size(15.dp))
                 }
             }
@@ -730,28 +939,29 @@ private fun TipsCard(modifier: Modifier) {
             Surface(Modifier.weight(1f).fillMaxWidth(), color = Color(0xFFEAF4FF), shape = RoundedCornerShape(13.dp)) {
                 Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(58.dp).clip(CircleShape).background(Color(0xFFD4E9FF)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.School, null, tint = Blue, modifier = Modifier.size(34.dp))
+                        Icon(tip.icon, null, tint = Blue, modifier = Modifier.size(34.dp))
                     }
                     Spacer(Modifier.width(16.dp))
                     Column {
-                        Text("Use termos de busca específicos", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(tip.title, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(5.dp))
-                        Text("Quanto mais específicos os termos, mais\nrelevantes serão os resultados.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+                        Text(tip.body, color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
                     }
                 }
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                Box(Modifier.size(11.dp).clip(CircleShape).background(Blue)); Spacer(Modifier.width(14.dp))
-                Box(Modifier.size(11.dp).clip(CircleShape).background(Color(0xFFB9CBE2))); Spacer(Modifier.width(14.dp))
-                Box(Modifier.size(11.dp).clip(CircleShape).background(Color(0xFFB9CBE2)))
+                tips.indices.forEach { i ->
+                    Box(Modifier.size(11.dp).clip(CircleShape).background(if (i == index) Blue else Color(0xFFB9CBE2)).clickable { index = i })
+                    if (i < tips.lastIndex) Spacer(Modifier.width(14.dp))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ReferenceFooter() {
+private fun ReferenceFooter(c: DesktopController) {
     Row(
         Modifier.fillMaxWidth().height(44.dp).background(Color(0xFFF8FBFF)).border(1.dp, Color(0xFFD9E7F7)).padding(horizontal = 26.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -762,9 +972,9 @@ private fun ReferenceFooter() {
         Spacer(Modifier.width(18.dp))
         Text("Inteligência de mídia para melhores decisões", color = Color(0xFF4C6D9F), fontSize = 11.sp)
         Spacer(Modifier.weight(1f))
-        Box(Modifier.size(10.dp).clip(CircleShape).background(Green))
+        Box(Modifier.size(10.dp).clip(CircleShape).background(if (c.automaticMonitoring) Green else Yellow))
         Spacer(Modifier.width(9.dp))
-        Text("Sistema operacional", color = Color(0xFF264D83), fontSize = 10.sp)
+        Text(if (c.automaticMonitoring) "Sistema operacional" else "Automação pausada", color = Color(0xFF264D83), fontSize = 10.sp)
         Spacer(Modifier.width(22.dp))
         Text("|", color = Color(0xFFB3C4DB), fontSize = 14.sp)
         Spacer(Modifier.width(22.dp))
@@ -783,14 +993,36 @@ private fun PanelCard(modifier: Modifier = Modifier, content: @Composable Column
 private fun NewsScreen(c: DesktopController) {
     var onlyDemands by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    val today = remember { LocalDate.now().toString() }
+    var sd by remember { mutableStateOf(today) }
+    var st by remember { mutableStateOf("00:00") }
+    var ed by remember { mutableStateOf(today) }
+    var et by remember { mutableStateOf("23:59") }
+    var periodError by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        PanelCard(Modifier.fillMaxWidth().height(82.dp)) {
+        PanelCard(Modifier.fillMaxWidth().height(145.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { c.searchNews() }, enabled = !c.newsBusy) { Text("Buscar últimas 24h") }
+                Button(onClick = { c.searchNews() }, enabled = !c.newsBusy) { Text(if (c.newsBusy) "Buscando..." else "Buscar últimas 24h") }
                 FilterChip(selected = onlyDemands, onClick = { onlyDemands = !onlyDemands }, label = { Text("Só Demandas") })
-                OutlinedTextField(query, { query = it }, label = { Text("Filtrar") }, singleLine = true, modifier = Modifier.width(300.dp))
+                OutlinedTextField(query, { query = it }, label = { Text("Filtrar resultados") }, singleLine = true, modifier = Modifier.width(300.dp))
                 Spacer(Modifier.weight(1f))
                 Text(c.status, color = Muted, fontSize = 11.sp, maxLines = 2)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(sd, { sd = it }, label = { Text("Data inicial") }, singleLine = true, modifier = Modifier.width(150.dp))
+                OutlinedTextField(st, { st = it }, label = { Text("Hora") }, singleLine = true, modifier = Modifier.width(95.dp))
+                OutlinedTextField(ed, { ed = it }, label = { Text("Data final") }, singleLine = true, modifier = Modifier.width(150.dp))
+                OutlinedTextField(et, { et = it }, label = { Text("Hora") }, singleLine = true, modifier = Modifier.width(95.dp))
+                OutlinedButton(
+                    enabled = !c.newsBusy,
+                    onClick = {
+                        val period = c.parsePeriod(sd, st, ed, et)
+                        if (period == null) periodError = "Período inválido. Use AAAA-MM-DD e HH:MM."
+                        else { periodError = ""; c.searchNews(period.first, period.second) }
+                    }
+                ) { Text("Buscar período") }
+                if (periodError.isNotBlank()) Text(periodError, color = Color(0xFFB2343B), fontSize = 10.sp)
             }
         }
         ProgressPanel("Notícias", c.newsProgress)
@@ -821,16 +1053,38 @@ private fun NewsCard(n: News) {
 private fun VideosScreen(c: DesktopController) {
     var filter by remember { mutableStateOf(VideoFilter.ALL) }
     var query by remember { mutableStateOf("") }
+    val today = remember { LocalDate.now().toString() }
+    var sd by remember { mutableStateOf(today) }
+    var st by remember { mutableStateOf("00:00") }
+    var ed by remember { mutableStateOf(today) }
+    var et by remember { mutableStateOf("23:59") }
+    var periodError by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        PanelCard(Modifier.fillMaxWidth().height(82.dp)) {
+        PanelCard(Modifier.fillMaxWidth().height(145.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = { c.searchVideos() }, enabled = !c.videoBusy) { Text("Buscar vídeos") }
+                Button(onClick = { c.searchVideos() }, enabled = !c.videoBusy) { Text(if (c.videoBusy) "Buscando..." else "Buscar vídeos") }
                 VideoFilter.entries.forEach { f ->
                     FilterChip(selected = filter == f, onClick = { filter = f }, label = { Text(when (f) { VideoFilter.ALL -> "Todos"; VideoFilter.RELEVANT -> "Relevantes"; VideoFilter.DEMANDS -> "Demandas" }) })
                 }
-                OutlinedTextField(query, { query = it }, label = { Text("Filtrar") }, singleLine = true, modifier = Modifier.width(260.dp))
+                OutlinedTextField(query, { query = it }, label = { Text("Filtrar resultados") }, singleLine = true, modifier = Modifier.width(260.dp))
                 Spacer(Modifier.weight(1f))
                 Text(c.videoStatus, color = Muted, fontSize = 11.sp, maxLines = 2)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(sd, { sd = it }, label = { Text("Data inicial") }, singleLine = true, modifier = Modifier.width(150.dp))
+                OutlinedTextField(st, { st = it }, label = { Text("Hora") }, singleLine = true, modifier = Modifier.width(95.dp))
+                OutlinedTextField(ed, { ed = it }, label = { Text("Data final") }, singleLine = true, modifier = Modifier.width(150.dp))
+                OutlinedTextField(et, { et = it }, label = { Text("Hora") }, singleLine = true, modifier = Modifier.width(95.dp))
+                OutlinedButton(
+                    enabled = !c.videoBusy,
+                    onClick = {
+                        val period = c.parsePeriod(sd, st, ed, et)
+                        if (period == null) periodError = "Período inválido. Use AAAA-MM-DD e HH:MM."
+                        else { periodError = ""; c.searchVideos(period.first, period.second) }
+                    }
+                ) { Text("Buscar período") }
+                if (periodError.isNotBlank()) Text(periodError, color = Color(0xFFB2343B), fontSize = 10.sp)
             }
         }
         ProgressPanel("Vídeos", c.videoProgress)
@@ -905,7 +1159,7 @@ private fun DemandsScreen(c: DesktopController) {
                 OutlinedTextField(vehicle, { vehicle = it }, label = { Text("Veículo") }, singleLine = true, modifier = Modifier.width(260.dp))
                 OutlinedTextField(subject, { subject = it }, label = { Text("Assunto") }, singleLine = true, modifier = Modifier.weight(1f))
                 Button(onClick = { c.addDemand(vehicle, subject); vehicle = ""; subject = "" }, enabled = vehicle.isNotBlank() && subject.isNotBlank()) { Text("Adicionar") }
-                OutlinedButton(onClick = { c.searchAllDemands() }, enabled = !c.newsBusy) { Text("Buscar todas") }
+                OutlinedButton(onClick = { c.searchAllDemands() }, enabled = !c.newsBusy) { Text(if (c.newsBusy) "Buscando..." else "Buscar todas") }
             }
         }
         Text(c.status, color = Muted, fontSize = 11.sp)
@@ -919,7 +1173,7 @@ private fun DemandsScreen(c: DesktopController) {
                             if (d.lastError.isNotBlank()) Text(d.lastError, color = Color(0xFFB2343B), fontSize = 10.sp)
                         }
                         OutlinedButton(onClick = { c.searchDemand(d) }, enabled = !c.newsBusy) { Text("Buscar") }
-                        IconButton(onClick = { c.removeDemand(d.id) }) { Icon(Icons.Default.Delete, null) }
+                        IconButton(onClick = { c.removeDemand(d.id) }, enabled = !c.newsBusy) { Icon(Icons.Default.Delete, null) }
                     }
                 }
             }
@@ -938,6 +1192,7 @@ private fun SourcesScreen(c: DesktopController) {
                 FilterChip(selected = videos, onClick = { videos = true }, label = { Text("Vídeos") })
                 OutlinedTextField(query, { query = it }, label = { Text("Filtrar fonte") }, singleLine = true, modifier = Modifier.width(300.dp))
                 Spacer(Modifier.weight(1f))
+                Text(if (videos) "${c.selectedVideoSourceIds.size} selecionadas" else if (c.newsAllSources) "Todas as fontes" else "${c.selectedNewsSourceIds.size} selecionadas", color = Muted, fontSize = 10.sp)
                 OutlinedButton(onClick = { if (videos) c.selectAllVideoSources() else c.selectAllNewsSources() }) { Text("Selecionar todas") }
                 OutlinedButton(onClick = { if (videos) c.clearVideoSources() else c.clearNewsSources() }) { Text("Limpar") }
             }
@@ -1002,6 +1257,21 @@ private fun SettingsScreen(c: DesktopController) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(15, 30, 60, 120).forEach { m -> FilterChip(selected = interval == m, onClick = { interval = m; c.newsIntervalMinutes = m }, label = { Text("$m min") }) }
                 }
+            }
+        }
+        item {
+            PanelCard(Modifier.fillMaxWidth().height(165.dp)) {
+                Text("Execução manual", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = { c.searchNews() }, enabled = !c.newsBusy) { Icon(Icons.Default.Article, null); Spacer(Modifier.width(5.dp)); Text("Buscar notícias") }
+                    Button(onClick = { c.searchVideos() }, enabled = !c.videoBusy) { Icon(Icons.Default.PlayCircle, null); Spacer(Modifier.width(5.dp)); Text("Buscar vídeos") }
+                    OutlinedButton(onClick = { c.searchAllDemands() }, enabled = !c.newsBusy) { Text("Buscar demandas") }
+                    OutlinedButton(onClick = { c.refresh() }) { Text("Recarregar dados") }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(c.status, color = Muted, fontSize = 10.sp)
+                Text(c.videoStatus, color = Muted, fontSize = 10.sp)
             }
         }
         item {
