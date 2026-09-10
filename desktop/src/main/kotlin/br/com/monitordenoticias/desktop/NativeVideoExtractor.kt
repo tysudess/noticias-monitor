@@ -385,7 +385,7 @@ fun V5NativeVideoExtractorScreen() {
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             VexTabButton("Download", Icons.Default.Download, tab == VexTab.DOWNLOAD, Modifier.weight(1f)) { tab = VexTab.DOWNLOAD }
-            VexTabButton("Editor / Timeline", Icons.Default.MovieEdit, tab == VexTab.EDITOR, Modifier.weight(1f)) { tab = VexTab.EDITOR }
+            VexTabButton("Editor / Timeline", Icons.Default.Movie, tab == VexTab.EDITOR, Modifier.weight(1f)) { tab = VexTab.EDITOR }
         }
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
