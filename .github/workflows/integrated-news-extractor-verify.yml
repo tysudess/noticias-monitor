@@ -1,0 +1,116 @@
+name: Verify Monitor + Extrator de Notícias
+
+on:
+  push:
+    branches:
+      - integration/extractors-v1
+  workflow_dispatch:
+
+jobs:
+  build-integrated-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Monitor
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Checkout Extrator de Notícias v1.25.19
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/RODRIGODESS/Extrator-de-noticias-windows.git _integrations/news-src
+          $pkg = Get-Content '_integrations/news-src/package.json' -Raw | ConvertFrom-Json
+          if ($pkg.version -ne '1.25.19') { throw "Versão inesperada do Extrator de Notícias: $($pkg.version)" }
+
+      - name: Build Extrator de Notícias sem alterar o programa
+        shell: pwsh
+        working-directory: _integrations/news-src
+        run: |
+          npm install --no-audit --no-fund
+          npx electron-builder --win dir --x64
+          if (-not (Test-Path 'dist/win-unpacked/Extrator de Materias.exe')) {
+            throw 'Extrator de Materias.exe não foi gerado.'
+          }
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile Monitor integrado
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Create Windows distributable
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Incorporar Extrator de Notícias no Portable
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $dest = Join-Path $root 'tools/ExtratorNoticias'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item '_integrations/news-src/dist/win-unpacked/*' $dest -Recurse -Force
+          if (-not (Test-Path (Join-Path $dest 'Extrator de Materias.exe'))) {
+            throw 'Executável integrado de notícias ausente no pacote final.'
+          }
+
+      - name: Verify packaged JVM modules
+        shell: pwsh
+        run: |
+          $release = Get-Content 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/runtime/release' -Raw
+          foreach ($module in @('java.sql', 'java.instrument', 'jdk.unsupported')) {
+            if ($release -notmatch [regex]::Escape($module)) {
+              throw "Required JVM module missing from packaged runtime: $module"
+            }
+          }
+
+      - name: Verify Monitor launcher initializes
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/MonitorDeNoticias.exe'
+          $p = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $p.Refresh()
+            if ($p.HasExited) { throw "Monitor exited early with code $($p.ExitCode)" }
+          }
+          finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Verify integrated news extractor initializes
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/ExtratorNoticias/Extrator de Materias.exe'
+          $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $p.Refresh()
+            if ($p.HasExited) { throw "Extrator de Notícias exited early with code $($p.ExitCode)" }
+          }
+          finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Create integrated portable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'Monitor-de-Noticias-v4.0.2-INTEGRADO-NOTICIAS.zip' -Force
+
+      - name: Upload integrated portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-de-noticias-integrado-noticias
+          path: Monitor-de-Noticias-v4.0.2-INTEGRADO-NOTICIAS.zip
+          if-no-files-found: error
+          retention-days: 7
