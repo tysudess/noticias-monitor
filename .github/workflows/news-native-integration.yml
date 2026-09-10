@@ -1,0 +1,134 @@
+name: Verify Native News Extractor Integration
+
+on:
+  push:
+    branches:
+      - integration/news-native-v1
+  workflow_dispatch:
+
+jobs:
+  build-native-news:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Monitor
+        uses: actions/checkout@v4
+        with:
+          ref: integration/news-native-v1
+
+      - name: Wire native extractor tab
+        shell: pwsh
+        run: |
+          $dashboard = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt'
+          if (-not (Select-String -Path $dashboard -Pattern 'EXTRACT_NEWS\(' -Quiet)) {
+            python tools/apply-news-native-tab.py
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add $dashboard
+            git commit -m 'feat(desktop): wire native news extractor tab'
+            git push origin HEAD:integration/news-native-v1
+          } else {
+            Write-Host 'Native extractor tab already wired.'
+          }
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Checkout original Extrator de Noticias engine
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch integration/monitor-headless https://github.com/tysudess/Extrator-de-noticias-windows.git _integrations/news-src
+          $pkg = Get-Content '_integrations/news-src/package.json' -Raw | ConvertFrom-Json
+          if ($pkg.version -ne '1.25.19') { throw "Versao inesperada do Extrator de Noticias: $($pkg.version)" }
+          if (-not (Test-Path '_integrations/news-src/monitor-bridge.js')) { throw 'Headless bridge ausente.' }
+
+      - name: Install original engine runtime dependencies
+        shell: pwsh
+        working-directory: _integrations/news-src
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile Monitor with native extractor UI
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Create Windows distributable
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Package headless original extractor core
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $dest = Join-Path $root 'tools/ExtratorNoticiasCore'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item '_integrations/news-src/engine' $dest -Recurse -Force
+          Copy-Item '_integrations/news-src/node_modules' $dest -Recurse -Force
+          Copy-Item '_integrations/news-src/package.json' $dest -Force
+          Copy-Item '_integrations/news-src/monitor-bridge.js' $dest -Force
+          $node = (Get-Command node).Source
+          Copy-Item $node (Join-Path $dest 'node.exe') -Force
+          if (-not (Test-Path (Join-Path $dest 'node.exe'))) { throw 'node.exe ausente do pacote.' }
+          if (-not (Test-Path (Join-Path $dest 'engine/extrator-materia-v1.25.19-runtime.js'))) { throw 'Motor v1.25.19 ausente.' }
+          if (-not (Test-Path (Join-Path $dest 'engine/corretor-rigido-ptbr-v1.25.19.js'))) { throw 'Corretor rigido v1.25.19 ausente.' }
+
+      - name: Verify headless engine state and PT-BR corrector
+        shell: pwsh
+        run: |
+          $core = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/ExtratorNoticiasCore'
+          $node = Join-Path $core 'node.exe'
+          $bridge = Join-Path $core 'monitor-bridge.js'
+          $state = '{"action":"state"}' | & $node $bridge
+          Write-Host $state
+          $s = $state | ConvertFrom-Json
+          if (-not $s.ok) { throw 'Headless engine state failed.' }
+          if ($s.versaoMotor -notmatch '1\.25\.19') { throw "Unexpected engine version: $($s.versaoMotor)" }
+          $review = '{"action":"review","texto":"A Marinha realizara operacao amanha."}' | & $node $bridge
+          Write-Host $review
+          $r = $review | ConvertFrom-Json
+          if (-not $r.ok) { throw 'PT-BR rigid corrector failed.' }
+
+      - name: Verify packaged JVM modules
+        shell: pwsh
+        run: |
+          $release = Get-Content 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/runtime/release' -Raw
+          foreach ($module in @('java.sql', 'java.instrument', 'jdk.unsupported')) {
+            if ($release -notmatch [regex]::Escape($module)) { throw "Required JVM module missing: $module" }
+          }
+
+      - name: Verify Monitor launcher initializes
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/MonitorDeNoticias.exe'
+          $p = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $p.Refresh()
+            if ($p.HasExited) { throw "Monitor exited early with code $($p.ExitCode)" }
+          }
+          finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Create native integrated portable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'Monitor-de-Noticias-v4.0.2-EXTRATOR-NATIVO.zip' -Force
+
+      - name: Upload native integrated portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-de-noticias-extrator-noticias-nativo
+          path: Monitor-de-Noticias-v4.0.2-EXTRATOR-NATIVO.zip
+          if-no-files-found: error
+          retention-days: 7
