@@ -1,0 +1,2 @@
+Verify V8 after a899252f1e67203bc8424e8c9d58813f0b823d9b.
+Checks: News default terms, 5 local/regional sources per UF, specialized defense media, A Tribuna SP, Compose runtime icon.
