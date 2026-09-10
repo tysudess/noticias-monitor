@@ -26,7 +26,19 @@ jobs:
           $pkg = Get-Content '_integrations/news-src/package.json' -Raw | ConvertFrom-Json
           if ($pkg.version -ne '1.25.19') { throw "Versão inesperada do Extrator de Notícias: $($pkg.version)" }
 
-      - name: Build Extrator de Notícias sem alterar o programa
+      - name: Aplicar identidade visual do Monitor no módulo integrado
+        shell: pwsh
+        run: |
+          $themePath = 'integrations/extrator-noticias/monitor-theme.css'
+          $targetCss = '_integrations/news-src/renderer/styles.css'
+          if (-not (Test-Path $themePath)) { throw 'Tema integrado do Extrator de Notícias não encontrado.' }
+          if (-not (Test-Path $targetCss)) { throw 'CSS original do Extrator de Notícias não encontrado.' }
+          $theme = Get-Content $themePath -Raw
+          Add-Content -Path $targetCss -Value "`r`n/* MONITOR DE NOTÍCIAS - TEMA DE INTEGRAÇÃO */`r`n$theme"
+          $patched = Get-Content $targetCss -Raw
+          if ($patched -notmatch 'O Monitor já fornece navegação') { throw 'Tema de integração não foi aplicado.' }
+
+      - name: Build Extrator de Notícias preservando todas as funções
         shell: pwsh
         working-directory: _integrations/news-src
         run: |
@@ -105,12 +117,12 @@ jobs:
       - name: Create integrated portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'Monitor-de-Noticias-v4.0.2-INTEGRADO-NOTICIAS.zip' -Force
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'Monitor-de-Noticias-v4.0.2-INTEGRADO-NOTICIAS-NATIVO.zip' -Force
 
       - name: Upload integrated portable
         uses: actions/upload-artifact@v4
         with:
-          name: monitor-de-noticias-integrado-noticias
-          path: Monitor-de-Noticias-v4.0.2-INTEGRADO-NOTICIAS.zip
+          name: monitor-de-noticias-integrado-noticias-nativo
+          path: Monitor-de-Noticias-v4.0.2-INTEGRADO-NOTICIAS-NATIVO.zip
           if-no-files-found: error
           retention-days: 7
