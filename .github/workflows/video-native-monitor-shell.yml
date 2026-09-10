@@ -1,4 +1,4 @@
-name: Build Monitor Native Video Extractor Shell
+name: Build and Release Monitor with Native Video Extractor
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     steps:
       - name: Checkout Monitor
         uses: actions/checkout@v4
@@ -92,24 +92,134 @@ jobs:
           if (-not $parsed.ok) { throw 'Native News Extractor regression.' }
           if ($parsed.versaoMotor -notmatch '1\.25\.19') { throw "Unexpected News engine version: $($parsed.versaoMotor)" }
 
+      - name: Checkout original Video Extractor headless engine
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch integration/monitor-headless https://github.com/tysudess/extrator-video-windows.git _integrations/video-src
+          if (-not (Test-Path '_integrations/video-src/monitor_bridge.py')) { throw 'Video headless bridge ausente.' }
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Video Extractor dependencies
+        shell: pwsh
+        working-directory: _integrations/video-src
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+
+      - name: Download yt-dlp nightly and stable
+        shell: pwsh
+        working-directory: _integrations/video-src
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe' -OutFile 'bin/yt-dlp.exe'
+          Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' -OutFile 'bin/yt-dlp-stable.exe'
+          & 'bin/yt-dlp.exe' --version
+          & 'bin/yt-dlp-stable.exe' --version
+
+      - name: Download Deno
+        shell: pwsh
+        working-directory: _integrations/video-src
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri 'https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip' -OutFile 'deno.zip'
+          Expand-Archive -Path 'deno.zip' -DestinationPath 'deno-temp' -Force
+          Copy-Item 'deno-temp/deno.exe' 'bin/deno.exe' -Force
+          & 'bin/deno.exe' --version
+
+      - name: Download FFmpeg and FFprobe
+        shell: pwsh
+        working-directory: _integrations/video-src
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $sources = @(
+            'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n9.0-latest-win64-gpl-9.0.zip',
+            'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+          )
+          $ok = $false
+          foreach ($url in $sources) {
+            try {
+              Invoke-WebRequest -Uri $url -OutFile 'ffmpeg.zip' -TimeoutSec 180
+              if ((Get-Item 'ffmpeg.zip').Length -gt 1000000) { $ok = $true; break }
+            } catch { Write-Warning $_.Exception.Message }
+          }
+          if (-not $ok) { throw 'Nao foi possivel baixar FFmpeg.' }
+          Expand-Archive -Path 'ffmpeg.zip' -DestinationPath 'ffmpeg-temp' -Force
+          $ffmpeg = Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1
+          $ffprobe = Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffprobe.exe' | Select-Object -First 1
+          if (-not $ffmpeg -or -not $ffprobe) { throw 'FFmpeg/FFprobe nao encontrados no pacote.' }
+          Copy-Item $ffmpeg.FullName 'bin/ffmpeg.exe' -Force
+          Copy-Item $ffprobe.FullName 'bin/ffprobe.exe' -Force
+
+      - name: Compile and build Video Extractor core
+        shell: pwsh
+        working-directory: _integrations/video-src
+        run: |
+          python -m py_compile monitor_bridge.py main.py advanced_editor.py advanced_editor_v300.py range_slider.py refined_layout_v301.py refined_layout_v300.py refined_layout_v214.py refined_layout_v213.py refined_layout_v212.py refined_layout_v211.py refined_layout_v210.py refined_layout_v209.py refined_layout_v208.py refined_layout_v207.py refined_layout_v206.py refined_layout_v205.py refined_layout_v204.py refined_layout_v203.py refined_layout_v202.py refined_layout_v201.py refined_layout_v2.py refined_layout.py modern_layout.py novo_layout.py
+          pyinstaller --noconfirm --clean --console --onedir --name VideoCoreBridge --contents-directory _internal --icon 'ExtratorVideos-Icone.ico' monitor_bridge.py
+          Copy-Item -Path 'bin' -Destination 'dist/VideoCoreBridge/bin' -Recurse -Force
+          if (Test-Path 'config-proxy.json') { Copy-Item 'config-proxy.json' 'dist/VideoCoreBridge/config-proxy.json' -Force }
+          Copy-Item 'LEIA-ME.txt' 'dist/VideoCoreBridge/LEIA-ME-EXTRATOR-VIDEOS.txt' -Force
+          New-Item -ItemType Directory -Force -Path 'dist/VideoCoreBridge/Videos' | Out-Null
+
+      - name: Verify packaged Video Extractor core
+        shell: pwsh
+        working-directory: _integrations/video-src
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu --no-sandbox
+        run: |
+          '{"action":"state"}' | & 'dist/VideoCoreBridge/VideoCoreBridge.exe' | Tee-Object -FilePath state-packaged.jsonl
+          $raw = Get-Content state-packaged.jsonl -Raw
+          if ($raw -notmatch 'Windows Portable v3.0.1') { throw 'Video core nao reportou v3.0.1.' }
+          if ($raw -notmatch '"ffmpeg": true') { throw 'Video core nao localizou FFmpeg.' }
+          if ($raw -notmatch '"ytDlp": true') { throw 'Video core nao localizou yt-dlp.' }
+
+      - name: Install Video Extractor core inside Monitor
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $dest = Join-Path $root 'tools/ExtratorVideosCore'
+          if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item '_integrations/video-src/dist/VideoCoreBridge/*' $dest -Recurse -Force
+          if (-not (Test-Path (Join-Path $dest 'VideoCoreBridge.exe'))) { throw 'VideoCoreBridge.exe nao foi instalado no Monitor.' }
+          if (-not (Test-Path (Join-Path $dest 'bin/ffmpeg.exe'))) { throw 'ffmpeg.exe nao foi instalado no Monitor.' }
+          if (-not (Test-Path (Join-Path $dest 'bin/yt-dlp.exe'))) { throw 'yt-dlp.exe nao foi instalado no Monitor.' }
+
+      - name: Verify integrated Video Extractor from final Monitor tree
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu --no-sandbox
+        run: |
+          $core = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/ExtratorVideosCore'
+          $state = '{"action":"state"}' | & (Join-Path $core 'VideoCoreBridge.exe')
+          $raw = $state -join "`n"
+          if ($raw -notmatch 'Windows Portable v3.0.1') { throw 'Integrated Video Extractor version mismatch.' }
+          if ($raw -notmatch '"ffmpeg": true') { throw 'Integrated Video Extractor FFmpeg missing.' }
+
       - name: Verify JavaFX preview runtime is packaged
         shell: pwsh
         run: |
           $app = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/app'
           $media = Get-ChildItem $app -Recurse -File | Where-Object { $_.Name -match '^javafx-media.*\.jar$' } | Select-Object -First 1
           $swing = Get-ChildItem $app -Recurse -File | Where-Object { $_.Name -match '^javafx-swing.*\.jar$' } | Select-Object -First 1
-          if (-not $media) { throw 'javafx-media não foi empacotado.' }
-          if (-not $swing) { throw 'javafx-swing não foi empacotado.' }
-          Write-Host "JavaFX media: $($media.FullName)"
-          Write-Host "JavaFX swing: $($swing.FullName)"
+          if (-not $media) { throw 'javafx-media nao foi empacotado.' }
+          if (-not $swing) { throw 'javafx-swing nao foi empacotado.' }
 
-      - name: Verify Monitor launcher initializes
+      - name: Verify final Monitor launcher initializes
         shell: pwsh
         run: |
           $exe = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/MonitorDeNoticias.exe'
           $p = Start-Process -FilePath $exe -PassThru
           try {
-            Start-Sleep -Seconds 10
+            Start-Sleep -Seconds 12
             $p.Refresh()
             if ($p.HasExited) { throw "Monitor exited early with code $($p.ExitCode)" }
           }
@@ -117,15 +227,54 @@ jobs:
             if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
           }
 
-      - name: Create Monitor shell ZIP
+      - name: Create final integrated Portable ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'Monitor-de-Noticias-v4.0.2-VIDEO-NATIVO-SHELL.zip' -Force
+          $asset = 'Monitor-de-Noticias-v4.0.2-COM-EXTRATOR-DE-VIDEOS.zip'
+          if (Test-Path $asset) { Remove-Item $asset -Force }
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias' -DestinationPath $asset -CompressionLevel Optimal
+          $file = Get-Item $asset
+          if ($file.Length -lt 300MB) { throw "ZIP final inesperadamente pequeno: $($file.Length) bytes" }
+          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          "sha256=$hash" | Set-Content 'release-sha256.txt'
+          Write-Host "Final ZIP: $($file.Length) bytes"
+          Write-Host "SHA256: $hash"
 
-      - name: Upload Monitor shell
+      - name: Upload final package as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: monitor-video-native-shell
-          path: Monitor-de-Noticias-v4.0.2-VIDEO-NATIVO-SHELL.zip
+          name: monitor-v4.0.2-extratores-integrados
+          path: |
+            Monitor-de-Noticias-v4.0.2-COM-EXTRATOR-DE-VIDEOS.zip
+            release-sha256.txt
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
+
+      - name: Publish GitHub prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = 'v4.0.2-extratores-integrados-rc1'
+          $asset = 'Monitor-de-Noticias-v4.0.2-COM-EXTRATOR-DE-VIDEOS.zip'
+          $hash = (Get-Content 'release-sha256.txt' -Raw).Trim()
+          @"
+          ## Monitor de Noticias v4.0.2 - Extratores integrados RC1
+
+          Versao de teste baseada na branch `integration/video-native-v1`.
+
+          Inclui o Extrator de Noticias integrado ao Monitor e o Extrator de Videos v3.0.1 integrado na propria interface, com Download e Editor/Timeline.
+
+          Este e um pre-release de validacao e nao substitui a versao estavel.
+
+          Integridade do arquivo: `$hash`
+          "@ | Set-Content -Path 'release-notes.md' -Encoding UTF8
+
+          gh release view $tag --repo tysudess/noticias-monitor *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $asset --clobber --repo tysudess/noticias-monitor
+          } else {
+            gh release create $tag $asset --repo tysudess/noticias-monitor --target integration/video-native-v1 --title 'Monitor de Noticias v4.0.2 - Extratores integrados RC1' --notes-file release-notes.md --prerelease
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar o Release no GitHub.' }
+          gh release view $tag --repo tysudess/noticias-monitor --json url,tagName,name,isPrerelease
