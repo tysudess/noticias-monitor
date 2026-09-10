@@ -2,6 +2,12 @@ name: Validate Separated Video Editor
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - integration/video-editor-separated-v1
+    paths:
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoEditor.kt'
+      - '.github/workflows/video-editor-separated-ci.yml'
 
 permissions:
   contents: read
@@ -67,3 +73,10 @@ jobs:
           if ($p.HasExited) { throw 'Monitor encerrou após navegação Editor.' }
           Stop-Process -Id $p.Id -Force
           Write-Host 'PASS: entrou e saiu do Editor duas vezes sem bloquear a UI.'
+
+      - name: Upload fixed distributable
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-editor-timeline-fix-distributable
+          path: desktop/build/compose/binaries/main/app/MonitorDeNoticias
+          if-no-files-found: error
