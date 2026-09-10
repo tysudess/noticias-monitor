@@ -304,7 +304,7 @@ private object VexBridge {
 }
 
 private class VexFxPreview {
-    val panel = JFXPanel()
+    @Volatile private var panel: JFXPanel? = null
     private var player: MediaPlayer? = null
     @Volatile var currentMs: Long = 0L
         private set
@@ -315,18 +315,31 @@ private class VexFxPreview {
     @Volatile var loadedPath: String = ""
         private set
 
-    init {
+    /**
+     * SwingPanel invokes its factory on Swing's EDT. JFXPanel must be created there;
+     * constructing it eagerly from the Compose render thread can deadlock AWT/JavaFX
+     * when the user first opens Editor / Timeline.
+     */
+    fun createPanel(): JFXPanel {
+        val created = JFXPanel()
+        panel = created
         Platform.setImplicitExit(false)
         Platform.runLater {
-            panel.scene = Scene(StackPane().apply { style = "-fx-background-color: #06111f;" })
+            if (panel === created) {
+                created.scene = Scene(StackPane().apply { style = "-fx-background-color: #06111f;" })
+            }
         }
+        return created
     }
 
     fun load(path: String, positionMs: Long = 0L, autoplay: Boolean = false) {
         if (path.isBlank()) return
+        val targetPanel = panel ?: return
         Platform.runLater {
+            if (panel !== targetPanel) return@runLater
             runCatching {
-                player?.stop(); player?.dispose()
+                player?.stop()
+                player?.dispose()
                 val media = Media(File(path).toURI().toString())
                 val mp = MediaPlayer(media)
                 val view = MediaView(mp).apply {
@@ -334,7 +347,7 @@ private class VexFxPreview {
                     fitWidth = 900.0
                     fitHeight = 500.0
                 }
-                panel.scene = Scene(StackPane(view).apply { style = "-fx-background-color: #06111f;" })
+                targetPanel.scene = Scene(StackPane(view).apply { style = "-fx-background-color: #06111f;" })
                 player = mp
                 loadedPath = path
                 mp.setOnReady {
@@ -352,7 +365,18 @@ private class VexFxPreview {
     fun pause() = Platform.runLater { player?.pause() }
     fun seek(ms: Long) = Platform.runLater { player?.seek(javafx.util.Duration.millis(ms.coerceAtLeast(0L).toDouble())) }
     fun toggle() = Platform.runLater { if (player?.status == MediaPlayer.Status.PLAYING) player?.pause() else player?.play() }
-    fun dispose() = Platform.runLater { player?.stop(); player?.dispose(); player = null }
+    fun dispose() {
+        panel = null
+        Platform.runLater {
+            player?.stop()
+            player?.dispose()
+            player = null
+            loadedPath = ""
+            currentMs = 0L
+            durationMs = 0L
+            playing = false
+        }
+    }
 }
 
 private enum class VexTab { DOWNLOAD, EDITOR }
@@ -706,7 +730,7 @@ private fun VexEditorScreen(state: VexCoreState) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
             Surface(color = Color(0xFF071426), shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, Color(0xFF1A355A)), modifier = Modifier.weight(0.68f).height(390.dp)) {
                 Column(Modifier.fillMaxSize()) {
-                    SwingPanel(factory = { preview.panel }, modifier = Modifier.weight(1f).fillMaxWidth())
+                    SwingPanel(factory = { preview.createPanel() }, modifier = Modifier.weight(1f).fillMaxWidth())
                     Row(Modifier.fillMaxWidth().background(Color(0xFF0B1C31)).padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         OutlinedButton(onClick = { val c = clips.getOrNull(selectedIndex) ?: return@OutlinedButton; preview.seek((preview.currentMs - 5000).coerceAtLeast(c.startMs)); playheadMs = clipGlobalStart(selectedIndex) + (preview.currentMs - c.startMs).coerceAtLeast(0) }, enabled = selected != null) { Text("−5s") }
                         Button(onClick = {
