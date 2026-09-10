@@ -1,0 +1,28 @@
+name: Probe Video Core Artifact Access
+
+on:
+  push:
+    branches:
+      - integration/video-editor-separated-v1
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - name: Download already-built private video core
+        uses: actions/download-artifact@v4
+        with:
+          repository: tysudess/extrator-video-windows
+          run-id: '34504332118'
+          name: video-core-bridge-v3.0.1
+          path: video-core
+          github-token: ${{ github.token }}
+      - name: Verify archive
+        shell: pwsh
+        run: |
+          Get-ChildItem video-core -Recurse
+          if (-not (Get-ChildItem video-core -Recurse -Filter 'VideoCoreBridge-v3.0.1.zip')) { throw 'Core ZIP not found' }
