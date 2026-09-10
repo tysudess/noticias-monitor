@@ -919,24 +919,25 @@ class VideoRepository(
     private fun parseYoutubeVideosTab(source: VideoSource, html: String, capturedAt: Long): List<VideoItem> {
         if (html.isBlank()) return emptyList()
         val out = linkedMapOf<String, VideoItem>()
-        val idRegex = Regex("\\"videoId\\":\\"([0-9A-Za-z_-]{6,})\\"")
-        val runTitleRegex = Regex("\\"title\\"\s*:\s*\{\s*\\"runs\\"\s*:\s*\[\s*\{\s*\\"text\\"\s*:\s*\\"((?:\\.|[^\\"])*)\\"")
-        val simpleTitleRegex = Regex("\\"title\\"\s*:\s*\{\s*\\"simpleText\\"\s*:\s*\\"((?:\\.|[^\\"])*)\\"")
-        val publishedRegex = Regex("\\"publishedTimeText\\"\s*:\s*\{\s*\\"simpleText\\"\s*:\s*\\"((?:\\.|[^\\"])*)\\"")
+        val videoNeedle = "\"videoId\":\""
+        var cursor = 0
 
-        idRegex.findAll(html).take(MAX_YOUTUBE_ITEMS_PER_SCAN * 5).forEach { match ->
-            val videoId = match.groupValues[1]
-            if (videoId.isBlank()) return@forEach
-            val from = match.range.first
-            val to = (from + 4200).coerceAtMost(html.length)
-            val block = html.substring(from, to)
-            val titleRaw = runTitleRegex.find(block)?.groupValues?.getOrNull(1)
-                ?: simpleTitleRegex.find(block)?.groupValues?.getOrNull(1)
-                ?: return@forEach
-            val title = cleanJsonText(titleRaw)
-            if (!usefulTitle(title)) return@forEach
-            val publishedText = publishedRegex.find(block)?.groupValues?.getOrNull(1)?.let(::cleanJsonText).orEmpty()
-            val publishedAt = parseYoutubeRelativeTime(publishedText, capturedAt)
+        while (cursor < html.length && out.size < MAX_YOUTUBE_ITEMS_PER_SCAN) {
+            val marker = html.indexOf(videoNeedle, cursor)
+            if (marker < 0) break
+            val idStart = marker + videoNeedle.length
+            val idEnd = html.indexOf('"', idStart)
+            if (idEnd < 0) break
+            val videoId = html.substring(idStart, idEnd)
+            cursor = idEnd + 1
+            if (videoId.length < 6) continue
+
+            val blockEnd = (idEnd + 5200).coerceAtMost(html.length)
+            val block = html.substring(idEnd, blockEnd)
+            val title = extractYoutubeJsonText(block, "\"title\"")
+            if (!usefulTitle(title)) continue
+
+            val publishedText = extractYoutubeJsonText(block, "\"publishedTimeText\"")
             val link = canonicalizeUrl("https://www.youtube.com/watch?v=$videoId")
             out.putIfAbsent(
                 canonicalKey(link),
@@ -944,7 +945,7 @@ class VideoRepository(
                     title = title.take(220),
                     sourceId = source.id,
                     sourceName = source.name,
-                    publishedAt = publishedAt,
+                    publishedAt = parseYoutubeRelativeTime(publishedText, capturedAt),
                     link = link,
                     summary = "Canal oficial • ${source.group} • Aba Vídeos",
                     capturedAt = capturedAt
@@ -954,9 +955,57 @@ class VideoRepository(
         return out.values.take(MAX_YOUTUBE_ITEMS_PER_SCAN)
     }
 
+    private fun extractYoutubeJsonText(block: String, field: String): String {
+        val fieldPos = block.indexOf(field)
+        if (fieldPos < 0) return ""
+        val end = (fieldPos + 1800).coerceAtMost(block.length)
+        val section = block.substring(fieldPos, end)
+        val textNeedle = "\"text\":\""
+        val simpleNeedle = "\"simpleText\":\""
+        val simplePos = section.indexOf(simpleNeedle)
+        val textPos = section.indexOf(textNeedle)
+        val markerPos: Int
+        val markerLength: Int
+        if (simplePos >= 0 && (textPos < 0 || simplePos < textPos)) {
+            markerPos = simplePos
+            markerLength = simpleNeedle.length
+        } else if (textPos >= 0) {
+            markerPos = textPos
+            markerLength = textNeedle.length
+        } else {
+            return ""
+        }
+
+        val start = markerPos + markerLength
+        val value = StringBuilder()
+        var escaped = false
+        var i = start
+        while (i < section.length) {
+            val ch = section[i]
+            if (escaped) {
+                when (ch) {
+                    'n', 'r', 't' -> value.append(' ')
+                    '"' -> value.append('"')
+                    '\\' -> value.append('\\')
+                    '/' -> value.append('/')
+                    else -> value.append(ch)
+                }
+                escaped = false
+            } else if (ch == '\\') {
+                escaped = true
+            } else if (ch == '"') {
+                break
+            } else {
+                value.append(ch)
+            }
+            i++
+        }
+        return cleanJsonText(value.toString())
+    }
+
     private fun parseYoutubeRelativeTime(raw: String, capturedAt: Long): Long {
         val text = normalize(raw)
-        val n = Regex("(?:ha )?(\d+)").find(text)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: return capturedAt
+        val n = text.split(' ').firstNotNullOfOrNull { it.toLongOrNull() } ?: return capturedAt
         val millis = when {
             "minuto" in text || "minute" in text -> n * 60_000L
             "hora" in text || "hour" in text -> n * 60L * 60_000L
