@@ -19,19 +19,22 @@ jobs:
         with:
           ref: integration/news-native-v1
 
-      - name: Wire native extractor tab
+      - name: Prepare native extractor sources
         shell: pwsh
         run: |
           $dashboard = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt'
           if (-not (Select-String -Path $dashboard -Pattern 'EXTRACT_NEWS\(' -Quiet)) {
             python tools/apply-news-native-tab.py
+          }
+          python tools/fix-news-native-source.py
+          if (git status --porcelain) {
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add $dashboard
-            git commit -m 'feat(desktop): wire native news extractor tab'
+            git add $dashboard desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeNewsExtractor.kt
+            git commit -m 'fix(desktop): finalize native news extractor sources'
             git push origin HEAD:integration/news-native-v1
           } else {
-            Write-Host 'Native extractor tab already wired.'
+            Write-Host 'Native extractor sources already prepared.'
           }
 
       - name: Setup Node.js 22
