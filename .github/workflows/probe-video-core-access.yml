@@ -1,19 +1,28 @@
-name: Probe Video Core Artifact Access
+name: Build Complete Monitor Editor Separated RC1
 
 on:
   push:
     branches:
       - integration/video-editor-separated-v1
+    paths:
+      - '.github/workflows/probe-video-core-access.yml'
 
 permissions:
   actions: read
-  contents: read
+  contents: write
 
 jobs:
-  probe:
+  release:
     runs-on: windows-latest
+    timeout-minutes: 50
     steps:
-      - name: Download already-built private video core
+      - name: Checkout candidate branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration/video-editor-separated-v1
+          fetch-depth: 0
+
+      - name: Download validated private VideoCoreBridge artifact
         uses: actions/download-artifact@v4
         with:
           repository: tysudess/extrator-video-windows
@@ -21,8 +30,177 @@ jobs:
           name: video-core-bridge-v3.0.1
           path: video-core
           github-token: ${{ github.token }}
-      - name: Verify archive
+
+      - name: Expand validated Video core
         shell: pwsh
         run: |
-          Get-ChildItem video-core -Recurse
-          if (-not (Get-ChildItem video-core -Recurse -Filter 'VideoCoreBridge-v3.0.1.zip')) { throw 'Core ZIP not found' }
+          $inner = Get-ChildItem 'video-core' -Recurse -Filter 'VideoCoreBridge-v3.0.1.zip' | Select-Object -First 1
+          if (-not $inner) { throw 'VideoCoreBridge-v3.0.1.zip ausente.' }
+          New-Item -ItemType Directory -Force -Path '_video-core' | Out-Null
+          Expand-Archive -Path $inner.FullName -DestinationPath '_video-core' -Force
+          $bridge = Get-ChildItem '_video-core' -Recurse -Filter 'VideoCoreBridge.exe' | Select-Object -First 1
+          if (-not $bridge) { throw 'VideoCoreBridge.exe ausente.' }
+          Write-Host "Video core pronto: $($bridge.Directory.FullName)"
+
+      - name: Setup Node.js 22 for native News core
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Checkout original News Extractor headless engine
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch integration/monitor-headless https://github.com/tysudess/Extrator-de-noticias-windows.git _news-src
+          if (-not (Test-Path '_news-src/monitor-bridge.js')) { throw 'News headless bridge ausente.' }
+
+      - name: Install News Extractor runtime dependencies
+        shell: pwsh
+        working-directory: _news-src
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Verify separated source invariants
+        shell: pwsh
+        run: |
+          $dash = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
+          $video = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt' -Raw
+          $editor = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoEditor.kt' -Raw
+          if ($dash -notmatch 'EXTRACT_VIDEO[\s\S]*EDIT_VIDEO\("Editor de vídeos"') { throw 'Menu lateral incorreto.' }
+          if ($dash -notmatch 'V5Section\.EDIT_VIDEO -> V5NativeVideoEditorScreen\(\)') { throw 'Rota independente do editor ausente.' }
+          if ($video -match 'private enum class VexTab|VexEditorScreen\(|(?m)^import javafx\.|SwingPanel|JFXPanel\(') { throw 'Editor legado ainda acoplado ao Extrator.' }
+          foreach ($anchor in @('VexDownloadScreen','Globoplay','proxy','download')) { if ($video -notmatch $anchor) { throw "Regressão no Extrator de vídeos: $anchor" } }
+          foreach ($anchor in @('Reproduzir','TIMELINE','Início aqui','Fim aqui','Duplicar','Excluir','Ctrl+Z','H.264','H.265','720p','1080p','Exportar vídeo')) { if ($editor -notmatch [regex]::Escape($anchor)) { throw "Função do editor ausente: $anchor" } }
+          if ($editor -match '(?m)^import javafx\.|SwingPanel|JFXPanel\(') { throw 'Editor novo contém dependência JavaFX/Swing.' }
+
+      - name: Compile complete Monitor
+        shell: pwsh
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Create Windows distributable
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Install native News core into final Monitor
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $dest = Join-Path $root 'tools/ExtratorNoticiasCore'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item '_news-src/engine' $dest -Recurse -Force
+          Copy-Item '_news-src/node_modules' $dest -Recurse -Force
+          Copy-Item '_news-src/package.json' $dest -Force
+          Copy-Item '_news-src/monitor-bridge.js' $dest -Force
+          Copy-Item (Get-Command node).Source (Join-Path $dest 'node.exe') -Force
+
+      - name: Install validated Video core into final Monitor
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $bridge = Get-ChildItem '_video-core' -Recurse -Filter 'VideoCoreBridge.exe' | Select-Object -First 1
+          if (-not $bridge) { throw 'Video core não localizado.' }
+          $dest = Join-Path $root 'tools/ExtratorVideosCore'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item (Join-Path $bridge.Directory.FullName '*') $dest -Recurse -Force
+
+      - name: Verify both integrated cores
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu --no-sandbox
+        run: |
+          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $news = Join-Path $root 'tools/ExtratorNoticiasCore'
+          $newsState = '{"action":"state"}' | & (Join-Path $news 'node.exe') (Join-Path $news 'monitor-bridge.js')
+          $newsRaw = $newsState | Out-String
+          if ($newsRaw -notmatch '1\.25\.19') { throw 'Extrator de Notícias integrado regrediu.' }
+
+          $video = Join-Path $root 'tools/ExtratorVideosCore'
+          $videoState = '{"action":"state"}' | & (Join-Path $video 'VideoCoreBridge.exe')
+          $videoRaw = $videoState | Out-String
+          if ($videoRaw -notmatch 'Windows Portable v3\.0\.1') { throw 'Extrator de Vídeos não reportou v3.0.1.' }
+          if ($videoRaw -notmatch '"ffmpeg": true') { throw 'FFmpeg não encontrado pelo núcleo de vídeos.' }
+          if ($videoRaw -notmatch '"ffprobe": true') { throw 'FFprobe não encontrado pelo núcleo de vídeos.' }
+
+      - name: Probe and export synthetic Editor clip
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu --no-sandbox
+        run: |
+          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $video = Join-Path $root 'tools/ExtratorVideosCore'
+          $ffmpeg = Join-Path $video 'bin/ffmpeg.exe'
+          $bridge = Join-Path $video 'VideoCoreBridge.exe'
+          & $ffmpeg -y -f lavfi -i color=c=black:s=320x180:d=1 -f lavfi -i anullsrc=r=44100:cl=stereo -shortest -c:v libx264 -c:a aac 'editor-smoke.mp4'
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar vídeo sintético.' }
+          $probeReq = @{ action='probe'; path=(Resolve-Path 'editor-smoke.mp4').Path } | ConvertTo-Json -Compress
+          $probeLines = $probeReq | & $bridge
+          $probeResult = $probeLines | ForEach-Object { try { $_ | ConvertFrom-Json } catch {} } | Where-Object { $_.type -eq 'result' } | Select-Object -Last 1
+          if (-not $probeResult.ok) { throw "Probe do editor falhou: $($probeResult.error)" }
+          $info = $probeResult.info
+          $clip = @{ path=(Resolve-Path 'editor-smoke.mp4').Path; start_ms=0; end_ms=[int64]$info.duration_ms; duration_ms=[int64]$info.duration_ms; cut_before=$false; info=$info }
+          $exportReq = @{ action='export'; clips=@($clip); outputName='editor-smoke-export.mp4'; resolution='Original'; codec='H.264 / AVC'; targetSizeEnabled=$false; targetSizeMb=30 } | ConvertTo-Json -Depth 8 -Compress
+          $exportLines = $exportReq | & $bridge
+          $exportResult = $exportLines | ForEach-Object { try { $_ | ConvertFrom-Json } catch {} } | Where-Object { $_.type -eq 'result' } | Select-Object -Last 1
+          if (-not $exportResult.ok) { throw "Exportação real do editor falhou: $($exportResult.error)" }
+          Write-Host 'PASS: probe + exportação H.264 reais concluídos.'
+
+      - name: UI navigation freeze smoke test with all cores installed
+        shell: pwsh
+        run: |
+          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $exe = Join-Path $root 'MonitorDeNoticias.exe'
+          $smoke = Join-Path $env:RUNNER_TEMP 'editor-smoke.txt'
+          $env:MONITOR_EDITOR_SMOKE_FILE = $smoke
+          $p = Start-Process -FilePath $exe -WorkingDirectory $root -PassThru
+          $deadline = (Get-Date).AddSeconds(18)
+          do {
+            Start-Sleep -Milliseconds 500
+            if (Test-Path $smoke) { $state = (Get-Content $smoke -Raw).Trim() } else { $state = '' }
+            if ($state -eq 'PASS') { break }
+            if ($p.HasExited) { throw "Monitor encerrou durante navegação. Exit=$($p.ExitCode), estado=$state" }
+          } while ((Get-Date) -lt $deadline)
+          if ($state -ne 'PASS') { throw "Editor/navigation smoke travou ou expirou. Estado: $state" }
+          if ($p.HasExited) { throw 'Monitor encerrou após sair do Editor.' }
+          Stop-Process -Id $p.Id -Force
+          Write-Host 'PASS: Editor -> Extrator -> Editor -> Início sem congelamento.'
+
+      - name: Create complete Portable ZIP
+        shell: pwsh
+        run: |
+          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $zip = Join-Path $PWD 'Monitor-de-Noticias-v4.0.2-EDITOR-SEPARADO-RC1.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
+          if ((Get-Item $zip).Length -lt 150000000) { throw 'ZIP final parece incompleto.' }
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  Monitor-de-Noticias-v4.0.2-EDITOR-SEPARADO-RC1.zip" | Set-Content 'Monitor-de-Noticias-v4.0.2-EDITOR-SEPARADO-RC1.zip.sha256'
+          Write-Host "SHA256: $hash"
+
+      - name: Publish GitHub prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'v4.0.2-editor-separated-rc1'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) { gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag }
+          gh release create $tag 'Monitor-de-Noticias-v4.0.2-EDITOR-SEPARADO-RC1.zip' 'Monitor-de-Noticias-v4.0.2-EDITOR-SEPARADO-RC1.zip.sha256' --repo tysudess/noticias-monitor --target integration/video-editor-separated-v1 --title 'Monitor de Notícias v4.0.2 — Editor de vídeos separado RC1' --prerelease --notes 'Versão candidata sobre a baseline V8 segura. Extrator de Notícias preservado; Extrator de Vídeos dedicado a download/proxy/Globoplay; Editor de vídeos em rota própria, sem JavaFX/SwingPanel/JFXPanel. Timeline, reprodução, cortes, início/fim, reordenação, exclusão, duplicação, Ctrl+Z, H.264/H.265, Original/720p/1080p e exportação. Build completo validado com probe/exportação H.264 real e navegação Editor -> Extrator -> Editor -> Início sem congelamento. A main não foi alterada.'
+
+      - name: Upload complete package as workflow artifact too
+        uses: actions/upload-artifact@v4
+        with:
+          name: Monitor-de-Noticias-v4.0.2-EDITOR-SEPARADO-RC1
+          path: |
+            Monitor-de-Noticias-v4.0.2-EDITOR-SEPARADO-RC1.zip
+            Monitor-de-Noticias-v4.0.2-EDITOR-SEPARADO-RC1.zip.sha256
+          retention-days: 7
