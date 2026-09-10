@@ -19,7 +19,8 @@ object GoogleNewsUrlResolver {
     suspend fun resolve(input: String): String = withContext(Dispatchers.IO) {
         if (!isGoogleNews(input)) return@withContext input
         cache[input]?.let { return@withContext it }
-        val resolved = resolveBlocking(input).takeIf { it.startsWith("http") && !isGoogleNews(it) } ?: input
+        val decoded = resolveBlocking(input)
+        val resolved = decoded?.takeIf { it.startsWith("http") && !isGoogleNews(it) } ?: input
         cache[input] = resolved
         resolved
     }
