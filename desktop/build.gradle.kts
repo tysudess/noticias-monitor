@@ -52,6 +52,13 @@ dependencies {
     implementation("net.sf.kxml:kxml2:2.3.0")
     implementation("net.java.dev.jna:jna:5.15.0")
     implementation("net.java.dev.jna:jna-platform:5.15.0")
+
+    // Preview de vídeo realmente incorporada à aba Editor/Timeline do Monitor.
+    // JavaFX 21 roda sobre o JDK 17 usado pelo projeto e inclui os binários Windows.
+    implementation("org.openjfx:javafx-base:21.0.8:win")
+    implementation("org.openjfx:javafx-graphics:21.0.8:win")
+    implementation("org.openjfx:javafx-media:21.0.8:win")
+    implementation("org.openjfx:javafx-swing:21.0.8:win")
 }
 
 compose.desktop {
