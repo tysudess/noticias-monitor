@@ -1,0 +1,117 @@
+name: Validate Video Editor Freeze Fix
+
+on:
+  push:
+    branches:
+      - integration/video-native-v1
+    paths:
+      - tools/fix-video-native-source.py
+      - .github/workflows/fix-video-editor-freeze.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration/video-native-v1
+
+      - name: Apply editor deadlock fix
+        shell: pwsh
+        run: |
+          python tools/fix-video-native-source.py
+          if (-not (Select-String -Path 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt' -Pattern 'fun createPanel\(\): JFXPanel' -Quiet)) {
+            throw 'JavaFX EDT fix was not applied.'
+          }
+          if (-not (Select-String -Path 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt' -Pattern 'SwingPanel\(factory = \{ preview.createPanel\(\) \}' -Quiet)) {
+            throw 'SwingPanel is still using the eager JFXPanel instance.'
+          }
+
+      - name: Commit fixed Kotlin source
+        shell: pwsh
+        run: |
+          if (git status --porcelain -- 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt') {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt'
+            git commit -m 'fix(video-editor): prevent JavaFX SwingPanel deadlock'
+            git push origin HEAD:integration/video-native-v1
+          } else {
+            Write-Host 'Kotlin source already contains the editor fix.'
+          }
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Checkout News Extractor headless engine
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch integration/monitor-headless https://github.com/tysudess/Extrator-de-noticias-windows.git _integrations/news-src
+
+      - name: Install News Extractor runtime
+        shell: pwsh
+        working-directory: _integrations/news-src
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile Kotlin
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Create Windows distributable
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Package News Extractor core
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $dest = Join-Path $root 'tools/ExtratorNoticiasCore'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item '_integrations/news-src/engine' $dest -Recurse -Force
+          Copy-Item '_integrations/news-src/node_modules' $dest -Recurse -Force
+          Copy-Item '_integrations/news-src/package.json' $dest -Force
+          Copy-Item '_integrations/news-src/monitor-bridge.js' $dest -Force
+          Copy-Item (Get-Command node).Source (Join-Path $dest 'node.exe') -Force
+
+      - name: Verify fixed source is packaged
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/MonitorDeNoticias.exe'
+          $p = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 10
+            $p.Refresh()
+            if ($p.HasExited) { throw "Monitor exited early with code $($p.ExitCode)" }
+          } finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Create fixed shell ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias' -DestinationPath 'Monitor-de-Noticias-v4.0.2-VIDEO-EDITOR-FIX-SHELL.zip' -CompressionLevel Optimal -Force
+
+      - name: Upload fixed shell artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-video-editor-fix-shell
+          path: Monitor-de-Noticias-v4.0.2-VIDEO-EDITOR-FIX-SHELL.zip
+          if-no-files-found: error
+          retention-days: 7
