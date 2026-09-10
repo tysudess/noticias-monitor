@@ -1,80 +1,4 @@
-from pathlib import Path
-import re
-
-DASH = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt')
-VIDEO = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt')
-EDITOR = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoEditor.kt')
-
-# 1) Sidebar/navigation: add a first-class Editor de vídeos route immediately after Extrator de vídeos.
-d = DASH.read_text(encoding='utf-8')
-old = '    EXTRACT_VIDEO("Extrator de vídeos", "Download e edição em timeline integrados ao Monitor", Icons.Default.VideoLibrary),'
-new = '    EXTRACT_VIDEO("Extrator de vídeos", "Download, proxy, Globoplay e recursos de extração", Icons.Default.VideoLibrary),\n    EDIT_VIDEO("Editor de vídeos", "Editor e timeline integrados ao Monitor", Icons.Default.Movie),'
-if old not in d and 'EDIT_VIDEO("Editor de vídeos"' not in d:
-    raise SystemExit('Dashboard enum anchor not found')
-d = d.replace(old, new)
-old_when = '                            V5Section.EXTRACT_VIDEO -> V5NativeVideoExtractorScreen()'
-new_when = old_when + '\n                            V5Section.EDIT_VIDEO -> V5NativeVideoEditorScreen()'
-if 'V5Section.EDIT_VIDEO -> V5NativeVideoEditorScreen()' not in d:
-    if old_when not in d:
-        raise SystemExit('Dashboard route anchor not found')
-    d = d.replace(old_when, new_when)
-
-# Hidden deterministic navigation smoke-test hook used only by CI. It executes on the Compose UI coroutine,
-# so reaching PASS proves the app entered and left the Editor twice without blocking the UI dispatcher.
-anchor = '    var tick by remember { mutableIntStateOf(0) }\n\n'
-smoke = '''    var tick by remember { mutableIntStateOf(0) }\n\n    val editorSmokeFile = remember { System.getenv("MONITOR_EDITOR_SMOKE_FILE").orEmpty() }\n    LaunchedEffect(editorSmokeFile) {\n        if (editorSmokeFile.isNotBlank()) {\n            fun mark(stage: String) = runCatching { java.io.File(editorSmokeFile).writeText(stage, Charsets.UTF_8) }\n            delay(900); section = V5Section.EDIT_VIDEO; mark("ENTER_EDITOR_1")\n            delay(1200); section = V5Section.EXTRACT_VIDEO; mark("LEAVE_EDITOR_1")\n            delay(900); section = V5Section.EDIT_VIDEO; mark("ENTER_EDITOR_2")\n            delay(1200); section = V5Section.HOME; mark("PASS")\n        }\n    }\n\n'''
-if 'MONITOR_EDITOR_SMOKE_FILE' not in d:
-    if anchor not in d:
-        raise SystemExit('Dashboard smoke anchor not found')
-    d = d.replace(anchor, smoke, 1)
-DASH.write_text(d, encoding='utf-8')
-
-# 2) Preserve the working Download implementation byte-for-byte. Only replace its outer tab shell.
-v = VIDEO.read_text(encoding='utf-8')
-pattern = re.compile(r'private enum class VexTab \{ DOWNLOAD, EDITOR \}\s+@Composable\s+fun V5NativeVideoExtractorScreen\(\) \{.*?\n\}\s+\n@Composable\s+private fun VexTabButton', re.S)
-replacement = r'''@Composable
-fun V5NativeVideoExtractorScreen() {
-    var state by remember { mutableStateOf(VexCoreState()) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) { state = VexBridge.state() }
-
-    Column(Modifier.fillMaxSize().background(VexBg), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Surface(color = Color.White, shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, VexBorder), modifier = Modifier.fillMaxWidth()) {
-            Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(38.dp).background(VexSoftPurple, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.VideoLibrary, null, tint = VexPurple, modifier = Modifier.size(22.dp))
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Extrator de Vídeos", color = VexInk, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Motor original ${state.version} integrado ao Monitor • download, proxy e Globoplay", color = VexMuted, fontSize = 10.5.sp)
-                }
-                VexStatusPill(
-                    text = if (state.available && state.ffmpeg && state.ytDlp) "Núcleo pronto" else if (state.error.isNotBlank()) "Núcleo indisponível" else "Verificando...",
-                    ok = state.available && state.ffmpeg && state.ytDlp
-                )
-            }
-        }
-
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            VexDownloadScreen(state, onStateChange = { state = it }, onRefresh = { scope.launch { state = VexBridge.state() } })
-        }
-    }
-}
-
-@Composable
-private fun VexTabButton'''
-if 'private enum class VexTab { DOWNLOAD, EDITOR }' in v:
-    v2, n = pattern.subn(replacement, v, count=1)
-    if n != 1:
-        raise SystemExit('Video extractor tab shell not found')
-    VIDEO.write_text(v2, encoding='utf-8')
-elif 'fun V5NativeVideoExtractorScreen()' not in v:
-    raise SystemExit('Video extractor wrapper missing')
-
-# 3) New editor is a separate Monitor screen. It intentionally has NO JavaFX/Swing/JFXPanel dependency.
-EDITOR.write_text(r'''package br.com.monitordenoticias.desktop
+package br.com.monitordenoticias.desktop
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -602,6 +526,3 @@ private fun vedParse(text: String): Long {
     require(h >= 0 && m in 0..59 && s >= 0.0 && s < 60.0) { "Tempo inválido" }
     return ((h * 3600 + m * 60 + s) * 1000.0).roundToInt().toLong()
 }
-''', encoding='utf-8')
-
-print('video editor separation applied')

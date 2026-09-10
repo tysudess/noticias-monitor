@@ -68,7 +68,8 @@ private enum class V5Section(val label: String, val subtitle: String, val icon: 
     DEMANDS("Demandas", "Assuntos prioritários acompanhados por veículo", Icons.Default.Assignment),
     SOURCES("Fontes", "Fontes nacionais, regionais e mídias especializadas", Icons.Default.Storage),
     EXTRACT_NEWS("Extrator de notícias", "Extração de matérias integrada ao Monitor", Icons.Default.Description),
-    EXTRACT_VIDEO("Extrator de vídeos", "Download e edição em timeline integrados ao Monitor", Icons.Default.VideoLibrary),
+    EXTRACT_VIDEO("Extrator de vídeos", "Download, proxy, Globoplay e recursos de extração", Icons.Default.VideoLibrary),
+    EDIT_VIDEO("Editor de vídeos", "Editor e timeline integrados ao Monitor", Icons.Default.Movie),
     HISTORY("Histórico", "Histórico local das buscas e resultados", Icons.Default.History),
     TERMS("Termos", "Termos independentes para notícias e vídeos", Icons.Default.Search),
     STOP("Parar buscas", "Interrompa buscas manuais em andamento", Icons.Default.StopCircle),
@@ -134,6 +135,17 @@ private fun V5App(c: DesktopControllerV5) {
     var section by remember { mutableStateOf(V5Section.HOME) }
     var tick by remember { mutableIntStateOf(0) }
 
+    val editorSmokeFile = remember { System.getenv("MONITOR_EDITOR_SMOKE_FILE").orEmpty() }
+    LaunchedEffect(editorSmokeFile) {
+        if (editorSmokeFile.isNotBlank()) {
+            fun mark(stage: String) = runCatching { java.io.File(editorSmokeFile).writeText(stage, Charsets.UTF_8) }
+            delay(900); section = V5Section.EDIT_VIDEO; mark("ENTER_EDITOR_1")
+            delay(1200); section = V5Section.EXTRACT_VIDEO; mark("LEAVE_EDITOR_1")
+            delay(900); section = V5Section.EDIT_VIDEO; mark("ENTER_EDITOR_2")
+            delay(1200); section = V5Section.HOME; mark("PASS")
+        }
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             delay(250)
@@ -161,6 +173,7 @@ private fun V5App(c: DesktopControllerV5) {
                             V5Section.SOURCES -> V5SourcesScreen(c, tick)
                             V5Section.EXTRACT_NEWS -> V5NativeNewsExtractorScreen()
                             V5Section.EXTRACT_VIDEO -> V5NativeVideoExtractorScreen()
+                            V5Section.EDIT_VIDEO -> V5NativeVideoEditorScreen()
                             V5Section.HISTORY -> V5HistoryScreen(c, tick)
                             V5Section.TERMS -> V5TermsScreen(c, tick)
                             V5Section.STOP -> V5StopScreen(c, tick)
