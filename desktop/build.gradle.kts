@@ -52,7 +52,7 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "br.com.monitordenoticias.desktop.ReferenceDashboardMainKt"
+        mainClass = "br.com.monitordenoticias.desktop.PolishedDashboardMainKt"
         nativeDistributions {
             // O runtime enxuto gerado pelo jpackage não detecta todos os módulos
             // usados indiretamente pelo SQLite JDBC e pelo Skiko. Sem estes módulos,
