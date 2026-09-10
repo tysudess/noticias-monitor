@@ -70,7 +70,7 @@ class DesktopController(
         if (newsAllSources) emptyList() else SourceCatalog.selected(selectedNewsSourceIds)
 
     private fun selectedVideoSources(): List<VideoSource> =
-        VideoSourceCatalog.selected(selectedVideoSourceIds.ifEmpty { VideoSourceCatalog.defaultIds })
+        VideoSourceCatalog.selected(selectedVideoSourceIds)
 
     fun searchNews(from: Long? = null, to: Long? = null) {
         if (newsBusy) return
