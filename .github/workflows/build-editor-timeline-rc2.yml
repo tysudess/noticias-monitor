@@ -74,7 +74,7 @@ jobs:
         shell: pwsh
         run: |
           $editor = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoEditor.kt' -Raw
-          foreach ($anchor in @('ffprobeFile','ProcessBuilder(','durationSeconds','clips += c','Timeline pronta')) {
+          foreach ($anchor in @('ffprobeFile','ProcessBuilder(','durationSeconds','clips.add(c)','Timeline pronta')) {
             if ($editor -notmatch [regex]::Escape($anchor)) { throw "Correção de importação ausente: $anchor" }
           }
           if ($editor -match '(?m)^import javafx\.|SwingPanel|JFXPanel\(') { throw 'Editor voltou a depender de JavaFX/Swing.' }
