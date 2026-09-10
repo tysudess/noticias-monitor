@@ -1,0 +1,60 @@
+name: Apply corrected V8 compact refinements
+
+on:
+  push:
+    branches:
+      - ui/dashboard-match
+    paths:
+      - tools/refine-v8-compact-safe-v2.py
+      - .github/workflows/apply-v8-compact-safe-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ui/dashboard-match
+          fetch-depth: 0
+
+      - name: Confirm V8 project files are untouched
+        shell: bash
+        run: |
+          DASH_EXPECTED="52926f7b5fc8b5d9533c8287df4479f78f27d9b7"
+          SOURCES_EXPECTED="26a32d84846c2e6bc4a6457b336e15834f01f0df"
+          DASH_ACTUAL="$(git hash-object desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt)"
+          SOURCES_ACTUAL="$(git hash-object app/src/main/java/br/com/monitordenoticias/android/SourceCatalog.kt)"
+          echo "Dashboard: $DASH_ACTUAL"
+          echo "Sources:   $SOURCES_ACTUAL"
+          test "$DASH_ACTUAL" = "$DASH_EXPECTED"
+          test "$SOURCES_ACTUAL" = "$SOURCES_EXPECTED"
+
+      - name: Apply corrected compact refinements
+        run: python tools/refine-v8-compact-safe-v2.py
+
+      - name: Show exact project diff
+        shell: bash
+        run: |
+          git diff --stat -- \
+            app/src/main/java/br/com/monitordenoticias/android/SourceCatalog.kt \
+            desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
+          git diff --check -- \
+            app/src/main/java/br/com/monitordenoticias/android/SourceCatalog.kt \
+            desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
+
+      - name: Commit requested changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            app/src/main/java/br/com/monitordenoticias/android/SourceCatalog.kt \
+            desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(desktop): compact V8 result views safely"
+          git push origin HEAD:ui/dashboard-match
