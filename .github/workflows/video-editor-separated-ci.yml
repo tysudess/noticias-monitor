@@ -1,0 +1,99 @@
+name: Validate Separated Video Editor
+
+on:
+  push:
+    branches:
+      - integration/video-editor-separated-v1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: video-editor-separated-v1
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration/video-editor-separated-v1
+
+      - name: Materialize separated editor sources
+        shell: pwsh
+        run: |
+          python tools/apply-video-editor-separation.py
+          python tools/remove-legacy-embedded-video-editor.py
+
+      - name: Verify separation invariants
+        shell: pwsh
+        run: |
+          $dash = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
+          $video = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt' -Raw
+          $editor = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoEditor.kt' -Raw
+          if ($dash -notmatch 'EXTRACT_VIDEO[\s\S]*EDIT_VIDEO\("Editor de vídeos"') { throw 'Editor não está logo após Extrator de vídeos no menu.' }
+          if ($dash -notmatch 'V5Section\.EDIT_VIDEO -> V5NativeVideoEditorScreen\(\)') { throw 'Rota independente do Editor ausente.' }
+          if ($video -match 'VexTab|VexEditorScreen|javafx\.|SwingPanel|JFXPanel') { throw 'Extrator de vídeos ainda contém editor/runtime legado.' }
+          foreach ($anchor in @('VexDownloadScreen','Globoplay','proxy','download')) { if ($video -notmatch $anchor) { throw "Regressão no Download: $anchor ausente." } }
+          foreach ($anchor in @('Reproduzir','TIMELINE','Início aqui','Fim aqui','Duplicar','Excluir','Ctrl+Z','H.264','H.265','720p','1080p','Exportar vídeo')) { if ($editor -notmatch [regex]::Escape($anchor)) { throw "Função do editor ausente: $anchor" } }
+          if ($editor -match 'javafx\.|SwingPanel|JFXPanel') { throw 'Novo Editor ainda depende de JavaFX/Swing.' }
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile separated Editor
+        shell: pwsh
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Commit final source only
+        shell: pwsh
+        run: |
+          Remove-Item 'tools/apply-video-editor-separation.py','tools/remove-legacy-embedded-video-editor.py' -Force
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoEditor.kt tools/apply-video-editor-separation.py tools/remove-legacy-embedded-video-editor.py
+          git commit -m 'feat(editor): separate video editor from extractor navigation'
+          git push origin HEAD:integration/video-editor-separated-v1
+
+      - name: Create Windows distributable
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: UI navigation freeze smoke test
+        shell: pwsh
+        run: |
+          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $exe = Join-Path $root 'MonitorDeNoticias.exe'
+          $smoke = Join-Path $env:RUNNER_TEMP 'editor-smoke.txt'
+          $env:MONITOR_EDITOR_SMOKE_FILE = $smoke
+          $p = Start-Process -FilePath $exe -WorkingDirectory $root -PassThru
+          $deadline = (Get-Date).AddSeconds(15)
+          do {
+            Start-Sleep -Milliseconds 500
+            if (Test-Path $smoke) { $state = (Get-Content $smoke -Raw).Trim() } else { $state = '' }
+            if ($state -eq 'PASS') { break }
+            if ($p.HasExited) { throw "Monitor encerrou durante smoke test. Exit=$($p.ExitCode), state=$state" }
+          } while ((Get-Date) -lt $deadline)
+          if ($state -ne 'PASS') { throw "Editor/navigation smoke test travou ou expirou. Estado: $state" }
+          if ($p.HasExited) { throw 'Monitor encerrou após navegação Editor.' }
+          Stop-Process -Id $p.Id -Force
+          Write-Host 'PASS: entrou e saiu do Editor duas vezes sem bloquear a UI.'
+
+      - name: Upload distributable for packaging stage
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-editor-separated-distributable
+          path: desktop/build/compose/binaries/main/app/MonitorDeNoticias
+          retention-days: 7
