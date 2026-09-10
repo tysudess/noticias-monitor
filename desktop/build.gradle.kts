@@ -52,13 +52,9 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "br.com.monitordenoticias.desktop.PolishedDashboardMainKt"
+        mainClass = "br.com.monitordenoticias.desktop.DashboardV3MainKt"
         nativeDistributions {
-            // O runtime enxuto gerado pelo jpackage não detecta todos os módulos
-            // usados indiretamente pelo SQLite JDBC e pelo Skiko. Sem estes módulos,
-            // o executável pode exibir apenas "Failed to launch JVM" no Windows.
             modules("java.sql", "java.instrument", "jdk.unsupported")
-
             targetFormats(TargetFormat.Msi)
             packageName = "MonitorDeNoticias"
             packageVersion = "4.0.2"
