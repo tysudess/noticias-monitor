@@ -6,6 +6,7 @@ on:
       - integration/video-native-v1
     paths:
       - tools/fix-video-native-source.py
+      - tools/fix-video-offscreen-preview-syntax.py
       - .github/workflows/fix-video-editor-freeze.yml
   workflow_dispatch:
 
@@ -26,6 +27,7 @@ jobs:
         shell: pwsh
         run: |
           python tools/fix-video-native-source.py
+          python tools/fix-video-offscreen-preview-syntax.py
           $source = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt'
           if (Select-String -Path $source -Pattern 'SwingPanel\(' -Quiet) {
             throw 'SwingPanel still exists in the video editor source.'
@@ -39,6 +41,9 @@ jobs:
           if (-not (Select-String -Path $source -Pattern 'private object VexFxRuntime' -Quiet)) {
             throw 'Non-blocking JavaFX runtime bridge was not installed.'
           }
+          if (-not (Select-String -Path $source -Pattern 'javafx.event.EventHandler \{ captureFrameFx\(\) \}' -Quiet)) {
+            throw 'KeyFrame event handler fix was not applied.'
+          }
 
       - name: Commit fixed Kotlin source
         shell: pwsh
@@ -47,7 +52,7 @@ jobs:
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeVideoExtractor.kt'
-            git commit -m 'fix(video-editor): remove blocking SwingPanel preview'
+            git commit -m 'fix(video-editor): use offscreen Compose video preview'
             git push origin HEAD:integration/video-native-v1
           } else {
             Write-Host 'Kotlin source already contains the editor fix.'
