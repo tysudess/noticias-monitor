@@ -52,7 +52,7 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "br.com.monitordenoticias.desktop.MainKt"
+        mainClass = "br.com.monitordenoticias.desktop.ReferenceDashboardMainKt"
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "MonitorDeNoticias"
