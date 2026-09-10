@@ -68,7 +68,7 @@ private object NativeNewsExtractorService {
     private const val LAST_FILE = "materia-extraida.txt"
     private const val HISTORY_FILE = "materias-extraidas.txt"
     private const val CREDENTIALS_FILE = "credenciais-assinante.json"
-    private const val SEP = "\n" + "#".repeat(70) + "\n\n"
+    private val SEP = "\n" + "#".repeat(70) + "\n\n"
 
     private fun downloadsDir(): File {
         val home = File(System.getProperty("user.home", "."))
