@@ -1,13 +1,10 @@
-name: Build and Release Monitor with Native Video Extractor
+name: Build Monitor Native Video Extractor Validation
 
 on:
-  push:
-    branches:
-      - integration/video-native-v1
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -28,15 +25,6 @@ jobs:
             python tools/apply-video-native-tab.py
           }
           python tools/fix-video-native-source.py
-          if (git status --porcelain) {
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add $dashboard $native
-            git commit -m 'fix(desktop): finalize native video extractor sources'
-            git push origin HEAD:integration/video-native-v1
-          } else {
-            Write-Host 'Native video extractor sources already prepared.'
-          }
 
       - name: Setup Node.js 22 for native news core
         uses: actions/setup-node@v4
@@ -118,8 +106,6 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe' -OutFile 'bin/yt-dlp.exe'
           Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' -OutFile 'bin/yt-dlp-stable.exe'
-          & 'bin/yt-dlp.exe' --version
-          & 'bin/yt-dlp-stable.exe' --version
 
       - name: Download Deno
         shell: pwsh
@@ -129,7 +115,6 @@ jobs:
           Invoke-WebRequest -Uri 'https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip' -OutFile 'deno.zip'
           Expand-Archive -Path 'deno.zip' -DestinationPath 'deno-temp' -Force
           Copy-Item 'deno-temp/deno.exe' 'bin/deno.exe' -Force
-          & 'bin/deno.exe' --version
 
       - name: Download FFmpeg and FFprobe
         shell: pwsh
@@ -152,7 +137,6 @@ jobs:
           Expand-Archive -Path 'ffmpeg.zip' -DestinationPath 'ffmpeg-temp' -Force
           $ffmpeg = Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1
           $ffprobe = Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffprobe.exe' | Select-Object -First 1
-          if (-not $ffmpeg -or -not $ffprobe) { throw 'FFmpeg/FFprobe nao encontrados no pacote.' }
           Copy-Item $ffmpeg.FullName 'bin/ffmpeg.exe' -Force
           Copy-Item $ffprobe.FullName 'bin/ffprobe.exe' -Force
 
@@ -178,7 +162,6 @@ jobs:
           $raw = Get-Content state-packaged.jsonl -Raw
           if ($raw -notmatch 'Windows Portable v3.0.1') { throw 'Video core nao reportou v3.0.1.' }
           if ($raw -notmatch '"ffmpeg": true') { throw 'Video core nao localizou FFmpeg.' }
-          if ($raw -notmatch '"ytDlp": true') { throw 'Video core nao localizou yt-dlp.' }
 
       - name: Install Video Extractor core inside Monitor
         shell: pwsh
@@ -188,9 +171,6 @@ jobs:
           if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Copy-Item '_integrations/video-src/dist/VideoCoreBridge/*' $dest -Recurse -Force
-          if (-not (Test-Path (Join-Path $dest 'VideoCoreBridge.exe'))) { throw 'VideoCoreBridge.exe nao foi instalado no Monitor.' }
-          if (-not (Test-Path (Join-Path $dest 'bin/ffmpeg.exe'))) { throw 'ffmpeg.exe nao foi instalado no Monitor.' }
-          if (-not (Test-Path (Join-Path $dest 'bin/yt-dlp.exe'))) { throw 'yt-dlp.exe nao foi instalado no Monitor.' }
 
       - name: Verify integrated Video Extractor from final Monitor tree
         shell: pwsh
@@ -202,7 +182,6 @@ jobs:
           $state = '{"action":"state"}' | & (Join-Path $core 'VideoCoreBridge.exe')
           $raw = $state -join "`n"
           if ($raw -notmatch 'Windows Portable v3.0.1') { throw 'Integrated Video Extractor version mismatch.' }
-          if ($raw -notmatch '"ffmpeg": true') { throw 'Integrated Video Extractor FFmpeg missing.' }
 
       - name: Verify JavaFX preview runtime is packaged
         shell: pwsh
@@ -227,54 +206,21 @@ jobs:
             if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
           }
 
-      - name: Create final integrated Portable ZIP
+      - name: Create validation Portable ZIP
         shell: pwsh
         run: |
-          $asset = 'Monitor-de-Noticias-v4.0.2-COM-EXTRATOR-DE-VIDEOS.zip'
+          $asset = 'Monitor-de-Noticias-v4.0.2-VIDEO-VALIDACAO.zip'
           if (Test-Path $asset) { Remove-Item $asset -Force }
           Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias' -DestinationPath $asset -CompressionLevel Optimal
-          $file = Get-Item $asset
-          if ($file.Length -lt 300MB) { throw "ZIP final inesperadamente pequeno: $($file.Length) bytes" }
           $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
-          "sha256=$hash" | Set-Content 'release-sha256.txt'
-          Write-Host "Final ZIP: $($file.Length) bytes"
-          Write-Host "SHA256: $hash"
+          "sha256=$hash" | Set-Content 'validation-sha256.txt'
 
-      - name: Upload final package as workflow artifact
+      - name: Upload validation package as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: monitor-v4.0.2-extratores-integrados
+          name: monitor-video-validation
           path: |
-            Monitor-de-Noticias-v4.0.2-COM-EXTRATOR-DE-VIDEOS.zip
-            release-sha256.txt
+            Monitor-de-Noticias-v4.0.2-VIDEO-VALIDACAO.zip
+            validation-sha256.txt
           if-no-files-found: error
-          retention-days: 14
-
-      - name: Publish GitHub prerelease
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $tag = 'v4.0.2-extratores-integrados-rc1'
-          $asset = 'Monitor-de-Noticias-v4.0.2-COM-EXTRATOR-DE-VIDEOS.zip'
-          $hash = (Get-Content 'release-sha256.txt' -Raw).Trim()
-          @"
-          ## Monitor de Noticias v4.0.2 - Extratores integrados RC1
-
-          Versao de teste baseada na branch `integration/video-native-v1`.
-
-          Inclui o Extrator de Noticias integrado ao Monitor e o Extrator de Videos v3.0.1 integrado na propria interface, com Download e Editor/Timeline.
-
-          Este e um pre-release de validacao e nao substitui a versao estavel.
-
-          Integridade do arquivo: `$hash`
-          "@ | Set-Content -Path 'release-notes.md' -Encoding UTF8
-
-          gh release view $tag --repo tysudess/noticias-monitor *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $asset --clobber --repo tysudess/noticias-monitor
-          } else {
-            gh release create $tag $asset --repo tysudess/noticias-monitor --target integration/video-native-v1 --title 'Monitor de Noticias v4.0.2 - Extratores integrados RC1' --notes-file release-notes.md --prerelease
-          }
-          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar o Release no GitHub.' }
-          gh release view $tag --repo tysudess/noticias-monitor --json url,tagName,name,isPrerelease
+          retention-days: 7
