@@ -52,7 +52,7 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "br.com.monitordenoticias.desktop.DashboardV3MainKt"
+        mainClass = "br.com.monitordenoticias.desktop.DashboardV4MainKt"
         nativeDistributions {
             modules("java.sql", "java.instrument", "jdk.unsupported")
             targetFormats(TargetFormat.Msi)
