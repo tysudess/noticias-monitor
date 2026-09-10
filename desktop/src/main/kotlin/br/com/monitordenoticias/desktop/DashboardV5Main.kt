@@ -65,7 +65,7 @@ private enum class V5Section(val label: String, val subtitle: String, val icon: 
     NEWS("Notícias", "Busca e acompanhamento de matérias com atualização contínua", Icons.Default.Article),
     VIDEOS("Vídeos", "Busca e acompanhamento de vídeos relevantes", Icons.Default.PlayCircle),
     DEMANDS("Demandas", "Assuntos prioritários acompanhados por veículo", Icons.Default.Assignment),
-    SOURCES("Fontes", "Fontes nacionais, regionais, programas e canais oficiais", Icons.Default.Storage),
+    SOURCES("Fontes", "Fontes nacionais, regionais e mídias especializadas", Icons.Default.Storage),
     HISTORY("Histórico", "Histórico local das buscas e resultados", Icons.Default.History),
     TERMS("Termos", "Termos independentes para notícias e vídeos", Icons.Default.Search),
     STOP("Parar buscas", "Interrompa buscas manuais em andamento", Icons.Default.StopCircle),
@@ -174,7 +174,7 @@ private fun V5Sidebar(selected: V5Section, onSelect: (V5Section) -> Unit, c: Des
     Column(
         Modifier.width(258.dp).fillMaxHeight()
             .background(Brush.verticalGradient(listOf(V5NavyDark, V5Navy, Color(0xFF073A69))))
-            .padding(horizontal = 18.dp, vertical = 20.dp)
+            .padding(horizontal = 18.dp, vertical = 18.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -191,42 +191,46 @@ private fun V5Sidebar(selected: V5Section, onSelect: (V5Section) -> Unit, c: Des
             }
         }
 
-        Spacer(Modifier.height(24.dp))
-        V5Section.entries.forEach { item ->
-            val active = selected == item
-            Row(
-                Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(10.dp))
-                    .background(
-                        if (active) Brush.horizontalGradient(listOf(Color(0xFF0B83F4), Color(0xFF185CC8)))
-                        else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
-                    )
-                    .clickable { onSelect(item) }
-                    .padding(horizontal = 15.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(item.icon, null, tint = if (active) Color.White else Color(0xFFC7DAEF), modifier = Modifier.size(23.dp))
-                Spacer(Modifier.width(14.dp))
-                Text(item.label, color = Color.White, fontSize = 15.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
-                when {
-                    item == V5Section.NEWS && c.newNewsLinks.isNotEmpty() -> {
-                        Spacer(Modifier.weight(1f)); V5CountBadge(c.newNewsLinks.size, V5Gold, V5Navy)
-                    }
-                    item == V5Section.VIDEOS && c.newVideoLinks.isNotEmpty() -> {
-                        Spacer(Modifier.weight(1f)); V5CountBadge(c.newVideoLinks.size, V5Purple, Color.White)
+        Spacer(Modifier.height(18.dp))
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            V5Section.entries.forEach { item ->
+                val active = selected == item
+                Row(
+                    Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (active) Brush.horizontalGradient(listOf(Color(0xFF0B83F4), Color(0xFF185CC8)))
+                            else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
+                        )
+                        .clickable { onSelect(item) }
+                        .padding(horizontal = 15.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(item.icon, null, tint = if (active) Color.White else Color(0xFFC7DAEF), modifier = Modifier.size(23.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Text(item.label, color = Color.White, fontSize = 15.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
+                    when {
+                        item == V5Section.NEWS && c.newNewsLinks.isNotEmpty() -> {
+                            Spacer(Modifier.weight(1f)); V5CountBadge(c.newNewsLinks.size, V5Gold, V5Navy)
+                        }
+                        item == V5Section.VIDEOS && c.newVideoLinks.isNotEmpty() -> {
+                            Spacer(Modifier.weight(1f)); V5CountBadge(c.newVideoLinks.size, V5Purple, Color.White)
+                        }
                     }
                 }
             }
-            Spacer(Modifier.height(5.dp))
         }
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(10.dp))
         Surface(
             color = Color(0x19000000),
             shape = RoundedCornerShape(12.dp),
             border = BorderStroke(1.dp, Color(0xFF245481)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(14.dp).clip(CircleShape).background(Color(0xFF72E557)))
                     Spacer(Modifier.width(8.dp))
@@ -252,14 +256,14 @@ private fun V5SideStatus(text: String, ok: Boolean) {
             modifier = Modifier.size(15.dp)
         )
         Spacer(Modifier.width(7.dp))
-        Text(text, color = if (ok) Color(0xFFD7E8F7) else Color(0xFFFFD985), fontSize = 10.sp, maxLines = 1)
+        Text(text, color = if (ok) Color(0xFFD7E8F7) else Color(0xFFFFD985), fontSize = 11.sp, maxLines = 1)
     }
 }
 
 @Composable
 private fun V5CountBadge(n: Int, bg: Color, fg: Color) {
     Surface(color = bg, shape = RoundedCornerShape(13.dp)) {
-        Text(n.toString(), color = fg, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
+        Text(n.toString(), color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
     }
 }
 
@@ -398,7 +402,7 @@ private fun V5Home(c: DesktopControllerV5, onNavigate: (V5Section) -> Unit, tick
                     .background(Brush.linearGradient(listOf(Color(0xFF082A52), Color(0xFF0A4E8C), Color(0xFF3288D5))))
             ) {
                 Column(Modifier.fillMaxHeight().width(500.dp).padding(horizontal = 28.dp, vertical = 25.dp)) {
-                    Text("CENTRAL DE INTELIGÊNCIA DE MÍDIA", color = Color(0xFFC9DDF1), fontSize = 10.sp, letterSpacing = 1.2.sp)
+                    Text("CENTRAL DE INTELIGÊNCIA DE MÍDIA", color = Color(0xFFC9DDF1), fontSize = 11.sp, letterSpacing = 1.2.sp)
                     Spacer(Modifier.height(9.dp))
                     Text("Tudo o que importa\nem um só lugar.", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 34.sp)
                     Spacer(Modifier.height(9.dp))
@@ -440,7 +444,7 @@ private fun V5Home(c: DesktopControllerV5, onNavigate: (V5Section) -> Unit, tick
                                 Text(
                                     "${activeProgress.completed}/${activeProgress.total} etapas • ${activeProgress.currentSource.ifBlank { "Preparando" }}",
                                     color = Color(0xFFCDEDE2),
-                                    fontSize = 8.sp,
+                                    fontSize = 11.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -454,13 +458,13 @@ private fun V5Home(c: DesktopControllerV5, onNavigate: (V5Section) -> Unit, tick
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(Icons.Default.LaptopWindows, null, tint = Color.White.copy(alpha = .32f), modifier = Modifier.size(185.dp))
-                    Text("Monitoramento integrado", color = Color.White.copy(alpha = .60f), fontSize = 9.sp)
+                    Text("Monitoramento integrado", color = Color.White.copy(alpha = .60f), fontSize = 11.sp)
                 }
             }
 
             V5Card(Modifier.weight(1f).fillMaxHeight()) {
                 Text("Ações rápidas", color = V5Ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Execute as principais rotinas sem sair do painel.", color = V5Muted, fontSize = 10.sp)
+                Text("Execute as principais rotinas sem sair do painel.", color = V5Muted, fontSize = 11.sp)
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -476,13 +480,13 @@ private fun V5Home(c: DesktopControllerV5, onNavigate: (V5Section) -> Unit, tick
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            V5Card(Modifier.weight(1f).height(160.dp)) {
+            V5Card(Modifier.weight(1f).height(188.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Schedule, null, tint = V5Blue, modifier = Modifier.size(26.dp))
                     Spacer(Modifier.width(9.dp))
                     Column {
                         Text("Agendamento automático", color = V5Ink, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("Rotinas independentes e configuráveis.", color = V5Muted, fontSize = 10.sp)
+                        Text("O sistema executa buscas automaticamente nos horários definidos.", color = V5Muted, fontSize = 11.sp)
                     }
                 }
                 Spacer(Modifier.height(13.dp))
@@ -493,9 +497,9 @@ private fun V5Home(c: DesktopControllerV5, onNavigate: (V5Section) -> Unit, tick
                 }
             }
 
-            V5Card(Modifier.weight(1f).height(160.dp)) {
+            V5Card(Modifier.weight(1f).height(188.dp)) {
                 Text("Resumo do dia", color = V5Ink, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Dados atuais disponíveis no aplicativo.", color = V5Muted, fontSize = 10.sp)
+                Text("Dados atuais disponíveis no aplicativo.", color = V5Muted, fontSize = 11.sp)
                 Spacer(Modifier.height(18.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     V5Summary("Notícias", c.news.size, V5Blue)
@@ -518,15 +522,15 @@ private fun V5Home(c: DesktopControllerV5, onNavigate: (V5Section) -> Unit, tick
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(7.dp).clip(CircleShape).background(V5Green))
                         Spacer(Modifier.width(8.dp))
-                        Text(s.name, color = V5Ink, fontSize = 10.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(s.region, color = V5Muted, fontSize = 8.sp)
+                        Text(s.name, color = V5Ink, fontSize = 11.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(s.region, color = V5Muted, fontSize = 11.sp)
                     }
                 }
                 Spacer(Modifier.weight(1f))
                 Text(
                     if (c.newsAllSources) "Todos os veículos: ligado" else "${c.selectedNewsSourceIds.size} fonte(s) selecionada(s)",
                     color = if (c.newsAllSources) V5Green else V5Muted,
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -559,7 +563,7 @@ private fun V5Home(c: DesktopControllerV5, onNavigate: (V5Section) -> Unit, tick
                         Text(
                             "Use termos específicos. Para notícias, ligue 'Todos os veículos' quando quiser incluir também fontes fora do catálogo padrão.",
                             color = V5Muted,
-                            fontSize = 9.sp,
+                            fontSize = 11.sp,
                             lineHeight = 14.sp
                         )
                     }
@@ -593,8 +597,8 @@ private fun V5Action(title: String, subtitle: String, accent: Color, icon: Image
             Icon(icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(10.dp))
             Column {
-                Text(title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text(subtitle, color = Color.White.copy(alpha = .84f), fontSize = 8.sp)
+                Text(title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = Color.White.copy(alpha = .84f), fontSize = 10.sp)
             }
         }
     }
@@ -602,11 +606,11 @@ private fun V5Action(title: String, subtitle: String, accent: Color, icon: Image
 
 @Composable
 private fun V5MiniSchedule(title: String, value: String, accent: Color, modifier: Modifier) {
-    Surface(modifier.height(62.dp), color = Color(0xFFF7FAFE), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Border)) {
-        Column(Modifier.padding(horizontal = 11.dp, vertical = 9.dp)) {
-            Text(title, color = V5Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(2.dp))
-            Text(value, color = accent, fontSize = 9.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Surface(modifier.height(78.dp), color = Color(0xFFF7FAFE), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Border)) {
+        Column(Modifier.padding(horizontal = 11.dp, vertical = 10.dp)) {
+            Text(title, color = V5Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(value, color = accent, fontSize = 11.sp, lineHeight = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -624,8 +628,8 @@ private fun V5ActivityLine(label: String, value: String, color: Color) {
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(8.dp))
-        Text(label, color = V5Ink, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(66.dp))
-        Text(value, color = V5Muted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(label, color = V5Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(76.dp))
+        Text(value, color = V5Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
     }
 }
 
@@ -760,7 +764,7 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
                 V5PeriodButton("7 dias") { val p = c.periodLastHours(168); c.searchVideos(p.first, p.second) }
                 V5PeriodButton("30 dias") { val p = c.periodLastHours(720); c.searchVideos(p.first, p.second) }
                 V5PeriodButton(if (custom) "Fechar período personalizado" else "Período personalizado", selected = custom) { custom = !custom }
-                Spacer(Modifier.weight(1f)); Text("${list.size} vídeo(s)", color = V5Muted, fontSize = 10.sp)
+                Spacer(Modifier.weight(1f)); Text("${list.size} vídeo(s)", color = V5Muted, fontSize = 11.sp)
             }
 
             if (custom) {
@@ -780,7 +784,7 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
                             Spacer(Modifier.width(6.dp)); Text("Buscar período", fontSize = 11.sp)
                         }
                         Spacer(Modifier.weight(1f))
-                        Text("Formato: AAAA-MM-DD", color = V5Muted, fontSize = 8.sp, modifier = Modifier.padding(bottom = 12.dp))
+                        Text("Formato: AAAA-MM-DD", color = V5Muted, fontSize = 11.sp, modifier = Modifier.padding(bottom = 12.dp))
                     }
                 }
             }
@@ -807,7 +811,7 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
                     Spacer(Modifier.width(8.dp))
                     Text(
                         "${c.unstableVideoSources.size} fonte(s) apresentaram instabilidade na última busca. As demais fontes continuaram normalmente.",
-                        color = Color(0xFF8A5D00), fontSize = 10.sp
+                        color = Color(0xFF8A5D00), fontSize = 11.sp
                     )
                 }
             }
@@ -815,7 +819,7 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Vídeos encontrados", color = V5Ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-            Spacer(Modifier.weight(1f)); Text("${list.size} exibido(s)", color = V5Muted, fontSize = 10.sp)
+            Spacer(Modifier.weight(1f)); Text("${list.size} exibido(s)", color = V5Muted, fontSize = 11.sp)
         }
 
         if (list.isEmpty()) {
@@ -1055,13 +1059,13 @@ private fun V5VideoCard(v: VideoItem, isNew: Boolean, showMatched: Boolean) {
 private fun V5LinkButtons(primaryLabel: String, open: () -> Unit, copy: () -> Unit, share: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = open, modifier = Modifier.height(40.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
-            Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text(primaryLabel, fontSize = 10.sp)
+            Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text(primaryLabel, fontSize = 11.sp)
         }
         OutlinedButton(onClick = share, modifier = Modifier.height(40.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
-            Icon(Icons.Default.Share, null, tint = V5Green, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("WhatsApp", fontSize = 10.sp, color = V5Green)
+            Icon(Icons.Default.Share, null, tint = V5Green, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("WhatsApp", fontSize = 11.sp, color = V5Green)
         }
         OutlinedButton(onClick = copy, modifier = Modifier.height(40.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
-            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("Copiar link", fontSize = 10.sp)
+            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("Copiar link", fontSize = 11.sp)
         }
     }
 }
@@ -1069,14 +1073,14 @@ private fun V5LinkButtons(primaryLabel: String, open: () -> Unit, copy: () -> Un
 @Composable
 private fun V5NewBadge() {
     Surface(color = V5Blue, shape = RoundedCornerShape(10.dp)) {
-        Text("Nova", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
+        Text("Nova", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
     }
 }
 
 @Composable
 private fun V5Tag(text: String, color: Color, maxWidth: androidx.compose.ui.unit.Dp) {
     Surface(color = color.copy(alpha = .08f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, color.copy(alpha = .25f)), modifier = Modifier.widthIn(max = maxWidth)) {
-        Text(text, color = color, fontSize = 9.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
+        Text(text, color = color, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
     }
 }
 
@@ -1152,9 +1156,9 @@ private fun V5SettingsScreen(c: DesktopControllerV5, tick: Int) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Configuração de proxy", color = V5Ink, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("Servidor fixo ${c.proxyHost}:${c.proxyPort}. Informe usuário e senha para autenticação.", color = V5Muted, fontSize = 10.sp)
+                        Text("Servidor fixo ${c.proxyHost}:${c.proxyPort}. Informe usuário e senha para autenticação.", color = V5Muted, fontSize = 11.sp)
                     }
-                    Text(if (proxyEnabled) "Ativado" else "Desativado", color = if (proxyEnabled) V5Green else V5Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(if (proxyEnabled) "Ativado" else "Desativado", color = if (proxyEnabled) V5Green else V5Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp)); Switch(proxyEnabled, onCheckedChange = { proxyEnabled = it })
                 }
 
@@ -1164,7 +1168,7 @@ private fun V5SettingsScreen(c: DesktopControllerV5, tick: Int) {
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Error, null, tint = V5Red, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Configure usuário e senha para liberar as buscas pelo proxy.", color = V5Red, fontSize = 10.sp)
+                            Text("Configure usuário e senha para liberar as buscas pelo proxy.", color = V5Red, fontSize = 11.sp)
                         }
                     }
                 }
@@ -1176,15 +1180,15 @@ private fun V5SettingsScreen(c: DesktopControllerV5, tick: Int) {
                     Button(
                         onClick = { c.saveProxy(proxyEnabled, "proxy-7db.mb", 6060, user, pass); proxyMessage = "Configuração salva e aplicada." },
                         modifier = Modifier.height(44.dp)
-                    ) { Icon(Icons.Default.Check, null); Spacer(Modifier.width(5.dp)); Text("Salvar e aplicar", fontSize = 10.sp) }
+                    ) { Icon(Icons.Default.Check, null); Spacer(Modifier.width(5.dp)); Text("Salvar e aplicar", fontSize = 11.sp) }
                     OutlinedButton(
                         onClick = { scope.launch { val r = c.testProxyConnection(); proxyMessage = r.second } },
                         modifier = Modifier.height(44.dp)
-                    ) { Icon(Icons.Default.Wifi, null); Spacer(Modifier.width(5.dp)); Text("Testar conexão", fontSize = 10.sp) }
+                    ) { Icon(Icons.Default.Wifi, null); Spacer(Modifier.width(5.dp)); Text("Testar conexão", fontSize = 11.sp) }
                 }
                 if (proxyMessage.isNotBlank()) {
                     Spacer(Modifier.height(7.dp))
-                    Text(proxyMessage, color = if (proxyMessage.contains("sucesso", true) || proxyMessage.contains("salva", true)) V5Green else V5Muted, fontSize = 9.sp)
+                    Text(proxyMessage, color = if (proxyMessage.contains("sucesso", true) || proxyMessage.contains("salva", true)) V5Green else V5Muted, fontSize = 11.sp)
                 }
             }
         }
@@ -1196,10 +1200,10 @@ private fun V5SettingsScreen(c: DesktopControllerV5, tick: Int) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Buscas automáticas", color = V5Ink, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("Notícias, Demandas e Vídeos funcionam de forma independente.", color = V5Muted, fontSize = 10.sp)
+                        Text("Notícias, Demandas e Vídeos funcionam de forma independente.", color = V5Muted, fontSize = 11.sp)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("Controle geral", color = V5Muted, fontSize = 9.sp)
+                        Text("Controle geral", color = V5Muted, fontSize = 11.sp)
                         Switch(c.automaticMonitoring, onCheckedChange = { c.automaticMonitoring = it })
                     }
                 }
@@ -1209,7 +1213,7 @@ private fun V5SettingsScreen(c: DesktopControllerV5, tick: Int) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Iniciar Monitor de Notícias com o Windows", color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text("Inicialização automática ao entrar no sistema.", color = V5Muted, fontSize = 9.sp)
+                        Text("Inicialização automática ao entrar no sistema.", color = V5Muted, fontSize = 11.sp)
                     }
                     Switch(c.startWithWindows, onCheckedChange = { c.startWithWindows = it })
                 }
@@ -1231,17 +1235,17 @@ private fun V5SettingsScreen(c: DesktopControllerV5, tick: Int) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Vídeos", color = V5Ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("Busca automática nos horários escolhidos; busca manual permanece disponível.", color = V5Muted, fontSize = 10.sp)
+                        Text("Busca automática nos horários escolhidos; busca manual permanece disponível.", color = V5Muted, fontSize = 11.sp)
                     }
-                    Text("Automático", color = V5Muted, fontSize = 9.sp)
+                    Text("Automático", color = V5Muted, fontSize = 11.sp)
                     Spacer(Modifier.width(7.dp)); Switch(c.videoAutomatic, onCheckedChange = { c.videoAutomatic = it })
                     Spacer(Modifier.width(12.dp))
                     OutlinedButton(onClick = { c.searchVideos() }, modifier = Modifier.height(42.dp)) {
-                        Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(5.dp)); Text("Executar agora", fontSize = 10.sp)
+                        Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(5.dp)); Text("Executar agora", fontSize = 11.sp)
                     }
                 }
                 Spacer(Modifier.height(11.dp))
-                Text("Horários programados", color = V5Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("Horários programados", color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(7.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     c.videoScheduleTimes.sorted().forEach { t -> V5TimeChip(t) { c.videoScheduleTimes = c.videoScheduleTimes - t } }
@@ -1259,9 +1263,9 @@ private fun V5SettingsScreen(c: DesktopControllerV5, tick: Int) {
                         },
                         enabled = videoTime.length == 5,
                         modifier = Modifier.height(44.dp)
-                    ) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(5.dp)); Text("Adicionar horário", fontSize = 10.sp) }
+                    ) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(5.dp)); Text("Adicionar horário", fontSize = 11.sp) }
                     Spacer(Modifier.weight(1f))
-                    Text("Última automática: ${V5AutoTime(c.lastVideoAutoAt)}", color = V5Muted, fontSize = 9.sp, modifier = Modifier.padding(bottom = 12.dp))
+                    Text("Última automática: ${V5AutoTime(c.lastVideoAutoAt)}", color = V5Muted, fontSize = 11.sp, modifier = Modifier.padding(bottom = 12.dp))
                 }
             }
         }
@@ -1295,24 +1299,24 @@ private fun V5AutomationCard(
                     Text(title, color = V5Ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                     if (enabled) { Spacer(Modifier.width(8.dp)); V5Tag("automático ativo", V5Green, 120.dp) }
                 }
-                Text(subtitle, color = V5Muted, fontSize = 10.sp)
+                Text(subtitle, color = V5Muted, fontSize = 11.sp)
             }
-            Text("Automático", color = V5Muted, fontSize = 9.sp)
+            Text("Automático", color = V5Muted, fontSize = 11.sp)
             Spacer(Modifier.width(7.dp)); Switch(enabled, onCheckedChange = onEnabled)
             Spacer(Modifier.width(12.dp))
             OutlinedButton(onClick = runNow, modifier = Modifier.height(42.dp)) {
-                Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(5.dp)); Text("Executar agora", fontSize = 10.sp)
+                Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(5.dp)); Text("Executar agora", fontSize = 11.sp)
             }
         }
         Spacer(Modifier.height(10.dp))
         Row {
-            Text("Última automática: ${V5AutoTime(lastAt)}", color = V5Muted, fontSize = 9.sp)
+            Text("Última automática: ${V5AutoTime(lastAt)}", color = V5Muted, fontSize = 11.sp)
             Spacer(Modifier.width(30.dp))
-            Text("Próxima execução: ${V5NextAuto(lastAt, interval)}", color = V5Muted, fontSize = 9.sp)
+            Text("Próxima execução: ${V5NextAuto(lastAt, interval)}", color = V5Muted, fontSize = 11.sp)
         }
         Spacer(Modifier.height(9.dp)); HorizontalDivider(color = V5Border); Spacer(Modifier.height(9.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Frequência", color = V5Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("Frequência", color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             listOf(15, 30, 45, 60, 120).forEach { m ->
                 V5ChoiceButton(V5IntervalLabel(m), interval == m) { onInterval(m) }
             }
@@ -1327,42 +1331,52 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
     var region by remember { mutableStateOf("Todas") }
     var state by remember { mutableStateOf("Todos") }
 
-    val newsList = remember(tick, region, state, query) {
-        SourceCatalog.all.filter {
+    val newsBase = if (tab == V5SourceTab.SPECIAL) SourceCatalog.specialized else SourceCatalog.all
+    val newsList = remember(tick, region, state, query, tab) {
+        newsBase.filter {
             (region == "Todas" || it.region == region) &&
                 (state == "Todos" || it.state == state) &&
-                (query.isBlank() || "${it.name} ${it.stateName} ${it.group}".contains(query, true))
+                (query.isBlank() || "${it.name} ${it.stateName} ${it.group} ${it.aliases.joinToString(" ")}".contains(query, true))
         }
     }
 
-    val videoBase = if (tab == V5SourceTab.SPECIAL) DesktopVideoSources.all.filter {
-        it.group.contains("Telejornal", true) || it.group.contains("Programa", true) || it.name.contains("Domingo Espetacular", true)
-    }.take(24) else DesktopVideoSources.all
-
-    val videoList = remember(tick, region, state, query, tab) {
-        videoBase.filter {
+    val videoList = remember(tick, region, state, query) {
+        DesktopVideoSources.all.filter {
             (region == "Todas" || it.region == region) &&
                 (state == "Todos" || it.state == state) &&
                 (query.isBlank() || "${it.name} ${it.group} ${it.aliases.joinToString(" ")}".contains(query, true))
         }
     }
-    val visible = if (tab == V5SourceTab.NEWS) newsList.size else videoList.size
+    val visible = when (tab) {
+        V5SourceTab.VIDEOS -> videoList.size
+        V5SourceTab.NEWS, V5SourceTab.SPECIAL -> newsList.size
+    }
+    val allNewsMode = tab == V5SourceTab.NEWS && c.newsAllSources
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         V5Card(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                V5TabButton("Notícias", tab == V5SourceTab.NEWS) { tab = V5SourceTab.NEWS }
+                V5TabButton("Notícias", tab == V5SourceTab.NEWS) {
+                    tab = V5SourceTab.NEWS
+                    region = "Todas"; state = "Todos"
+                }
                 Spacer(Modifier.width(7.dp))
-                V5TabButton("Vídeos", tab == V5SourceTab.VIDEOS) { tab = V5SourceTab.VIDEOS }
+                V5TabButton("Vídeos", tab == V5SourceTab.VIDEOS) {
+                    tab = V5SourceTab.VIDEOS
+                    region = "Todas"; state = "Todos"
+                }
                 Spacer(Modifier.width(7.dp))
-                V5TabButton("Mídias / programas", tab == V5SourceTab.SPECIAL) { tab = V5SourceTab.SPECIAL }
+                V5TabButton("Mídia especializada", tab == V5SourceTab.SPECIAL) {
+                    tab = V5SourceTab.SPECIAL
+                    region = "Todas"; state = "Todos"
+                }
                 Spacer(Modifier.weight(1f))
                 V5SearchBox(query, { query = it }, "Pesquisar fonte...", Modifier.width(400.dp))
             }
 
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Região", color = V5Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(65.dp))
+                Text("Região", color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(65.dp))
                 SourceCatalog.regions.forEach { r ->
                     V5FilterButton(r, region == r) { region = r; state = "Todos" }
                     Spacer(Modifier.width(5.dp))
@@ -1371,7 +1385,7 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
 
             Spacer(Modifier.height(9.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Estado", color = V5Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(65.dp))
+                Text("Estado", color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(65.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
                     V5FilterButton("Todos", state == "Todos") { state = "Todos" }
                     Spacer(Modifier.width(5.dp))
@@ -1382,34 +1396,47 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
                 }
             }
 
-            if (tab == V5SourceTab.NEWS) {
-                Spacer(Modifier.height(12.dp))
-                Surface(
-                    color = if (c.newsAllSources) Color(0xFFE5F8EF) else Color(0xFFF6F9FD),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, if (c.newsAllSources) V5Green.copy(alpha = .35f) else V5Border),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(40.dp).clip(RoundedCornerShape(9.dp)).background((if (c.newsAllSources) V5Green else V5Muted).copy(alpha = .12f)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Public, null, tint = if (c.newsAllSources) V5Green else V5Muted)
+            when (tab) {
+                V5SourceTab.NEWS -> {
+                    Spacer(Modifier.height(12.dp))
+                    Surface(
+                        color = if (c.newsAllSources) Color(0xFFE5F8EF) else Color(0xFFF6F9FD),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, if (c.newsAllSources) V5Green.copy(alpha = .35f) else V5Border),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(40.dp).clip(RoundedCornerShape(9.dp)).background((if (c.newsAllSources) V5Green else V5Muted).copy(alpha = .12f)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Public, null, tint = if (c.newsAllSources) V5Green else V5Muted)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("TODOS OS VEÍCULOS — SEM EXCEÇÃO", color = if (c.newsAllSources) V5Green else V5Ink, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                                Text("Ligado: aceita qualquer veículo encontrado, inclusive fora do catálogo padrão.", color = V5Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                            }
+                            Text(if (c.newsAllSources) "LIGADO" else "DESLIGADO", color = if (c.newsAllSources) V5Green else V5Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(8.dp)); Switch(c.newsAllSources, onCheckedChange = { c.newsAllSources = it })
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("TODOS OS VEÍCULOS — SEM EXCEÇÃO", color = if (c.newsAllSources) V5Green else V5Ink, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-                            Text("Ligado: ignora o seletor e aceita qualquer veículo encontrado na busca, inclusive fora do catálogo padrão.", color = V5Muted, fontSize = 9.sp, lineHeight = 13.sp)
-                        }
-                        Text(if (c.newsAllSources) "LIGADO" else "DESLIGADO", color = if (c.newsAllSources) V5Green else V5Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(8.dp)); Switch(c.newsAllSources, onCheckedChange = { c.newsAllSources = it })
                     }
                 }
-            } else {
-                Spacer(Modifier.height(12.dp))
-                Surface(color = Color(0xFFF8F5FF), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Purple.copy(alpha = .18f)), modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.YouTube, null, tint = V5Red, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text("Fontes oficiais do YouTube incluem g1 e Domingo Espetacular, além dos canais já existentes.", color = V5Ink, fontSize = 10.sp)
+                V5SourceTab.VIDEOS -> {
+                    Spacer(Modifier.height(12.dp))
+                    Surface(color = Color(0xFFF8F5FF), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Purple.copy(alpha = .18f)), modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.YouTube, null, tint = V5Red, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("Fontes oficiais do YouTube incluem g1 e Domingo Espetacular, além dos canais já existentes.", color = V5Ink, fontSize = 11.sp)
+                        }
+                    }
+                }
+                V5SourceTab.SPECIAL -> {
+                    Spacer(Modifier.height(12.dp))
+                    Surface(color = Color(0xFFFFF8E8), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Gold.copy(alpha = .28f)), modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Verified, null, tint = Color(0xFFC88700), modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("Mídia especializada: 8 veículos focados em Defesa, Forças Armadas e assuntos navais.", color = V5Ink, fontSize = 11.sp)
+                        }
                     }
                 }
             }
@@ -1419,36 +1446,39 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Storage, null, tint = V5Blue, modifier = Modifier.size(31.dp))
                 Spacer(Modifier.width(12.dp))
-                Text("$visible fonte(s) visível(is)", color = V5Ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                if (tab == V5SourceTab.NEWS && c.newsAllSources) { Spacer(Modifier.width(10.dp)); V5Tag("seletor ignorado", V5Green, 130.dp) }
+                Text("$visible fonte(s) visível(is)", color = V5Ink, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                if (allNewsMode) { Spacer(Modifier.width(10.dp)); V5Tag("seletor ignorado", V5Green, 130.dp) }
                 Spacer(Modifier.weight(1f))
                 Button(onClick = {
-                    if (tab == V5SourceTab.NEWS) newsList.forEach { c.setNewsSource(it.id, true) }
-                    else videoList.forEach { c.setVideoSource(it.id, true) }
-                }) { Text("Selecionar visíveis", fontSize = 10.sp) }
+                    if (tab == V5SourceTab.VIDEOS) videoList.forEach { c.setVideoSource(it.id, true) }
+                    else newsList.forEach { c.setNewsSource(it.id, true) }
+                }) { Text("Selecionar visíveis", fontSize = 11.sp) }
                 Spacer(Modifier.width(7.dp))
                 OutlinedButton(onClick = {
-                    if (tab == V5SourceTab.NEWS) newsList.forEach { c.setNewsSource(it.id, false) }
-                    else videoList.forEach { c.setVideoSource(it.id, false) }
-                }) { Text("Limpar visíveis", fontSize = 10.sp) }
+                    if (tab == V5SourceTab.VIDEOS) videoList.forEach { c.setVideoSource(it.id, false) }
+                    else newsList.forEach { c.setNewsSource(it.id, false) }
+                }) { Text("Limpar visíveis", fontSize = 11.sp) }
                 Spacer(Modifier.width(7.dp))
-                OutlinedButton(onClick = { if (tab == V5SourceTab.NEWS) c.selectAllNewsSources() else c.selectAllVideoSources() }) { Text("Todas", fontSize = 10.sp) }
+                OutlinedButton(onClick = {
+                    when (tab) {
+                        V5SourceTab.NEWS -> c.selectAllNewsSources()
+                        V5SourceTab.VIDEOS -> c.selectAllVideoSources()
+                        V5SourceTab.SPECIAL -> SourceCatalog.specialized.forEach { c.setNewsSource(it.id, true) }
+                    }
+                }) { Text("Todas", fontSize = 11.sp) }
                 Spacer(Modifier.width(7.dp))
-                OutlinedButton(onClick = { if (tab == V5SourceTab.NEWS) c.clearNewsSources() else c.clearVideoSources() }) { Text("Nenhuma", fontSize = 10.sp) }
+                OutlinedButton(onClick = {
+                    when (tab) {
+                        V5SourceTab.NEWS -> c.clearNewsSources()
+                        V5SourceTab.VIDEOS -> c.clearVideoSources()
+                        V5SourceTab.SPECIAL -> SourceCatalog.specialized.forEach { c.setNewsSource(it.id, false) }
+                    }
+                }) { Text("Nenhuma", fontSize = 11.sp) }
             }
         }
 
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            if (tab == V5SourceTab.NEWS) {
-                items(newsList, key = { it.id }) { s ->
-                    V5SourceRow(
-                        s.name,
-                        "${s.group} • ${s.region} • ${s.state.ifBlank { "BR" }}",
-                        c.newsAllSources || s.id in c.selectedNewsSourceIds,
-                        !c.newsAllSources
-                    ) { c.setNewsSource(s.id, it) }
-                }
-            } else {
+            if (tab == V5SourceTab.VIDEOS) {
                 items(videoList, key = { it.id }) { s ->
                     V5SourceRow(
                         s.name,
@@ -1456,6 +1486,15 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
                         s.id in c.selectedVideoSourceIds,
                         true
                     ) { c.setVideoSource(s.id, it) }
+                }
+            } else {
+                items(newsList, key = { it.id }) { s ->
+                    V5SourceRow(
+                        s.name,
+                        "${s.group} • ${s.region} • ${s.state.ifBlank { "BR" }}",
+                        allNewsMode || s.id in c.selectedNewsSourceIds,
+                        !allNewsMode
+                    ) { c.setNewsSource(s.id, it) }
                 }
             }
         }
@@ -1468,10 +1507,10 @@ private fun V5TabButton(text: String, selected: Boolean, click: () -> Unit) {
         color = if (selected) Color(0xFFEDE7FF) else Color.White,
         shape = RoundedCornerShape(9.dp),
         border = BorderStroke(1.dp, if (selected) V5Purple.copy(alpha = .25f) else V5Border),
-        modifier = Modifier.height(40.dp).clickable(onClick = click)
+        modifier = Modifier.height(44.dp).clickable(onClick = click)
     ) {
         Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text, color = V5Ink, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+            Text(text, color = V5Ink, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
         }
     }
 }
@@ -1482,10 +1521,10 @@ private fun V5FilterButton(text: String, selected: Boolean, click: () -> Unit) {
         color = if (selected) Color(0xFFDCEBFF) else Color.White,
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, V5Border),
-        modifier = Modifier.height(35.dp).clickable(onClick = click)
+        modifier = Modifier.height(38.dp).clickable(onClick = click)
     ) {
         Row(Modifier.padding(horizontal = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text, color = if (selected) V5Blue else V5Muted, fontSize = 9.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+            Text(text, color = if (selected) V5Blue else V5Muted, fontSize = 10.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
         }
     }
 }
@@ -1501,8 +1540,8 @@ private fun V5SourceRow(name: String, detail: String, checked: Boolean, enabled:
             }
             Spacer(Modifier.width(15.dp))
             Column(Modifier.weight(1f)) {
-                Text(name, color = V5Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(2.dp)); Text(detail, color = V5Muted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(name, color = V5Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(2.dp)); Text(detail, color = V5Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (!enabled) V5Tag("modo todos", V5Green, 90.dp)
             Spacer(Modifier.width(8.dp)); Icon(Icons.Default.ChevronRight, null, tint = V5Blue)
@@ -1525,9 +1564,9 @@ private fun V5DemandsScreen(c: DesktopControllerV5, tick: Int) {
                     onClick = { c.addDemand(vehicle, subject); vehicle = ""; subject = "" },
                     enabled = vehicle.isNotBlank() && subject.isNotBlank(),
                     modifier = Modifier.height(44.dp)
-                ) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(5.dp)); Text("Adicionar", fontSize = 10.sp) }
+                ) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(5.dp)); Text("Adicionar", fontSize = 11.sp) }
                 OutlinedButton(onClick = { c.searchAllDemands() }, enabled = !c.newsBusy, modifier = Modifier.height(44.dp)) {
-                    Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(5.dp)); Text("Buscar todas", fontSize = 10.sp)
+                    Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(5.dp)); Text("Buscar todas", fontSize = 11.sp)
                 }
             }
         }
@@ -1538,7 +1577,7 @@ private fun V5DemandsScreen(c: DesktopControllerV5, tick: Int) {
                 Spacer(Modifier.width(15.dp))
                 Column {
                     Text(if (c.newsBusy) "Status: Buscando" else "Status: Pronto", color = if (c.newsBusy) V5Orange else V5Green, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Text(if (c.newsBusy) c.status else "Sistema disponível para consultar e gerenciar demandas.", color = V5Muted, fontSize = 10.sp)
+                    Text(if (c.newsBusy) c.status else "Sistema disponível para consultar e gerenciar demandas.", color = V5Muted, fontSize = 11.sp)
                 }
             }
         }
@@ -1556,10 +1595,10 @@ private fun V5DemandsScreen(c: DesktopControllerV5, tick: Int) {
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text("${d.vehicle} • ${d.subject}", color = V5Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text("Última busca: ${V5AutoTime(d.lastCheckedAt)} • encontrados ${d.lastFoundCount} • novos ${d.lastNewCount}", color = V5Muted, fontSize = 9.sp)
-                                if (d.lastError.isNotBlank()) Text(d.lastError, color = V5Red, fontSize = 8.sp)
+                                Text("Última busca: ${V5AutoTime(d.lastCheckedAt)} • encontrados ${d.lastFoundCount} • novos ${d.lastNewCount}", color = V5Muted, fontSize = 11.sp)
+                                if (d.lastError.isNotBlank()) Text(d.lastError, color = V5Red, fontSize = 11.sp)
                             }
-                            OutlinedButton(onClick = { c.searchDemand(d) }) { Text("Buscar", fontSize = 10.sp) }
+                            OutlinedButton(onClick = { c.searchDemand(d) }) { Text("Buscar", fontSize = 11.sp) }
                             Spacer(Modifier.width(5.dp)); IconButton(onClick = { c.removeDemand(d.id) }) { Icon(Icons.Default.DeleteOutline, null, tint = V5Red) }
                         }
                     }
@@ -1614,9 +1653,9 @@ private fun V5SearchBox(value: String, change: (String) -> Unit, hint: String, m
                 onValueChange = change,
                 singleLine = true,
                 modifier = Modifier.weight(1f),
-                textStyle = LocalTextStyle.current.copy(color = V5Ink, fontSize = 11.sp),
+                textStyle = LocalTextStyle.current.copy(color = V5Ink, fontSize = 12.sp),
                 decorationBox = { inner ->
-                    if (value.isBlank()) Text(hint, color = V5Muted, fontSize = 11.sp)
+                    if (value.isBlank()) Text(hint, color = V5Muted, fontSize = 12.sp)
                     inner()
                 }
             )
@@ -1634,7 +1673,7 @@ private fun V5LabeledField(
     password: Boolean = false
 ) {
     Column(modifier) {
-        Text(label, color = V5Ink, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, color = V5Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
         Surface(color = Color.White, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, V5Border), modifier = Modifier.fillMaxWidth().height(44.dp)) {
             Row(Modifier.padding(horizontal = 11.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1644,9 +1683,9 @@ private fun V5LabeledField(
                     singleLine = true,
                     visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
                     modifier = Modifier.weight(1f),
-                    textStyle = LocalTextStyle.current.copy(color = V5Ink, fontSize = 11.sp),
+                    textStyle = LocalTextStyle.current.copy(color = V5Ink, fontSize = 12.sp),
                     decorationBox = { inner ->
-                        if (value.isBlank()) Text(hint, color = Color(0xFF91A5C1), fontSize = 10.sp)
+                        if (value.isBlank()) Text(hint, color = Color(0xFF91A5C1), fontSize = 12.sp)
                         inner()
                     }
                 )
@@ -1659,27 +1698,27 @@ private fun V5LabeledField(
 private fun V5PeriodButton(text: String, selected: Boolean = false, click: () -> Unit) {
     OutlinedButton(
         onClick = click,
-        modifier = Modifier.height(36.dp),
+        modifier = Modifier.height(38.dp),
         colors = ButtonDefaults.outlinedButtonColors(containerColor = if (selected) V5SoftBlue else Color.Transparent),
         contentPadding = PaddingValues(horizontal = 13.dp, vertical = 4.dp)
-    ) { Text(text, fontSize = 9.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) }
+    ) { Text(text, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) }
 }
 
 @Composable
 private fun V5ChoiceButton(text: String, selected: Boolean, click: () -> Unit) {
     OutlinedButton(
         onClick = click,
-        modifier = Modifier.height(36.dp),
+        modifier = Modifier.height(38.dp),
         colors = ButtonDefaults.outlinedButtonColors(containerColor = if (selected) Color(0xFFE9E0FF) else Color.Transparent),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
-    ) { Text(text, fontSize = 10.sp, color = V5Ink, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
+    ) { Text(text, fontSize = 12.sp, color = V5Ink, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) }
 }
 
 @Composable
 private fun V5TimeChip(text: String, remove: () -> Unit) {
     Surface(color = Color(0xFFEDE4FF), shape = RoundedCornerShape(9.dp), border = BorderStroke(1.dp, V5Purple.copy(alpha = .12f))) {
         Row(Modifier.padding(start = 11.dp, end = 5.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(text, color = V5Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            Text(text, color = V5Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(5.dp))
             Icon(Icons.Default.Close, null, tint = V5Muted, modifier = Modifier.size(15.dp).clickable(onClick = remove))
         }
@@ -1717,15 +1756,15 @@ private fun V5Card(modifier: Modifier = Modifier, padding: androidx.compose.ui.u
 private fun V5Footer(c: DesktopControllerV5, tick: Int) {
     @Suppress("UNUSED_VARIABLE") val redraw = tick
     Row(
-        Modifier.fillMaxWidth().height(40.dp).background(Color(0xFFF7FAFE)).padding(horizontal = 25.dp),
+        Modifier.fillMaxWidth().height(42.dp).background(Color(0xFFF7FAFE)).padding(horizontal = 25.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Monitor de Notícias v4.0.2", color = V5Muted, fontSize = 9.sp)
-        Spacer(Modifier.width(20.dp)); Text("Inteligência de mídia para melhores decisões", color = V5Muted, fontSize = 9.sp)
+        Text("Monitor de Notícias v4.0.2", color = V5Muted, fontSize = 10.sp)
+        Spacer(Modifier.width(20.dp)); Text("Inteligência de mídia para melhores decisões", color = V5Muted, fontSize = 10.sp)
         Spacer(Modifier.weight(1f))
         Box(Modifier.size(10.dp).clip(CircleShape).background(if (c.newsBusy || c.videoBusy) V5Orange else V5Green))
         Spacer(Modifier.width(7.dp))
-        Text(if (c.newsBusy || c.videoBusy) "Busca em andamento" else "Sistema operacional", color = V5Muted, fontSize = 9.sp)
+        Text(if (c.newsBusy || c.videoBusy) "Busca em andamento" else "Sistema operacional", color = V5Muted, fontSize = 10.sp)
     }
 }
 

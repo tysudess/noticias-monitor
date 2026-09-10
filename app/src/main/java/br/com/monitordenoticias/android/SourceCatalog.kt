@@ -188,7 +188,82 @@ object SourceCatalog {
         state("RS", "Rio Grande do Sul", "Sul", "Sul21")
     )
 
-    val all: List<MediaSource> = (national + byState).distinctBy { it.id }
+    val specialized = listOf(
+        MediaSource(
+            id = "especializada-defesatv",
+            name = "DefesaTV",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Defesa TV", "defesa.tv.br")
+        ),
+        MediaSource(
+            id = "especializada-poder-naval",
+            name = "Poder Naval",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("PoderNaval", "naval.com.br")
+        ),
+        MediaSource(
+            id = "especializada-agencia-marinha",
+            name = "Agência Marinha de Notícias",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Agência Marinha", "agencia.marinha.mil.br")
+        ),
+        MediaSource(
+            id = "especializada-forcas-terrestres",
+            name = "Forças Terrestres",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Forcas Terrestres", "forte.jor.br")
+        ),
+        MediaSource(
+            id = "especializada-poder-aereo",
+            name = "Poder Aéreo",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Poder Aereo", "aereo.jor.br")
+        ),
+        MediaSource(
+            id = "especializada-defesanet",
+            name = "DefesaNet",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Defesa Net", "defesanet.com.br")
+        ),
+        MediaSource(
+            id = "especializada-tecnologia-defesa",
+            name = "Tecnologia & Defesa",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Tecnologia e Defesa", "tecnodefesa.com.br")
+        ),
+        MediaSource(
+            id = "especializada-agencia-forca-aerea",
+            name = "Agência Força Aérea",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Agência FAB", "Agencia Forca Aerea", "fab.mil.br")
+        )
+    )
+
+    val all: List<MediaSource> = (national + byState + specialized).distinctBy { it.id }
     val byId: Map<String, MediaSource> = all.associateBy { it.id }
 
     fun selected(ids: Set<String>): List<MediaSource> = ids.mapNotNull(byId::get)
