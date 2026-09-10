@@ -1,0 +1,44 @@
+name: Apply V8 sources terms and icon fixes
+
+on:
+  push:
+    branches:
+      - ui/dashboard-match
+    paths:
+      - tools/refine-v8-sources-icon.py
+      - .github/workflows/apply-v8-sources-icon.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ui/dashboard-match
+          fetch-depth: 0
+
+      - name: Apply V8 refinements
+        run: python tools/refine-v8-sources-icon.py
+
+      - name: Commit V8 refinements
+        shell: bash
+        run: |
+          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            app/src/main/java/br/com/monitordenoticias/android/SourceCatalog.kt \
+            desktop/src/main/kotlin/br/com/monitordenoticias/android/DesktopNewsDb.kt \
+            desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt \
+            docs/state-sources-2026.md
+          git commit -m "feat(desktop): expand state sources and fix app icon"
+          git push origin HEAD:ui/dashboard-match
