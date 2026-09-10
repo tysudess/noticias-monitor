@@ -1,0 +1,232 @@
+:root {
+  font-family: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  color-scheme: light;
+  --bg: #f3f8fe;
+  --panel: #ffffff;
+  --panel-2: #f7fbff;
+  --panel-3: #eef6ff;
+  --line: #d5e4f3;
+  --line-strong: #bfd5ea;
+  --text: #0a1f4b;
+  --muted: #58739f;
+  --muted-2: #7489aa;
+  --blue: #087af7;
+  --blue-2: #087af7;
+  --cyan: #087af7;
+  --green: #08a86f;
+  --yellow: #f2b715;
+  --danger: #d92f43;
+  --shadow: 0 6px 20px rgba(3, 31, 62, .07);
+}
+
+html, body {
+  min-width: 680px;
+  background: #f3f8fe !important;
+  color: var(--text) !important;
+}
+body {
+  background: linear-gradient(180deg, #f7fbff 0%, #f3f8fe 100%) !important;
+  overflow: hidden;
+}
+
+/* O Monitor já fornece navegação e cabeçalho. No modo integrado, o extrator
+   ocupa apenas a área funcional, como uma tela nativa do próprio Monitor. */
+.app-shell {
+  display: block !important;
+  min-height: 100vh;
+  max-height: 100vh;
+  background: transparent !important;
+}
+.sidebar { display: none !important; }
+.workspace {
+  height: 100vh;
+  padding: 4px 5px 10px !important;
+  background: transparent !important;
+  overflow: auto;
+}
+.topbar {
+  min-height: 34px;
+  margin: 0 0 7px !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+}
+.topbar > div:first-child { display: none !important; }
+.status-pill {
+  max-width: none !important;
+  min-height: 32px !important;
+  padding: 6px 11px !important;
+  background: #eef6ff !important;
+  border: 1px solid #cfe1f3 !important;
+  color: #315b89 !important;
+  box-shadow: none !important;
+  font-size: 11px !important;
+}
+.status-dot { background: #7489aa !important; box-shadow: 0 0 0 3px rgba(116,137,170,.10) !important; }
+.status-pill[data-state="busy"] .status-dot { background: #087af7 !important; box-shadow: 0 0 0 3px rgba(8,122,247,.12) !important; }
+.status-pill[data-state="success"] .status-dot { background: #08a86f !important; box-shadow: 0 0 0 3px rgba(8,168,111,.12) !important; }
+.status-pill[data-state="error"] .status-dot { background: #d92f43 !important; box-shadow: 0 0 0 3px rgba(217,47,67,.10) !important; }
+
+.card {
+  background: #ffffff !important;
+  border: 1px solid #d5e4f3 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 14px rgba(3,31,62,.055) !important;
+  color: #0a1f4b !important;
+}
+.extraction-card { padding: 14px !important; }
+.card-heading { margin-bottom: 10px !important; }
+.card-heading.compact { margin-bottom: 9px !important; }
+.section-kicker, .eyebrow { color: #087af7 !important; font-size: 10px !important; }
+h1, h2, strong { color: #0a1f4b; }
+h2 { font-size: 15px !important; }
+.subtitle, .helper, .content-info, small { color: #58739f !important; }
+.shortcut {
+  color: #58739f !important;
+  background: #f7fbff !important;
+  border-color: #d5e4f3 !important;
+}
+
+.url-row { gap: 9px !important; }
+.url-field {
+  min-height: 48px !important;
+  background: #f9fcff !important;
+  border: 1px solid #cbddee !important;
+  border-radius: 10px !important;
+}
+.url-field:focus-within {
+  border-color: #087af7 !important;
+  box-shadow: 0 0 0 3px rgba(8,122,247,.10) !important;
+}
+.field-icon { color: #087af7 !important; }
+textarea {
+  min-height: 46px !important;
+  color: #0a1f4b !important;
+  padding-top: 13px !important;
+}
+textarea::placeholder, input::placeholder { color: #8799b5 !important; }
+.helper { margin-top: 6px !important; }
+
+.btn {
+  min-height: 40px !important;
+  border-radius: 9px !important;
+  font-weight: 650 !important;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #087af7, #1767d7) !important;
+  border-color: #087af7 !important;
+  color: #fff !important;
+  box-shadow: 0 5px 13px rgba(8,122,247,.18) !important;
+}
+.btn-ghost {
+  background: #f7fbff !important;
+  color: #315b89 !important;
+  border-color: #d5e4f3 !important;
+}
+.btn-ghost:hover:not(:disabled) { background: #eef6ff !important; border-color: #bdd6ed !important; }
+.secondary-actions { margin-top: 9px !important; }
+
+.proxy-card { margin-top: 9px !important; }
+.proxy-card summary {
+  min-height: 48px !important;
+  padding: 9px 13px !important;
+}
+.summary-main strong, .switch-row strong { color: #0a1f4b !important; }
+.summary-main small, .switch-row small { color: #7489aa !important; }
+.summary-icon {
+  background: #eef6ff !important;
+  border-color: #d5e4f3 !important;
+  color: #087af7 !important;
+}
+.proxy-content { border-top-color: #e2ecf6 !important; }
+.proxy-fields label > span { color: #315b89 !important; }
+.proxy-fields input {
+  background: #f9fcff !important;
+  border-color: #cbddee !important;
+  color: #0a1f4b !important;
+}
+.proxy-fields input:focus { border-color: #087af7 !important; box-shadow: 0 0 0 3px rgba(8,122,247,.09) !important; }
+code { color: #087af7 !important; }
+.switch-ui { background: #d9e5f1 !important; border-color: #c1d2e3 !important; }
+.switch-ui::after { background: #ffffff !important; box-shadow: 0 1px 4px rgba(3,31,62,.15); }
+.switch input:checked + .switch-ui { background: #087af7 !important; border-color: #087af7 !important; }
+
+.results-grid {
+  gap: 9px !important;
+  margin-top: 9px !important;
+  grid-template-columns: minmax(250px, .78fr) minmax(390px, 1.42fr) !important;
+}
+.metadata-card, .content-card {
+  min-height: 330px !important;
+  padding: 13px !important;
+}
+.metadata-list { gap: 6px !important; }
+.meta-item {
+  padding: 8px !important;
+  background: #f8fbff !important;
+  border: 1px solid #dce8f4 !important;
+  border-radius: 9px !important;
+}
+.meta-item small { color: #7489aa !important; }
+.meta-item strong { color: #0a1f4b !important; }
+.meta-icon {
+  background: #eef6ff !important;
+  color: #087af7 !important;
+  border: 1px solid #d5e4f3 !important;
+}
+.success-mark {
+  color: #08a86f !important;
+  background: #e9f8f2 !important;
+  border-color: rgba(8,168,111,.25) !important;
+}
+
+.revisao-rigida-toolbar {
+  background: #f8fbff !important;
+  border-color: #d5e4f3 !important;
+}
+.revisao-rigida-status { color: #58739f !important; }
+.revisao-issue {
+  background: #fff5f6 !important;
+  border-color: #f1c7cd !important;
+}
+.revisao-palavra {
+  background: #fff1f3 !important;
+  color: #b1263a !important;
+  border-color: #e6a8b1 !important;
+}
+.revisao-sugestao {
+  background: #eef6ff !important;
+  color: #1767d7 !important;
+  border-color: #cbddee !important;
+}
+.revisao-sugestao:hover { color: #052d57 !important; border-color: #087af7 !important; }
+
+.result-wrap, .resultado {
+  background: #ffffff !important;
+  color: #0a1f4b !important;
+  border-color: #d5e4f3 !important;
+}
+.empty-state { color: #7489aa !important; }
+.empty-state strong { color: #315b89 !important; }
+
+.quick-actions { margin-top: 9px !important; gap: 8px !important; }
+.quick-btn {
+  background: #ffffff !important;
+  border: 1px solid #d5e4f3 !important;
+  color: #315b89 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 3px 10px rgba(3,31,62,.04) !important;
+}
+.quick-btn:hover:not(:disabled) { background: #f4f9ff !important; border-color: #bdd6ed !important; }
+.quick-btn strong { color: #0a1f4b !important; }
+.quick-btn small { color: #7489aa !important; }
+.quick-icon { color: #087af7 !important; background: #eef6ff !important; border-color: #d5e4f3 !important; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #f3f8fe; }
+::-webkit-scrollbar-thumb { background: #c4d6e8; border-radius: 999px; border: 2px solid #f3f8fe; }
+::-webkit-scrollbar-thumb:hover { background: #a8bfd7; }
+
+@media (max-width: 980px) {
+  .workspace { padding: 3px 4px 8px !important; }
+  .results-grid { grid-template-columns: 1fr !important; }
+}
