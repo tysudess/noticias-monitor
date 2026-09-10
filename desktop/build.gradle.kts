@@ -63,6 +63,7 @@ compose.desktop {
             description = "Monitor de Notícias v4.0.2 para Windows"
             vendor = "Monitor de Notícias"
             windows {
+                iconFile.set(project.file("src/main/resources/monitor-icon.ico"))
                 menuGroup = "Monitor de Notícias"
                 shortcut = false
                 console = false

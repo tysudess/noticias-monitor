@@ -19,9 +19,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
@@ -66,6 +68,7 @@ private enum class V5Section(val label: String, val subtitle: String, val icon: 
     SOURCES("Fontes", "Fontes nacionais, regionais, programas e canais oficiais", Icons.Default.Storage),
     HISTORY("Histórico", "Histórico local das buscas e resultados", Icons.Default.History),
     TERMS("Termos", "Termos independentes para notícias e vídeos", Icons.Default.Search),
+    STOP("Parar buscas", "Interrompa buscas manuais em andamento", Icons.Default.StopCircle),
     SETTINGS("Configurações", "Automação, proxy, inicialização e operação do aplicativo", Icons.Default.Settings)
 }
 
@@ -91,6 +94,7 @@ fun main() = application {
             Item("Buscar notícias agora", onClick = { controller.searchNews() })
             Item("Buscar vídeos agora", onClick = { controller.searchVideos() })
             Item("Buscar demandas agora", onClick = { controller.searchAllDemands() })
+            Item("Parar buscas", onClick = { controller.stopAllSearches() })
             Separator()
             Item("Sair", onClick = { controller.close(); exitApplication() })
         }
@@ -110,7 +114,12 @@ fun main() = application {
                 onSurface = V5Ink
             )
         ) {
-            V5App(controller)
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, density.fontScale * 1.08f)
+            ) {
+                V5App(controller)
+            }
         }
     }
 }
@@ -147,6 +156,7 @@ private fun V5App(c: DesktopControllerV5) {
                             V5Section.SOURCES -> V5SourcesScreen(c, tick)
                             V5Section.HISTORY -> V5HistoryScreen(c, tick)
                             V5Section.TERMS -> V5TermsScreen(c, tick)
+                            V5Section.STOP -> V5StopScreen(c, tick)
                             V5Section.SETTINGS -> V5SettingsScreen(c, tick)
                             else -> Unit
                         }
@@ -530,6 +540,7 @@ private fun V5Home(c: DesktopControllerV5, onNavigate: (V5Section) -> Unit, tick
                 Spacer(Modifier.height(10.dp))
                 V5ActivityLine("Notícias", c.status, V5Blue)
                 V5ActivityLine("Vídeos", c.videoStatus, V5Purple)
+                V5ActivityLine("Fontes instáveis", if (c.unstableVideoSources.isEmpty()) "Nenhuma" else c.unstableVideoSources.joinToString(", ") { it.sourceName }, if (c.unstableVideoSources.isEmpty()) V5Green else V5Orange)
                 V5ActivityLine("Proxy", c.proxyStatusLabel, if (c.proxyReady) V5Green else V5Orange)
                 V5ActivityLine("Automação", if (c.automaticMonitoring) "Ativa" else "Pausada", V5Green)
             }
@@ -694,6 +705,15 @@ private fun V5NewsScreen(c: DesktopControllerV5, tick: Int) {
         }
 
         V5ExecutionPanel("Notícias", c.newsBusy, c.newsProgress, c.status, c.newNewsLinks.size, c.lastNewsSearchDurationMs, tick)
+        if (c.newsBusy) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(onClick = { c.stopNewsSearch() }) {
+                    Icon(Icons.Default.StopCircle, null, tint = V5Red)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Parar busca", color = V5Red, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Notícias encontradas", color = V5Ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
@@ -767,6 +787,18 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
         }
 
         V5ExecutionPanel("Vídeos", c.videoBusy, c.videoProgress, c.videoStatus, c.newVideoLinks.size, c.lastVideoSearchDurationMs, tick)
+        if (c.videoBusy) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(onClick = { c.stopVideoSearch() }) {
+                    Icon(Icons.Default.StopCircle, null, tint = V5Red)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Parar busca", color = V5Red, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        if (c.unstableVideoSources.isNotEmpty()) {
+            V5UnstableVideoSourcesPanel(c.unstableVideoSources)
+        }
 
         if (c.unstableVideoSources.isNotEmpty()) {
             Surface(color = Color(0xFFFFF6E8), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Gold.copy(alpha = .35f)), modifier = Modifier.fillMaxWidth()) {
@@ -791,6 +823,86 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 items(list, key = { it.link }) { V5VideoCard(it, it.link in c.newVideoLinks, showMatched = true) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun V5StopScreen(c: DesktopControllerV5, tick: Int) {
+    @Suppress("UNUSED_VARIABLE") val redraw = tick
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        V5Card(Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(54.dp).clip(CircleShape).background(V5Red.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.StopCircle, null, tint = V5Red, modifier = Modifier.size(32.dp))
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Controle de buscas em andamento", color = V5Ink, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Interrompa uma busca manual sem fechar o aplicativo. A automação permanece configurada.", color = V5Muted, fontSize = 12.sp)
+                }
+            }
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            V5Card(Modifier.weight(1f)) {
+                Text("Notícias e demandas", color = V5Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(if (c.newsBusy) c.status else "Nenhuma busca em andamento", color = V5Muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { c.stopNewsSearch() }, enabled = c.newsBusy) {
+                    Icon(Icons.Default.Stop, null)
+                    Spacer(Modifier.width(7.dp))
+                    Text("Parar notícias/demandas")
+                }
+            }
+            V5Card(Modifier.weight(1f)) {
+                Text("Vídeos", color = V5Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(if (c.videoBusy) c.videoStatus else "Nenhuma busca em andamento", color = V5Muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { c.stopVideoSearch() }, enabled = c.videoBusy) {
+                    Icon(Icons.Default.Stop, null)
+                    Spacer(Modifier.width(7.dp))
+                    Text("Parar vídeos")
+                }
+            }
+        }
+
+        V5Card(Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Parar todas as buscas", color = V5Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("Use este comando quando quiser interromper simultaneamente notícia/demanda e vídeo.", color = V5Muted, fontSize = 11.sp)
+                }
+                Button(onClick = { c.stopAllSearches() }, enabled = c.newsBusy || c.videoBusy, colors = ButtonDefaults.buttonColors(containerColor = V5Red)) {
+                    Icon(Icons.Default.StopCircle, null)
+                    Spacer(Modifier.width(7.dp))
+                    Text("Parar tudo", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun V5UnstableVideoSourcesPanel(issues: List<VideoSourceIssue>) {
+    V5Card(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.WarningAmber, null, tint = V5Orange, modifier = Modifier.size(23.dp))
+            Spacer(Modifier.width(9.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Fontes que apresentaram instabilidade", color = V5Ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                Text("A lista corresponde à última busca de vídeos e não remove a fonte da seleção.", color = V5Muted, fontSize = 10.sp)
+            }
+            Text("${issues.size} fonte(s)", color = V5Orange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(9.dp))
+        issues.take(10).forEach { issue ->
+            Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                Row(Modifier.padding(horizontal = 11.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(issue.sourceName, color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text("${issue.stage} • ${issue.failureCount} falha(s)", color = V5Orange, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }

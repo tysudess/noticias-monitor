@@ -2,6 +2,8 @@ package br.com.monitordenoticias.android
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -142,6 +144,7 @@ class VideoRepository(
             }
 
             plan.forEach { (source, specs) ->
+                currentCoroutineContext().ensureActive()
                 val resolvedCache = mutableMapOf<String, VideoItem?>()
                 var sourceRequestFailures = 0
                 val sourceFailureStages = linkedMapOf<String, Int>()
@@ -211,6 +214,7 @@ class VideoRepository(
                 }
 
                 specs.forEach specLoop@ { spec ->
+                    currentCoroutineContext().ensureActive()
                     val scanMode = isSourceScanMode(source)
                     if (!scanMode && sourceRequestFailures >= MAX_REQUEST_FAILURES_PER_SOURCE) {
                         markCurrentSourceUnstable()
@@ -833,54 +837,136 @@ class VideoRepository(
     }
 
     private fun fetchYoutube(source: VideoSource, capturedAt: Long): List<VideoItem> {
-        val handle = source.youtubeHandle.removePrefix("@")
-        val channelPage = Jsoup.connect("https://www.youtube.com/@$handle/videos")
-            .userAgent("Mozilla/5.0 (Linux; Android 14) MonitorNoticias/3.0.7")
-            .timeout(14_000)
+        val handle = source.youtubeHandle.removePrefix("@").trim()
+        val knownChannelId = when (source.id) {
+            "youtube-g1" -> "UCaGmdJSSiR7fkh2A-c6emsA"
+            "youtube-domingo-espetacular" -> "UCP-Vg2PcmLiWpEdvMI1R35w"
+            else -> ""
+        }
+        val videosUrl = when {
+            knownChannelId.isNotBlank() -> "https://www.youtube.com/channel/$knownChannelId/videos"
+            handle.isNotBlank() -> "https://www.youtube.com/@$handle/videos"
+            source.landingUrl.contains("/videos", ignoreCase = true) -> source.landingUrl
+            else -> source.landingUrl.trimEnd('/') + "/videos"
+        }
+
+        // Caminho principal: a própria aba VÍDEOS do canal. Isso evita depender
+        // exclusivamente do feed RSS e segue exatamente a navegação que o usuário faria.
+        val channelPage = Jsoup.connect(videosUrl)
+            .userAgent(BROWSER_USER_AGENT)
+            .header("Accept-Language", "pt-BR,pt;q=0.9,en;q=0.7")
+            .referrer("https://www.youtube.com/")
+            .timeout(18_000)
+            .maxBodySize(MAX_HTML_BODY_BYTES)
+            .followRedirects(true)
             .get()
             .html()
 
-        val channelId = YOUTUBE_CHANNEL_ID_REGEXES.asSequence()
-            .mapNotNull { regex -> regex.find(channelPage)?.groupValues?.getOrNull(1) }
-            .firstOrNull { it.startsWith("UC") }
-            ?: return emptyList()
+        val tabItems = parseYoutubeVideosTab(source, channelPage, capturedAt)
 
-        val feed = Jsoup.connect("https://www.youtube.com/feeds/videos.xml?channel_id=$channelId")
-            .userAgent("Mozilla/5.0 MonitorNoticias/3.0.7")
-            .timeout(14_000)
-            .parser(Parser.xmlParser())
-            .get()
+        // RSS fica como apoio para datas/descrições e como fallback quando o HTML
+        // da aba muda. Para g1 e Domingo Espetacular usamos IDs oficiais conhecidos,
+        // eliminando a dependência de descobrir o channelId no HTML.
+        val channelId = knownChannelId.ifBlank {
+            YOUTUBE_CHANNEL_ID_REGEXES.asSequence()
+                .mapNotNull { regex -> regex.find(channelPage)?.groupValues?.getOrNull(1) }
+                .firstOrNull { it.startsWith("UC") }
+                .orEmpty()
+        }
 
-        return feed.select("entry").mapNotNull { entry ->
-            val title = cleanText(entry.selectFirst("title")?.text().orEmpty())
-            val link = canonicalizeUrl(entry.selectFirst("link[href]")?.attr("href").orEmpty())
-            if (!usefulTitle(title) || !isYoutubeVideoUrl(link)) return@mapNotNull null
+        val feedItems = if (channelId.isNotBlank()) {
+            runCatching {
+                val feed = Jsoup.connect("https://www.youtube.com/feeds/videos.xml?channel_id=$channelId")
+                    .userAgent(BROWSER_USER_AGENT)
+                    .timeout(16_000)
+                    .parser(Parser.xmlParser())
+                    .get()
 
-            val published = runCatching {
-                Instant.parse(entry.selectFirst("published")?.text().orEmpty()).toEpochMilli()
-            }.getOrDefault(capturedAt)
+                feed.select("entry").mapNotNull { entry ->
+                    val title = cleanText(entry.selectFirst("title")?.text().orEmpty())
+                    val link = canonicalizeUrl(entry.selectFirst("link[href]")?.attr("href").orEmpty())
+                    if (!usefulTitle(title) || !isYoutubeVideoUrl(link)) return@mapNotNull null
 
-            val description = sequenceOf(
-                entry.getElementsByTag("media:description").firstOrNull()?.text().orEmpty(),
-                entry.selectFirst("description")?.text().orEmpty()
-            ).map(::cleanText).firstOrNull { it.isNotBlank() }.orEmpty()
+                    val published = runCatching {
+                        Instant.parse(entry.selectFirst("published")?.text().orEmpty()).toEpochMilli()
+                    }.getOrDefault(capturedAt)
+                    val description = sequenceOf(
+                        entry.getElementsByTag("media:description").firstOrNull()?.text().orEmpty(),
+                        entry.selectFirst("description")?.text().orEmpty()
+                    ).map(::cleanText).firstOrNull { it.isNotBlank() }.orEmpty()
 
-            val summary = listOf(description, "Canal oficial • ${source.group}")
-                .filter { it.isNotBlank() }
-                .distinct()
-                .joinToString(" • ")
-                .take(1000)
+                    VideoItem(
+                        title = title.take(220),
+                        sourceId = source.id,
+                        sourceName = source.name,
+                        publishedAt = published,
+                        link = link,
+                        summary = listOf(description, "Canal oficial • ${source.group}")
+                            .filter { it.isNotBlank() }.distinct().joinToString(" • ").take(1000),
+                        capturedAt = capturedAt
+                    )
+                }
+            }.getOrDefault(emptyList())
+        } else emptyList()
 
-            VideoItem(
-                title = title.take(220),
-                sourceId = source.id,
-                sourceName = source.name,
-                publishedAt = published,
-                link = link,
-                summary = summary,
-                capturedAt = capturedAt
+        // Preferimos os itens do feed quando o mesmo vídeo também foi achado na aba,
+        // pois o feed traz a data exata. Vídeos adicionais da aba entram em seguida.
+        return (feedItems + tabItems)
+            .distinctBy { canonicalKey(it.link) }
+            .take(MAX_YOUTUBE_ITEMS_PER_SCAN)
+    }
+
+    private fun parseYoutubeVideosTab(source: VideoSource, html: String, capturedAt: Long): List<VideoItem> {
+        if (html.isBlank()) return emptyList()
+        val out = linkedMapOf<String, VideoItem>()
+        val idRegex = Regex("\\"videoId\\":\\"([0-9A-Za-z_-]{6,})\\"")
+        val runTitleRegex = Regex("\\"title\\"\s*:\s*\{\s*\\"runs\\"\s*:\s*\[\s*\{\s*\\"text\\"\s*:\s*\\"((?:\\.|[^\\"])*)\\"")
+        val simpleTitleRegex = Regex("\\"title\\"\s*:\s*\{\s*\\"simpleText\\"\s*:\s*\\"((?:\\.|[^\\"])*)\\"")
+        val publishedRegex = Regex("\\"publishedTimeText\\"\s*:\s*\{\s*\\"simpleText\\"\s*:\s*\\"((?:\\.|[^\\"])*)\\"")
+
+        idRegex.findAll(html).take(MAX_YOUTUBE_ITEMS_PER_SCAN * 5).forEach { match ->
+            val videoId = match.groupValues[1]
+            if (videoId.isBlank()) return@forEach
+            val from = match.range.first
+            val to = (from + 4200).coerceAtMost(html.length)
+            val block = html.substring(from, to)
+            val titleRaw = runTitleRegex.find(block)?.groupValues?.getOrNull(1)
+                ?: simpleTitleRegex.find(block)?.groupValues?.getOrNull(1)
+                ?: return@forEach
+            val title = cleanJsonText(titleRaw)
+            if (!usefulTitle(title)) return@forEach
+            val publishedText = publishedRegex.find(block)?.groupValues?.getOrNull(1)?.let(::cleanJsonText).orEmpty()
+            val publishedAt = parseYoutubeRelativeTime(publishedText, capturedAt)
+            val link = canonicalizeUrl("https://www.youtube.com/watch?v=$videoId")
+            out.putIfAbsent(
+                canonicalKey(link),
+                VideoItem(
+                    title = title.take(220),
+                    sourceId = source.id,
+                    sourceName = source.name,
+                    publishedAt = publishedAt,
+                    link = link,
+                    summary = "Canal oficial • ${source.group} • Aba Vídeos",
+                    capturedAt = capturedAt
+                )
             )
-        }.take(MAX_YOUTUBE_ITEMS_PER_SCAN)
+        }
+        return out.values.take(MAX_YOUTUBE_ITEMS_PER_SCAN)
+    }
+
+    private fun parseYoutubeRelativeTime(raw: String, capturedAt: Long): Long {
+        val text = normalize(raw)
+        val n = Regex("(?:ha )?(\d+)").find(text)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: return capturedAt
+        val millis = when {
+            "minuto" in text || "minute" in text -> n * 60_000L
+            "hora" in text || "hour" in text -> n * 60L * 60_000L
+            "dia" in text || "day" in text -> n * 24L * 60L * 60_000L
+            "semana" in text || "week" in text -> n * 7L * 24L * 60L * 60_000L
+            "mes" in text || "month" in text -> n * 30L * 24L * 60L * 60_000L
+            "ano" in text || "year" in text -> n * 365L * 24L * 60L * 60_000L
+            else -> 0L
+        }
+        return (capturedAt - millis).coerceAtLeast(1L)
     }
 
     private fun isSpecificVideoUrl(source: VideoSource, url: String): Boolean {

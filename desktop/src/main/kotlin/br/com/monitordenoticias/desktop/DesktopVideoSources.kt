@@ -17,7 +17,7 @@ object DesktopVideoSources {
             id = "youtube-g1",
             name = "YouTube • g1",
             group = "YouTube oficial • g1",
-            landingUrl = "https://www.youtube.com/@g1/videos",
+            landingUrl = "https://www.youtube.com/channel/UCaGmdJSSiR7fkh2A-c6emsA/videos",
             linkHints = listOf("/watch"),
             aliases = listOf("g1", "G1", "Globo", "Portal g1"),
             youtubeHandle = "@g1"
@@ -26,7 +26,7 @@ object DesktopVideoSources {
             id = "youtube-domingo-espetacular",
             name = "YouTube • Domingo Espetacular",
             group = "YouTube oficial • Domingo Espetacular",
-            landingUrl = "https://www.youtube.com/@domingoespetacular/videos",
+            landingUrl = "https://www.youtube.com/channel/UCP-Vg2PcmLiWpEdvMI1R35w/videos",
             linkHints = listOf("/watch"),
             aliases = listOf("Domingo Espetacular", "Record", "Record TV"),
             youtubeHandle = "@domingoespetacular"

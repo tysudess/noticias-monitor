@@ -26,6 +26,8 @@ class DesktopControllerV5(
 ) : AutoCloseable {
     private val prefs = context.getSharedPreferences(BackgroundMonitor.PREFS, Context.MODE_PRIVATE)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Volatile private var newsJob: Job? = null
+    @Volatile private var videoJob: Job? = null
     val newsDb = NewsDb(context)
     val videoDb = VideoDb(context)
     private val newsRepository = NewsRepository(newsDb)
@@ -140,9 +142,17 @@ class DesktopControllerV5(
         }
 
     init {
+        migrateDesktopVideoSources()
         applyProxySettings()
         refresh()
         scope.launch { automationLoop() }
+    }
+
+    private fun migrateDesktopVideoSources() {
+        val migrationKey = "desktop_video_sources_v6_migrated"
+        if (prefs.getBoolean(migrationKey, false)) return
+        selectedVideoSourceIds = selectedVideoSourceIds + DesktopVideoSources.extras.map { it.id }
+        prefs.edit().putBoolean(migrationKey, true).apply()
     }
 
     fun saveProxy(enabled: Boolean, host: String, port: Int, username: String, password: String) {
@@ -266,7 +276,7 @@ class DesktopControllerV5(
 
     fun searchNews(from: Long? = null, to: Long? = null) {
         if (newsBusy) return
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val started = System.currentTimeMillis()
             val before = newsDb.listNews(5000).map { it.link }.toSet()
             newNewsLinks = emptySet()
@@ -288,6 +298,8 @@ class DesktopControllerV5(
                 newNewsLinks = newsDb.listNews(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 status = "✓ ${result.newCount} nova(s) notícia(s) • ${result.newDemandCount} demanda(s) • ${result.errors} falha(s)"
                 if (result.newCount + result.newDemandCount > 0) notify("Monitor de Notícias", status)
+            } catch (_: CancellationException) {
+                status = "⏹ Busca de notícias interrompida pelo usuário."
             } catch (t: Throwable) {
                 status = "Falha na busca de notícias: ${t.message ?: t.javaClass.simpleName}"
             } finally {
@@ -295,11 +307,13 @@ class DesktopControllerV5(
                 newsBusy = false
             }
         }
+        newsJob = job
+        job.start()
     }
 
     fun searchDemand(demand: Demand) {
         if (newsBusy) return
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val before = newsDb.listNews(5000).map { it.link }.toSet()
             newNewsLinks = emptySet()
             newsBusy = true
@@ -310,17 +324,21 @@ class DesktopControllerV5(
                 newNewsLinks = newsDb.listNews(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 status = "✓ Demanda: ${result.foundCount} resultado(s), ${result.newCount} novo(s)"
                 if (result.newCount > 0) notify("Nova demanda encontrada", "${demand.vehicle} • ${demand.subject}: ${result.newCount}")
+            } catch (_: CancellationException) {
+                status = "⏹ Busca de demanda interrompida pelo usuário."
             } catch (t: Throwable) {
                 status = "Falha na demanda: ${t.message ?: t.javaClass.simpleName}"
             } finally {
                 newsBusy = false
             }
         }
+        newsJob = job
+        job.start()
     }
 
     fun searchAllDemands() {
         if (newsBusy) return
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val before = newsDb.listNews(5000).map { it.link }.toSet()
             newNewsLinks = emptySet()
             newsBusy = true
@@ -331,17 +349,21 @@ class DesktopControllerV5(
                 newNewsLinks = newsDb.listNews(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 status = "✓ ${result.checkedCount} demanda(s) • ${result.foundCount} resultado(s) • ${result.newCount} novo(s)"
                 if (result.newCount > 0) notify("Demandas", "${result.newCount} novo(s) resultado(s)")
+            } catch (_: CancellationException) {
+                status = "⏹ Busca de demandas interrompida pelo usuário."
             } catch (t: Throwable) {
                 status = "Falha nas demandas: ${t.message ?: t.javaClass.simpleName}"
             } finally {
                 newsBusy = false
             }
         }
+        newsJob = job
+        job.start()
     }
 
     fun searchVideos(from: Long? = null, to: Long? = null) {
         if (videoBusy) return
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val started = System.currentTimeMillis()
             val before = videoDb.listAll(5000).map { it.link }.toSet()
             newVideoLinks = emptySet()
@@ -367,6 +389,8 @@ class DesktopControllerV5(
                 newVideoLinks = videoDb.listAll(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 videoStatus = "✓ ${result.relevantCount} relevante(s) • ${result.newRelevantCount} novo(s) • ${result.errors} fonte(s) instável(is)"
                 if (result.newRelevantCount > 0) notify("Novos vídeos", "${result.newRelevantCount} vídeo(s) relevante(s)")
+            } catch (_: CancellationException) {
+                videoStatus = "⏹ Busca de vídeos interrompida pelo usuário."
             } catch (t: Throwable) {
                 videoStatus = "Falha na busca de vídeos: ${t.message ?: t.javaClass.simpleName}"
             } finally {
@@ -374,6 +398,29 @@ class DesktopControllerV5(
                 videoBusy = false
             }
         }
+        videoJob = job
+        job.start()
+    }
+
+    fun stopNewsSearch() {
+        val job = newsJob
+        if (job?.isActive == true) {
+            status = "⏹ Interrompendo busca de notícias/demandas..."
+            job.cancel(CancellationException("Interrompida pelo usuário"))
+        }
+    }
+
+    fun stopVideoSearch() {
+        val job = videoJob
+        if (job?.isActive == true) {
+            videoStatus = "⏹ Interrompendo busca de vídeos..."
+            job.cancel(CancellationException("Interrompida pelo usuário"))
+        }
+    }
+
+    fun stopAllSearches() {
+        stopNewsSearch()
+        stopVideoSearch()
     }
 
     fun addTerm(value: String) {
