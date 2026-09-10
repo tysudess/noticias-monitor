@@ -6,6 +6,9 @@ on:
       - integration/news-native-v1
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-native-news:
     runs-on: windows-latest
