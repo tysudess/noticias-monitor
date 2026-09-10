@@ -48,144 +48,171 @@ object SourceCatalog {
 
     val byState = listOf(
         // Norte
-        state("AC", "Acre", "Norte", "ac24horas", "ac24horas"),
+        state("AC", "Acre", "Norte", "ac24horas", "AC24Horas"),
         state("AC", "Acre", "Norte", "ContilNet", "ContilNet Notícias"),
+        state("AC", "Acre", "Norte", "Folha do Acre"),
         state("AC", "Acre", "Norte", "O Rio Branco", "Jornal O Rio Branco"),
         state("AC", "Acre", "Norte", "Ecos da Notícia", "Ecos da Noticia"),
 
         state("AP", "Amapá", "Norte", "Diário do Amapá", "Diario do Amapa"),
         state("AP", "Amapá", "Norte", "SelesNafes.com", "Seles Nafes"),
+        state("AP", "Amapá", "Norte", "A Gazeta do Amapá", "Jornal A Gazeta do Amapá"),
         state("AP", "Amapá", "Norte", "Amapá Digital", "Amapa Digital"),
         state("AP", "Amapá", "Norte", "Portal do Amapá", "Portal Amapá", "Portal Amapa"),
 
-        state("AM", "Amazonas", "Norte", "A Crítica", "A Critica"),
-        state("AM", "Amazonas", "Norte", "Amazonas Atual"),
-        state("AM", "Amazonas", "Norte", "D24AM", "Diário do Amazonas", "Diario do Amazonas"),
         state("AM", "Amazonas", "Norte", "Portal do Holanda"),
+        state("AM", "Amazonas", "Norte", "A Crítica", "A Critica"),
+        state("AM", "Amazonas", "Norte", "D24AM", "Diário do Amazonas", "Diario do Amazonas"),
+        state("AM", "Amazonas", "Norte", "Amazonas Atual"),
+        state("AM", "Amazonas", "Norte", "Em Tempo", "Amazonas Em Tempo"),
 
+        state("PA", "Pará", "Norte", "DOL", "Diário Online", "Diario Online"),
         state("PA", "Pará", "Norte", "O Liberal", "Oliberal.com"),
         state("PA", "Pará", "Norte", "Diário do Pará", "Diario do Para"),
-        state("PA", "Pará", "Norte", "DOL", "Diário Online", "Diario Online"),
         state("PA", "Pará", "Norte", "Roma News", "RomaNews"),
+        state("PA", "Pará", "Norte", "Portal Canaã", "Portal Canaa"),
 
-        state("RO", "Rondônia", "Norte", "Rondônia Dinâmica", "Rondonia Dinamica"),
         state("RO", "Rondônia", "Norte", "Rondoniaovivo", "Rondônia ao Vivo"),
-        state("RO", "Rondônia", "Norte", "Tudo Rondônia", "Tudo Rondonia"),
-        state("RO", "Rondônia", "Norte", "O Observador", "O Observador RO"),
+        state("RO", "Rondônia", "Norte", "Rondoniagora", "Rondônia Agora"),
+        state("RO", "Rondônia", "Norte", "Portal de Rondônia", "Portal de Rondonia"),
+        state("RO", "Rondônia", "Norte", "Rondonotícias", "Rondonoticias"),
+        state("RO", "Rondônia", "Norte", "EuIdeal", "Eu Ideal"),
 
         state("RR", "Roraima", "Norte", "Folha BV", "Folha de Boa Vista"),
         state("RR", "Roraima", "Norte", "Roraima em Tempo"),
-        state("RR", "Roraima", "Norte", "Portal Norte Roraima", "Portal Norte"),
         state("RR", "Roraima", "Norte", "Roraima 1", "Roraima1"),
+        state("RR", "Roraima", "Norte", "Portal Norte Roraima", "Portal Norte"),
+        state("RR", "Roraima", "Norte", "Portal Roraima", "Roraima Portal"),
 
-        state("TO", "Tocantins", "Norte", "Jornal do Tocantins"),
-        state("TO", "Tocantins", "Norte", "Conexão Tocantins", "Conexao Tocantins"),
-        state("TO", "Tocantins", "Norte", "Gazeta do Cerrado"),
+        state("TO", "Tocantins", "Norte", "Sou de Palmas"),
         state("TO", "Tocantins", "Norte", "AF Notícias", "AF Noticias"),
+        state("TO", "Tocantins", "Norte", "Gazeta do Cerrado"),
+        state("TO", "Tocantins", "Norte", "Agência Tocantins", "Agencia Tocantins"),
+        state("TO", "Tocantins", "Norte", "T1 Notícias", "T1 Noticias"),
 
         // Nordeste
-        state("AL", "Alagoas", "Nordeste", "Gazeta de Alagoas"),
         state("AL", "Alagoas", "Nordeste", "TNH1"),
+        state("AL", "Alagoas", "Nordeste", "Gazeta de Alagoas", "GazetaWeb"),
         state("AL", "Alagoas", "Nordeste", "Cada Minuto"),
-        state("AL", "Alagoas", "Nordeste", "Tribuna Hoje"),
+        state("AL", "Alagoas", "Nordeste", "7Segundos", "7 Segundos"),
+        state("AL", "Alagoas", "Nordeste", "Tribuna Hoje", "Tribuna Independente"),
 
-        state("BA", "Bahia", "Nordeste", "A Tarde"),
-        state("BA", "Bahia", "Nordeste", "Correio 24 Horas", "Correio da Bahia", "Correio*"),
+        state("BA", "Bahia", "Nordeste", "BNews"),
         state("BA", "Bahia", "Nordeste", "Bahia Notícias", "Bahia Noticias"),
-        state("BA", "Bahia", "Nordeste", "BNews", "Bahia Notícias BNews"),
+        state("BA", "Bahia", "Nordeste", "Correio 24 Horas", "Correio da Bahia", "Correio*"),
+        state("BA", "Bahia", "Nordeste", "iBahia", "IBahia"),
+        state("BA", "Bahia", "Nordeste", "A Tarde"),
 
-        state("CE", "Ceará", "Nordeste", "Diário do Nordeste", "Diario do Nordeste"),
         state("CE", "Ceará", "Nordeste", "O Povo"),
+        state("CE", "Ceará", "Nordeste", "Diário do Nordeste", "Diario do Nordeste"),
         state("CE", "Ceará", "Nordeste", "GCMAIS", "GC Mais"),
         state("CE", "Ceará", "Nordeste", "CN7"),
+        state("CE", "Ceará", "Nordeste", "Ceará Agora", "Ceara Agora"),
 
+        state("MA", "Maranhão", "Nordeste", "Imirante"),
         state("MA", "Maranhão", "Nordeste", "O Imparcial"),
         state("MA", "Maranhão", "Nordeste", "Jornal Pequeno"),
-        state("MA", "Maranhão", "Nordeste", "Imirante"),
         state("MA", "Maranhão", "Nordeste", "Atual7"),
+        state("MA", "Maranhão", "Nordeste", "Marrapá", "Marrapa"),
 
+        state("PB", "Paraíba", "Nordeste", "Portal Correio"),
         state("PB", "Paraíba", "Nordeste", "Jornal da Paraíba", "Jornal da Paraiba"),
         state("PB", "Paraíba", "Nordeste", "ClickPB"),
-        state("PB", "Paraíba", "Nordeste", "Portal Correio"),
-        state("PB", "Paraíba", "Nordeste", "MaisPB"),
+        state("PB", "Paraíba", "Nordeste", "WSCOM"),
+        state("PB", "Paraíba", "Nordeste", "Polêmica Paraíba", "Polemica Paraiba"),
 
-        state("PE", "Pernambuco", "Nordeste", "Jornal do Commercio", "JC Online"),
+        state("PE", "Pernambuco", "Nordeste", "Jornal do Commercio", "JC Online", "JCPE", "JC PE"),
         state("PE", "Pernambuco", "Nordeste", "Diario de Pernambuco", "Diário de Pernambuco"),
         state("PE", "Pernambuco", "Nordeste", "Folha de Pernambuco"),
         state("PE", "Pernambuco", "Nordeste", "NE10"),
+        state("PE", "Pernambuco", "Nordeste", "LeiaJá", "LeiaJa"),
 
         state("PI", "Piauí", "Nordeste", "Meio Norte"),
         state("PI", "Piauí", "Nordeste", "Cidade Verde"),
-        state("PI", "Piauí", "Nordeste", "O Dia", "O Dia Piauí"),
         state("PI", "Piauí", "Nordeste", "GP1"),
+        state("PI", "Piauí", "Nordeste", "180graus", "180 Graus"),
+        state("PI", "Piauí", "Nordeste", "Lupa1", "Lupa 1"),
 
         state("RN", "Rio Grande do Norte", "Nordeste", "Tribuna do Norte"),
-        state("RN", "Rio Grande do Norte", "Nordeste", "Agora RN"),
         state("RN", "Rio Grande do Norte", "Nordeste", "Blog do BG", "BG"),
+        state("RN", "Rio Grande do Norte", "Nordeste", "Agora RN"),
+        state("RN", "Rio Grande do Norte", "Nordeste", "Via Certa Natal", "Via Certa"),
         state("RN", "Rio Grande do Norte", "Nordeste", "Saiba Mais", "Agência Saiba Mais"),
 
-        state("SE", "Sergipe", "Nordeste", "Jornal da Cidade", "Jornal da Cidade Sergipe"),
         state("SE", "Sergipe", "Nordeste", "Infonet"),
+        state("SE", "Sergipe", "Nordeste", "Jornal da Cidade", "Jornal da Cidade Sergipe"),
+        state("SE", "Sergipe", "Nordeste", "F5 News", "F5News"),
         state("SE", "Sergipe", "Nordeste", "FaxAju"),
         state("SE", "Sergipe", "Nordeste", "NE Notícias", "NE Noticias"),
 
         // Centro-Oeste
-        state("DF", "Distrito Federal", "Centro-Oeste", "Correio Braziliense"),
         state("DF", "Distrito Federal", "Centro-Oeste", "Metrópoles", "Metropoles"),
+        state("DF", "Distrito Federal", "Centro-Oeste", "Correio Braziliense"),
         state("DF", "Distrito Federal", "Centro-Oeste", "Jornal de Brasília", "Jornal de Brasilia"),
         state("DF", "Distrito Federal", "Centro-Oeste", "GPS Brasília", "GPS Brasilia"),
+        state("DF", "Distrito Federal", "Centro-Oeste", "Brasília Capital", "Brasilia Capital"),
 
+        state("GO", "Goiás", "Centro-Oeste", "Portal 6", "Portal6"),
         state("GO", "Goiás", "Centro-Oeste", "O Popular"),
+        state("GO", "Goiás", "Centro-Oeste", "Jornal Opção", "Jornal Opcao"),
         state("GO", "Goiás", "Centro-Oeste", "Mais Goiás", "Mais Goias"),
         state("GO", "Goiás", "Centro-Oeste", "Diário de Goiás", "Diario de Goias"),
-        state("GO", "Goiás", "Centro-Oeste", "Sagres", "Sagres Online"),
 
         state("MT", "Mato Grosso", "Centro-Oeste", "MidiaNews"),
+        state("MT", "Mato Grosso", "Centro-Oeste", "Olhar Direto"),
         state("MT", "Mato Grosso", "Centro-Oeste", "Gazeta Digital"),
         state("MT", "Mato Grosso", "Centro-Oeste", "RDNews"),
-        state("MT", "Mato Grosso", "Centro-Oeste", "Olhar Direto"),
+        state("MT", "Mato Grosso", "Centro-Oeste", "HiperNotícias", "HiperNoticias"),
 
         state("MS", "Mato Grosso do Sul", "Centro-Oeste", "Campo Grande News"),
         state("MS", "Mato Grosso do Sul", "Centro-Oeste", "Midiamax"),
-        state("MS", "Mato Grosso do Sul", "Centro-Oeste", "Correio do Estado"),
+        state("MS", "Mato Grosso do Sul", "Centro-Oeste", "TopMídiaNews", "Top Midia News", "TopMídia News"),
         state("MS", "Mato Grosso do Sul", "Centro-Oeste", "O Jacaré", "O Jacare"),
+        state("MS", "Mato Grosso do Sul", "Centro-Oeste", "Correio do Estado"),
 
         // Sudeste
-        state("ES", "Espírito Santo", "Sudeste", "A Gazeta", "A Gazeta ES"),
         state("ES", "Espírito Santo", "Sudeste", "Folha Vitória", "Folha Vitoria"),
+        state("ES", "Espírito Santo", "Sudeste", "A Gazeta", "A Gazeta ES"),
+        state("ES", "Espírito Santo", "Sudeste", "Tribuna Online", "A Tribuna ES", "A Tribuna Espírito Santo"),
         state("ES", "Espírito Santo", "Sudeste", "ES Hoje"),
         state("ES", "Espírito Santo", "Sudeste", "Século Diário", "Seculo Diario"),
 
+        state("MG", "Minas Gerais", "Sudeste", "Itatiaia", "Rádio Itatiaia"),
         state("MG", "Minas Gerais", "Sudeste", "Estado de Minas", "EM.com.br"),
         state("MG", "Minas Gerais", "Sudeste", "O Tempo"),
-        state("MG", "Minas Gerais", "Sudeste", "Itatiaia", "Rádio Itatiaia"),
         state("MG", "Minas Gerais", "Sudeste", "Hoje em Dia"),
+        state("MG", "Minas Gerais", "Sudeste", "BHAZ", "Bhaz"),
 
         state("RJ", "Rio de Janeiro", "Sudeste", "O Globo", "oglobo"),
-        state("RJ", "Rio de Janeiro", "Sudeste", "Extra", "Extra Online"),
         state("RJ", "Rio de Janeiro", "Sudeste", "O Dia", "O Dia RJ"),
+        state("RJ", "Rio de Janeiro", "Sudeste", "Extra", "Extra Online"),
         state("RJ", "Rio de Janeiro", "Sudeste", "Jornal do Brasil", "JB"),
+        state("RJ", "Rio de Janeiro", "Sudeste", "Diário do Rio", "Diario do Rio"),
 
         state("SP", "São Paulo", "Sudeste", "Folha de S.Paulo", "Folha de São Paulo", "Folha"),
         state("SP", "São Paulo", "Sudeste", "Estadão", "O Estado de S. Paulo"),
-        state("SP", "São Paulo", "Sudeste", "Diário de S.Paulo", "Diario de S.Paulo"),
         state("SP", "São Paulo", "Sudeste", "Valor Econômico", "Valor"),
+        state("SP", "São Paulo", "Sudeste", "Diário de S.Paulo", "Diario de S.Paulo"),
+        state("SP", "São Paulo", "Sudeste", "A Tribuna", "A Tribuna de Santos", "atribuna.com.br"),
 
         // Sul
-        state("PR", "Paraná", "Sul", "Gazeta do Povo"),
-        state("PR", "Paraná", "Sul", "Bem Paraná", "Bem Parana"),
         state("PR", "Paraná", "Sul", "Banda B"),
+        state("PR", "Paraná", "Sul", "aRede", "Portal aRede"),
         state("PR", "Paraná", "Sul", "Tribuna do Paraná", "Tribuna do Parana"),
+        state("PR", "Paraná", "Sul", "Bem Paraná", "Bem Parana"),
+        state("PR", "Paraná", "Sul", "Gazeta do Povo"),
 
-        state("SC", "Santa Catarina", "Sul", "NSC Total", "NSC"),
         state("SC", "Santa Catarina", "Sul", "ND Mais", "ND+"),
+        state("SC", "Santa Catarina", "Sul", "NSC Total", "NSC"),
         state("SC", "Santa Catarina", "Sul", "SCC10", "SCC"),
         state("SC", "Santa Catarina", "Sul", "O Município", "O Municipio"),
+        state("SC", "Santa Catarina", "Sul", "Oeste Mais", "OesteMais"),
 
-        state("RS", "Rio Grande do Sul", "Sul", "Zero Hora", "ZH"),
+        state("RS", "Rio Grande do Sul", "Sul", "GZH", "Zero Hora", "GaúchaZH", "GauchaZH"),
         state("RS", "Rio Grande do Sul", "Sul", "Correio do Povo"),
         state("RS", "Rio Grande do Sul", "Sul", "Jornal do Comércio", "Jornal do Comercio RS"),
-        state("RS", "Rio Grande do Sul", "Sul", "Sul21")
+        state("RS", "Rio Grande do Sul", "Sul", "Sul21"),
+        state("RS", "Rio Grande do Sul", "Sul", "O Sul", "Jornal O Sul")
     )
 
     val specialized = listOf(
@@ -208,6 +235,51 @@ object SourceCatalog {
             aliases = listOf("PoderNaval", "naval.com.br")
         ),
         MediaSource(
+            id = "especializada-poder-aereo",
+            name = "Poder Aéreo",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Poder Aereo", "aereo.jor.br")
+        ),
+        MediaSource(
+            id = "especializada-defesa-em-foco",
+            name = "Defesa em Foco",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("defesaemfoco.com.br")
+        ),
+        MediaSource(
+            id = "especializada-gbn-news",
+            name = "GBN News",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("GBN Defense", "GBNNews", "gbnnews.com.br")
+        ),
+        MediaSource(
+            id = "especializada-zona-militar",
+            name = "Zona Militar",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Zona-Militar", "zona-militar.com")
+        ),
+        MediaSource(
+            id = "especializada-tecnologia-defesa",
+            name = "Tecnodefesa",
+            region = NATIONAL_REGION,
+            state = "BR",
+            stateName = "Brasil",
+            group = "Mídia especializada",
+            aliases = listOf("Tecnologia & Defesa", "Tecnologia e Defesa", "tecnodefesa.com.br")
+        ),
+        MediaSource(
             id = "especializada-agencia-marinha",
             name = "Agência Marinha de Notícias",
             region = NATIONAL_REGION,
@@ -226,15 +298,6 @@ object SourceCatalog {
             aliases = listOf("Forcas Terrestres", "forte.jor.br")
         ),
         MediaSource(
-            id = "especializada-poder-aereo",
-            name = "Poder Aéreo",
-            region = NATIONAL_REGION,
-            state = "BR",
-            stateName = "Brasil",
-            group = "Mídia especializada",
-            aliases = listOf("Poder Aereo", "aereo.jor.br")
-        ),
-        MediaSource(
             id = "especializada-defesanet",
             name = "DefesaNet",
             region = NATIONAL_REGION,
@@ -242,15 +305,6 @@ object SourceCatalog {
             stateName = "Brasil",
             group = "Mídia especializada",
             aliases = listOf("Defesa Net", "defesanet.com.br")
-        ),
-        MediaSource(
-            id = "especializada-tecnologia-defesa",
-            name = "Tecnologia & Defesa",
-            region = NATIONAL_REGION,
-            state = "BR",
-            stateName = "Brasil",
-            group = "Mídia especializada",
-            aliases = listOf("Tecnologia e Defesa", "tecnodefesa.com.br")
         ),
         MediaSource(
             id = "especializada-agencia-forca-aerea",

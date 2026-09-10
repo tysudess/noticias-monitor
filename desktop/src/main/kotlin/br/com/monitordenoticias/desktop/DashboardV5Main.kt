@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,6 +78,7 @@ private data class V5Weather(val temperature: Int, val description: String)
 
 fun main() = application {
     val trayState = rememberTrayState()
+    val appIcon = painterResource("monitor-icon.svg")
     var visible by remember { mutableStateOf(true) }
     val controller = remember {
         DesktopControllerV5 { title, message ->
@@ -86,7 +88,7 @@ fun main() = application {
 
     Tray(
         state = trayState,
-        icon = rememberVectorPainter(Icons.Default.Newspaper),
+        icon = appIcon,
         tooltip = "Monitor de Notícias v4.0.2",
         menu = {
             Item("Abrir", onClick = { visible = true })
@@ -104,6 +106,7 @@ fun main() = application {
         visible = visible,
         onCloseRequest = { visible = false },
         title = "Monitor de Notícias - Windows Portable v4.0.2",
+        icon = appIcon,
         state = rememberWindowState(width = 1600.dp, height = 960.dp)
     ) {
         MaterialTheme(
@@ -1435,7 +1438,7 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
                         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Verified, null, tint = Color(0xFFC88700), modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(10.dp))
-                            Text("Mídia especializada: 8 veículos focados em Defesa, Forças Armadas e assuntos navais.", color = V5Ink, fontSize = 11.sp)
+                            Text("Mídia especializada: ${SourceCatalog.specialized.size} veículos focados em Defesa, Forças Armadas e assuntos navais.", color = V5Ink, fontSize = 11.sp)
                         }
                     }
                 }
