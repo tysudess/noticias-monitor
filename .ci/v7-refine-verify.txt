@@ -1,0 +1,2 @@
+Verify V7 UI refinement after commit 4aa25a2adecf8acc6ecc5e3329284e390ca87140.
+Checks: specialized media restored, automatic scheduling layout fixed, typography normalized, clipped labels reduced, new default terms migrated.

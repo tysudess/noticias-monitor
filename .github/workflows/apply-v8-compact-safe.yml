@@ -1,0 +1,48 @@
+name: Apply safe V8 compact refinements
+
+on:
+  push:
+    branches:
+      - ui/dashboard-match
+    paths:
+      - tools/refine-v8-compact-safe.py
+      - .github/workflows/apply-v8-compact-safe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ui/dashboard-match
+          fetch-depth: 4
+
+      - name: Confirm known-good V8 baseline
+        shell: bash
+        run: |
+          EXPECTED="93697ca705c4ebd53a8b8955821da5b30290fe7c"
+          ACTUAL="$(git rev-parse HEAD~2)"
+          echo "Expected baseline: $EXPECTED"
+          echo "Actual baseline:   $ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Apply compact UI changes
+        run: python tools/refine-v8-compact-safe.py
+
+      - name: Commit only requested changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            app/src/main/java/br/com/monitordenoticias/android/SourceCatalog.kt \
+            desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
+          git diff --cached --stat
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(desktop): compact V8 news video and source views"
+          git push origin HEAD:ui/dashboard-match

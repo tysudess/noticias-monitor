@@ -15,6 +15,8 @@ kotlin {
         main {
             kotlin.srcDir("../app/src/main/java")
             kotlin.exclude(
+                "br/com/monitordenoticias/desktop/PolishedDashboardMain.kt",
+                "br/com/monitordenoticias/desktop/DashboardV3Main.kt",
                 "br/com/monitordenoticias/android/BackgroundMonitor.kt",
                 "br/com/monitordenoticias/android/DemandMonitorWorker.kt",
                 "br/com/monitordenoticias/android/MainActivity.kt",
@@ -52,14 +54,16 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "br.com.monitordenoticias.desktop.MainKt"
+        mainClass = "br.com.monitordenoticias.desktop.DashboardV5MainKt"
         nativeDistributions {
+            modules("java.sql", "java.instrument", "jdk.unsupported")
             targetFormats(TargetFormat.Msi)
             packageName = "MonitorDeNoticias"
             packageVersion = "4.0.2"
             description = "Monitor de Notícias v4.0.2 para Windows"
             vendor = "Monitor de Notícias"
             windows {
+                iconFile.set(project.file("src/main/resources/monitor-icon.ico"))
                 menuGroup = "Monitor de Notícias"
                 shortcut = false
                 console = false

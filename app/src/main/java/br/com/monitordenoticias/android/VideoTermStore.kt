@@ -5,25 +5,36 @@ import android.content.Context
 /**
  * Termos de vídeo independentes dos termos de notícias.
  *
- * Na primeira execução da v4.0, copiamos os termos atuais de notícias apenas para
- * preservar o comportamento anterior. A partir daí as duas listas evoluem de forma
- * totalmente independente.
+ * Na primeira execução copiamos os termos iniciais e, na migração V7, incluímos
+ * uma única vez o novo vocabulário padrão solicitado para notícias e vídeos.
  */
 object VideoTermStore {
     private const val KEY_TERMS = "video_terms_v400"
     private const val KEY_INITIALIZED = "video_terms_v400_initialized"
+    private const val KEY_DEFAULTS_V7_MIGRATED = "video_terms_v7_defaults_migrated"
 
     fun load(context: Context, seedTerms: List<String>): List<String> {
         val prefs = context.getSharedPreferences(BackgroundMonitor.PREFS, 0)
         if (!prefs.getBoolean(KEY_INITIALIZED, false)) {
-            val seed = clean(seedTerms)
+            val seed = clean(seedTerms + DEFAULT_MONITOR_TERMS)
             prefs.edit()
                 .putStringSet(KEY_TERMS, seed.toSet())
                 .putBoolean(KEY_INITIALIZED, true)
+                .putBoolean(KEY_DEFAULTS_V7_MIGRATED, true)
                 .apply()
             return seed
         }
-        return clean(prefs.getStringSet(KEY_TERMS, emptySet()).orEmpty().toList())
+
+        val current = clean(prefs.getStringSet(KEY_TERMS, emptySet()).orEmpty().toList())
+        if (!prefs.getBoolean(KEY_DEFAULTS_V7_MIGRATED, false)) {
+            val merged = clean(current + DEFAULT_MONITOR_TERMS)
+            prefs.edit()
+                .putStringSet(KEY_TERMS, merged.toSet())
+                .putBoolean(KEY_DEFAULTS_V7_MIGRATED, true)
+                .apply()
+            return merged
+        }
+        return current
     }
 
     fun add(context: Context, value: String, seedTerms: List<String>): List<String> {
@@ -46,6 +57,7 @@ object VideoTermStore {
             .edit()
             .putStringSet(KEY_TERMS, cleanValues.toSet())
             .putBoolean(KEY_INITIALIZED, true)
+            .putBoolean(KEY_DEFAULTS_V7_MIGRATED, true)
             .apply()
         return cleanValues
     }

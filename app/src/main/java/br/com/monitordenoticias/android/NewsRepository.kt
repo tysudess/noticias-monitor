@@ -12,10 +12,7 @@ import java.time.format.DateTimeFormatter
 
 class NewsRepository(private val db: NewsDb) {
     private val latestCollector = NewsLatestCollector()
-    val defaultTerms = listOf(
-        "Marinha do Brasil","Capitania dos Portos","Distrito Naval","NAM Atlântico",
-        "Cisne Branco","Fragata Marinha do Brasil","Navio-Patrulha Marinha","Programa Nuclear da Marinha"
-    )
+    val defaultTerms = DEFAULT_MONITOR_TERMS
 
     private data class SearchTask(
         val query: String,

@@ -7,7 +7,6 @@ import org.jsoup.Jsoup
 import java.net.Authenticator
 import java.net.PasswordAuthentication
 import java.net.URI
-import java.net.URL
 import java.net.URLDecoder
 import java.security.Security
 import java.time.LocalDate
@@ -16,12 +15,19 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-class DesktopController(
+/**
+ * Controlador da interface Desktop V5.
+ * Mantém a lógica funcional da V4 e acrescenta as novas fontes oficiais do
+ * YouTube do g1 e do Domingo Espetacular ao fluxo normal e automático.
+ */
+class DesktopControllerV5(
     val context: Context = Context(),
     private val notify: (String, String) -> Unit = { _, _ -> }
 ) : AutoCloseable {
     private val prefs = context.getSharedPreferences(BackgroundMonitor.PREFS, Context.MODE_PRIVATE)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Volatile private var newsJob: Job? = null
+    @Volatile private var videoJob: Job? = null
     val newsDb = NewsDb(context)
     val videoDb = VideoDb(context)
     private val newsRepository = NewsRepository(newsDb)
@@ -57,7 +63,7 @@ class DesktopController(
         set(v) { prefs.edit().putStringSet("desktop_news_source_ids", v).apply() }
 
     var selectedVideoSourceIds: Set<String>
-        get() = prefs.getStringSet("desktop_video_source_ids", VideoSourceCatalog.defaultIds).orEmpty()
+        get() = prefs.getStringSet("desktop_video_source_ids", DesktopVideoSources.defaultIds).orEmpty()
         set(v) { prefs.edit().putStringSet("desktop_video_source_ids", v).apply() }
 
     var automaticMonitoring: Boolean
@@ -88,7 +94,9 @@ class DesktopController(
         get() = prefs.getStringSet("desktop_video_schedule_times", setOf("08:00", "12:00", "15:00", "19:00", "21:00")).orEmpty()
             .filter { runCatching { LocalTime.parse(it) }.isSuccess }.toSet()
         set(v) {
-            val clean = v.mapNotNull { raw -> runCatching { LocalTime.parse(raw.trim()).format(DateTimeFormatter.ofPattern("HH:mm")) }.getOrNull() }.toSet()
+            val clean = v.mapNotNull { raw ->
+                runCatching { LocalTime.parse(raw.trim()).format(DateTimeFormatter.ofPattern("HH:mm")) }.getOrNull()
+            }.toSet()
             prefs.edit().putStringSet("desktop_video_schedule_times", clean).apply()
         }
 
@@ -134,9 +142,17 @@ class DesktopController(
         }
 
     init {
+        migrateDesktopVideoSources()
         applyProxySettings()
         refresh()
         scope.launch { automationLoop() }
+    }
+
+    private fun migrateDesktopVideoSources() {
+        val migrationKey = "desktop_video_sources_v6_migrated"
+        if (prefs.getBoolean(migrationKey, false)) return
+        selectedVideoSourceIds = selectedVideoSourceIds + DesktopVideoSources.extras.map { it.id }
+        prefs.edit().putBoolean(migrationKey, true).apply()
     }
 
     fun saveProxy(enabled: Boolean, host: String, port: Int, username: String, password: String) {
@@ -158,8 +174,10 @@ class DesktopController(
         val pass = prefs.getString("desktop_proxy_password", "").orEmpty()
 
         if (!enabled) {
-            listOf("http.proxyHost", "http.proxyPort", "https.proxyHost", "https.proxyPort", "http.proxyUser", "http.proxyPassword", "https.proxyUser", "https.proxyPassword")
-                .forEach(System::clearProperty)
+            listOf(
+                "http.proxyHost", "http.proxyPort", "https.proxyHost", "https.proxyPort",
+                "http.proxyUser", "http.proxyPassword", "https.proxyUser", "https.proxyPassword"
+            ).forEach(System::clearProperty)
             Authenticator.setDefault(null)
             return
         }
@@ -202,9 +220,19 @@ class DesktopController(
         }.getOrElse { false to "Falha no proxy: ${it.message ?: it.javaClass.simpleName}" }
     }
 
+    /** Resolve o wrapper do Google Notícias antes de abrir, copiar ou compartilhar. */
     suspend fun resolveVehicleUrl(link: String): String = withContext(Dispatchers.IO) {
         if (!isGoogleNewsLink(link)) return@withContext link
-        queryParameter(link, "url")?.let { decoded -> if (decoded.startsWith("http")) return@withContext decoded }
+
+        queryParameter(link, "url")?.let { decoded ->
+            if (decoded.startsWith("http") && !isGoogleNewsLink(decoded)) return@withContext decoded
+        }
+
+        val decoded = runCatching { GoogleNewsUrlResolver.resolve(link) }.getOrNull()
+        if (!decoded.isNullOrBlank() && decoded.startsWith("http") && !isGoogleNewsLink(decoded)) {
+            return@withContext decoded
+        }
+
         runCatching {
             val response = Jsoup.connect(link)
                 .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36")
@@ -244,11 +272,11 @@ class DesktopController(
     private fun selectedNewsSources(): List<MediaSource> =
         if (newsAllSources) emptyList() else SourceCatalog.selected(selectedNewsSourceIds)
 
-    private fun selectedVideoSources(): List<VideoSource> = VideoSourceCatalog.selected(selectedVideoSourceIds)
+    private fun selectedVideoSources(): List<VideoSource> = DesktopVideoSources.selected(selectedVideoSourceIds)
 
     fun searchNews(from: Long? = null, to: Long? = null) {
         if (newsBusy) return
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val started = System.currentTimeMillis()
             val before = newsDb.listNews(5000).map { it.link }.toSet()
             newNewsLinks = emptySet()
@@ -270,6 +298,8 @@ class DesktopController(
                 newNewsLinks = newsDb.listNews(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 status = "✓ ${result.newCount} nova(s) notícia(s) • ${result.newDemandCount} demanda(s) • ${result.errors} falha(s)"
                 if (result.newCount + result.newDemandCount > 0) notify("Monitor de Notícias", status)
+            } catch (_: CancellationException) {
+                status = "⏹ Busca de notícias interrompida pelo usuário."
             } catch (t: Throwable) {
                 status = "Falha na busca de notícias: ${t.message ?: t.javaClass.simpleName}"
             } finally {
@@ -277,11 +307,13 @@ class DesktopController(
                 newsBusy = false
             }
         }
+        newsJob = job
+        job.start()
     }
 
     fun searchDemand(demand: Demand) {
         if (newsBusy) return
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val before = newsDb.listNews(5000).map { it.link }.toSet()
             newNewsLinks = emptySet()
             newsBusy = true
@@ -292,15 +324,21 @@ class DesktopController(
                 newNewsLinks = newsDb.listNews(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 status = "✓ Demanda: ${result.foundCount} resultado(s), ${result.newCount} novo(s)"
                 if (result.newCount > 0) notify("Nova demanda encontrada", "${demand.vehicle} • ${demand.subject}: ${result.newCount}")
+            } catch (_: CancellationException) {
+                status = "⏹ Busca de demanda interrompida pelo usuário."
             } catch (t: Throwable) {
                 status = "Falha na demanda: ${t.message ?: t.javaClass.simpleName}"
-            } finally { newsBusy = false }
+            } finally {
+                newsBusy = false
+            }
         }
+        newsJob = job
+        job.start()
     }
 
     fun searchAllDemands() {
         if (newsBusy) return
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val before = newsDb.listNews(5000).map { it.link }.toSet()
             newNewsLinks = emptySet()
             newsBusy = true
@@ -311,15 +349,21 @@ class DesktopController(
                 newNewsLinks = newsDb.listNews(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 status = "✓ ${result.checkedCount} demanda(s) • ${result.foundCount} resultado(s) • ${result.newCount} novo(s)"
                 if (result.newCount > 0) notify("Demandas", "${result.newCount} novo(s) resultado(s)")
+            } catch (_: CancellationException) {
+                status = "⏹ Busca de demandas interrompida pelo usuário."
             } catch (t: Throwable) {
                 status = "Falha nas demandas: ${t.message ?: t.javaClass.simpleName}"
-            } finally { newsBusy = false }
+            } finally {
+                newsBusy = false
+            }
         }
+        newsJob = job
+        job.start()
     }
 
     fun searchVideos(from: Long? = null, to: Long? = null) {
         if (videoBusy) return
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val started = System.currentTimeMillis()
             val before = videoDb.listAll(5000).map { it.link }.toSet()
             newVideoLinks = emptySet()
@@ -345,6 +389,8 @@ class DesktopController(
                 newVideoLinks = videoDb.listAll(5000).asSequence().map { it.link }.filter { it !in before }.toSet()
                 videoStatus = "✓ ${result.relevantCount} relevante(s) • ${result.newRelevantCount} novo(s) • ${result.errors} fonte(s) instável(is)"
                 if (result.newRelevantCount > 0) notify("Novos vídeos", "${result.newRelevantCount} vídeo(s) relevante(s)")
+            } catch (_: CancellationException) {
+                videoStatus = "⏹ Busca de vídeos interrompida pelo usuário."
             } catch (t: Throwable) {
                 videoStatus = "Falha na busca de vídeos: ${t.message ?: t.javaClass.simpleName}"
             } finally {
@@ -352,16 +398,78 @@ class DesktopController(
                 videoBusy = false
             }
         }
+        videoJob = job
+        job.start()
     }
 
-    fun addTerm(value: String) { if (value.isNotBlank()) { newsDb.addTerm(value.trim()); refresh() } }
-    fun removeTerm(value: String) { newsDb.removeTerm(value); refresh() }
-    fun addVideoTerm(value: String) { if (value.isNotBlank()) { VideoTermStore.add(context, value.trim(), terms); refresh() } }
-    fun removeVideoTerm(value: String) { VideoTermStore.remove(context, value, terms); refresh() }
-    fun addDemand(vehicle: String, subject: String) { if (vehicle.isNotBlank() && subject.isNotBlank()) { newsDb.addDemand(vehicle.trim(), subject.trim()); refresh() } }
-    fun removeDemand(id: Long) { newsDb.removeDemand(id); refresh() }
-    fun clearNewsHistory() { newsDb.clearHistory(); newNewsLinks = emptySet(); refresh() }
-    fun clearVideoHistory() { videoDb.clear(); newVideoLinks = emptySet(); refresh() }
+    fun stopNewsSearch() {
+        val job = newsJob
+        if (job?.isActive == true) {
+            status = "⏹ Interrompendo busca de notícias/demandas..."
+            job.cancel(CancellationException("Interrompida pelo usuário"))
+        }
+    }
+
+    fun stopVideoSearch() {
+        val job = videoJob
+        if (job?.isActive == true) {
+            videoStatus = "⏹ Interrompendo busca de vídeos..."
+            job.cancel(CancellationException("Interrompida pelo usuário"))
+        }
+    }
+
+    fun stopAllSearches() {
+        stopNewsSearch()
+        stopVideoSearch()
+    }
+
+    fun addTerm(value: String) {
+        if (value.isNotBlank()) {
+            newsDb.addTerm(value.trim())
+            refresh()
+        }
+    }
+
+    fun removeTerm(value: String) {
+        newsDb.removeTerm(value)
+        refresh()
+    }
+
+    fun addVideoTerm(value: String) {
+        if (value.isNotBlank()) {
+            VideoTermStore.add(context, value.trim(), terms)
+            refresh()
+        }
+    }
+
+    fun removeVideoTerm(value: String) {
+        VideoTermStore.remove(context, value, terms)
+        refresh()
+    }
+
+    fun addDemand(vehicle: String, subject: String) {
+        if (vehicle.isNotBlank() && subject.isNotBlank()) {
+            newsDb.addDemand(vehicle.trim(), subject.trim())
+            refresh()
+        }
+    }
+
+    fun removeDemand(id: Long) {
+        newsDb.removeDemand(id)
+        refresh()
+    }
+
+    fun clearNewsHistory() {
+        newsDb.clearHistory()
+        newNewsLinks = emptySet()
+        refresh()
+    }
+
+    fun clearVideoHistory() {
+        videoDb.clear()
+        newVideoLinks = emptySet()
+        refresh()
+    }
 
     fun setNewsSource(id: String, selected: Boolean) {
         val next = selectedNewsSourceIds.toMutableSet()
@@ -376,10 +484,23 @@ class DesktopController(
         selectedVideoSourceIds = next
     }
 
-    fun selectAllNewsSources() { newsAllSources = false; selectedNewsSourceIds = SourceCatalog.all.map { it.id }.toSet() }
-    fun clearNewsSources() { newsAllSources = false; selectedNewsSourceIds = emptySet() }
-    fun selectAllVideoSources() { selectedVideoSourceIds = VideoSourceCatalog.all.map { it.id }.toSet() }
-    fun clearVideoSources() { selectedVideoSourceIds = emptySet() }
+    fun selectAllNewsSources() {
+        newsAllSources = false
+        selectedNewsSourceIds = SourceCatalog.all.map { it.id }.toSet()
+    }
+
+    fun clearNewsSources() {
+        newsAllSources = false
+        selectedNewsSourceIds = emptySet()
+    }
+
+    fun selectAllVideoSources() {
+        selectedVideoSourceIds = DesktopVideoSources.all.map { it.id }.toSet()
+    }
+
+    fun clearVideoSources() {
+        selectedVideoSourceIds = emptySet()
+    }
 
     fun parsePeriod(startDate: String, startTime: String, endDate: String, endTime: String): Pair<Long, Long>? = runCatching {
         val zone = ZoneId.systemDefault()
@@ -432,19 +553,29 @@ class DesktopController(
             val command = ProcessHandle.current().info().command().orElse("")
             if (command.isBlank()) return@runCatching
             val args = if (enabled) {
-                listOf("reg", "add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "MonitorDeNoticias", "/t", "REG_SZ", "/d", "\"$command\"", "/f")
+                listOf(
+                    "reg", "add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    "/v", "MonitorDeNoticias", "/t", "REG_SZ", "/d", "\"$command\"", "/f"
+                )
             } else {
-                listOf("reg", "delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "MonitorDeNoticias", "/f")
+                listOf(
+                    "reg", "delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    "/v", "MonitorDeNoticias", "/f"
+                )
             }
             ProcessBuilder(args).redirectErrorStream(true).start().waitFor()
         }
     }
 
     private fun mergeNewsForUi(old: List<News>, fresh: List<News>): List<News> =
-        (fresh + old).distinctBy { it.link }.sortedWith(compareByDescending<News> { it.capturedAt }.thenByDescending { it.date }).take(1500)
+        (fresh + old).distinctBy { it.link }
+            .sortedWith(compareByDescending<News> { it.capturedAt }.thenByDescending { it.date })
+            .take(1500)
 
     private fun mergeVideosForUi(old: List<VideoItem>, fresh: List<VideoItem>): List<VideoItem> =
-        (fresh + old).distinctBy { it.link }.sortedWith(compareByDescending<VideoItem> { it.capturedAt }.thenByDescending { it.publishedAt }).take(2000)
+        (fresh + old).distinctBy { it.link }
+            .sortedWith(compareByDescending<VideoItem> { it.capturedAt }.thenByDescending { it.publishedAt })
+            .take(2000)
 
     override fun close() {
         scope.cancel()

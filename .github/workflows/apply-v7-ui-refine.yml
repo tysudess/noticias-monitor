@@ -1,0 +1,46 @@
+name: Apply V7 UI refinements
+
+on:
+  push:
+    branches:
+      - ui/dashboard-match
+    paths:
+      - tools/refine-v7-ui.py
+      - .github/workflows/apply-v7-ui-refine.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ui/dashboard-match
+          fetch-depth: 0
+
+      - name: Apply V7 refinements
+        run: python tools/refine-v7-ui.py
+
+      - name: Commit refinements
+        shell: bash
+        run: |
+          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            app/src/main/java/br/com/monitordenoticias/android/DefaultTerms.kt \
+            app/src/main/java/br/com/monitordenoticias/android/NewsDb.kt \
+            app/src/main/java/br/com/monitordenoticias/android/NewsRepository.kt \
+            app/src/main/java/br/com/monitordenoticias/android/SourceCatalog.kt \
+            app/src/main/java/br/com/monitordenoticias/android/VideoTermStore.kt \
+            desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
+          git commit -m "feat(desktop): restore specialized media and refine readability"
+          git push origin HEAD:ui/dashboard-match

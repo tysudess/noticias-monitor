@@ -1,0 +1,2 @@
+Verify the safe V8-based compact refinement at commit 15edd8baee0900536ff3b96852db71d2a62c4ebd.
+Scope: compact News/Videos/Sources top areas, improve result readability, compact instability/status panels, add Defesa Aérea & Naval.
