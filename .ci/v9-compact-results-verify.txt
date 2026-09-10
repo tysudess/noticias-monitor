@@ -1,0 +1,2 @@
+Verify V9 after commit e7bed1c181a39d798ac893849426b46ede90b4b6.
+Checks: compact News/Video/Source headers, functional global home search, compact execution status, compact unstable-source notice, Defesa Aérea & Naval specialized source.
