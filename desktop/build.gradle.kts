@@ -15,6 +15,8 @@ kotlin {
         main {
             kotlin.srcDir("../app/src/main/java")
             kotlin.exclude(
+                "br/com/monitordenoticias/desktop/PolishedDashboardMain.kt",
+                "br/com/monitordenoticias/desktop/DashboardV3Main.kt",
                 "br/com/monitordenoticias/android/BackgroundMonitor.kt",
                 "br/com/monitordenoticias/android/DemandMonitorWorker.kt",
                 "br/com/monitordenoticias/android/MainActivity.kt",
