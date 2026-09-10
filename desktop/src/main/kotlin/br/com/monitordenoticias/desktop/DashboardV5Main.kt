@@ -343,23 +343,23 @@ private fun V5HomeHeader(c: DesktopControllerV5, onNavigate: (V5Section) -> Unit
 private fun V5PageHeader(section: V5Section, c: DesktopControllerV5, tick: Int) {
     val now = Date(System.currentTimeMillis() + tick * 0L)
     Row(
-        Modifier.fillMaxWidth().height(108.dp).padding(horizontal = 26.dp),
+        Modifier.fillMaxWidth().height(82.dp).padding(horizontal = 22.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.width(4.dp).height(58.dp).clip(RoundedCornerShape(2.dp)).background(V5Gold))
-        Spacer(Modifier.width(14.dp))
+        Box(Modifier.width(4.dp).height(44.dp).clip(RoundedCornerShape(2.dp)).background(V5Gold))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("CENTRAL DE INTELIGÊNCIA DE MÍDIA", color = Color(0xFFB78900), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            Text(section.label, color = V5Ink, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            Text(section.label, color = V5Ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
             Text(section.subtitle, color = V5Muted, fontSize = 12.sp)
         }
         V5StatusPill(c.proxyStatusLabel, if (c.proxyReady) V5Green else Color(0xFFC88700), if (c.proxyReady) Icons.Default.VerifiedUser else Icons.Default.Security)
         Spacer(Modifier.width(10.dp))
         V5StatusPill(if (c.automaticMonitoring) "Automação ativa" else "Automação pausada", if (c.automaticMonitoring) V5Green else V5Orange, Icons.Default.Schedule)
-        Spacer(Modifier.width(24.dp))
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(185.dp)) {
+        Spacer(Modifier.width(18.dp))
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(150.dp)) {
             Text(SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR")).format(now), color = V5Muted, fontSize = 9.sp)
-            Text(SimpleDateFormat("HH:mm:ss", Locale("pt", "BR")).format(now), color = V5Ink, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+            Text(SimpleDateFormat("HH:mm:ss", Locale("pt", "BR")).format(now), color = V5Ink, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -653,27 +653,27 @@ private fun V5NewsScreen(c: DesktopControllerV5, tick: Int) {
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        V5Card(Modifier.fillMaxWidth()) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        V5Card(Modifier.fillMaxWidth(), padding = 10.dp) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                V5SearchBox(query, { query = it }, "Buscar nas notícias (título, fonte, termo...)", Modifier.weight(1f))
-                Spacer(Modifier.width(12.dp))
+                V5SearchBox(query, { query = it }, "Buscar nas notícias (título, fonte, termo...)", Modifier.weight(1f).height(42.dp))
+                Spacer(Modifier.width(9.dp))
                 Button(
                     onClick = { val p = c.periodLastHours(24); c.searchNews(p.first, p.second) },
                     enabled = !c.newsBusy,
-                    modifier = Modifier.height(50.dp)
+                    modifier = Modifier.height(42.dp)
                 ) {
                     Icon(Icons.Default.Refresh, null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(7.dp)); Text("Buscar últimas 24h", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.width(10.dp))
-                OutlinedButton(onClick = { onlyDemands = !onlyDemands }, modifier = Modifier.height(50.dp)) {
+                OutlinedButton(onClick = { onlyDemands = !onlyDemands }, modifier = Modifier.height(42.dp)) {
                     Icon(Icons.Default.FilterAlt, null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(6.dp)); Text(if (onlyDemands) "Mostrar todas" else "Só demandas", fontSize = 12.sp)
                 }
             }
 
-            Spacer(Modifier.height(11.dp))
+            Spacer(Modifier.height(7.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 V5PeriodButton("Hoje") {
                     val end = System.currentTimeMillis()
@@ -689,9 +689,9 @@ private fun V5NewsScreen(c: DesktopControllerV5, tick: Int) {
             }
 
             if (custom) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
                 Surface(color = Color(0xFFF6F9FD), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Border), modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         V5LabeledField("Data inicial", startDate, { startDate = it }, "AAAA-MM-DD", Modifier.width(155.dp))
                         V5LabeledField("Hora inicial", startTime, { startTime = it.take(5) }, "00:00", Modifier.width(105.dp))
                         V5LabeledField("Data final", endDate, { endDate = it }, "AAAA-MM-DD", Modifier.width(155.dp))
@@ -705,7 +705,7 @@ private fun V5NewsScreen(c: DesktopControllerV5, tick: Int) {
                             Spacer(Modifier.width(6.dp)); Text("Buscar período", fontSize = 11.sp)
                         }
                         Spacer(Modifier.weight(1f))
-                        Text("Formato: AAAA-MM-DD", color = V5Muted, fontSize = 8.sp, modifier = Modifier.padding(bottom = 12.dp))
+                        Text("Formato: AAAA-MM-DD", color = V5Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 12.dp))
                     }
                 }
             }
@@ -730,7 +730,7 @@ private fun V5NewsScreen(c: DesktopControllerV5, tick: Int) {
         if (list.isEmpty()) {
             V5EmptyState("Nenhuma notícia nesta visualização", "Execute uma busca ou altere os filtros para exibir resultados.", Icons.Default.Article, V5Blue, Modifier.weight(1f))
         } else {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 items(list, key = { it.link }) { V5NewsCard(it, it.link in c.newNewsLinks, c, showMatched = true) }
             }
         }
@@ -750,18 +750,18 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
         c.videos.filter { query.isBlank() || "${it.title} ${it.sourceName} ${it.matchedTerm} ${it.matchedDemand}".contains(query, true) }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        V5Card(Modifier.fillMaxWidth()) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        V5Card(Modifier.fillMaxWidth(), padding = 10.dp) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                V5SearchBox(query, { query = it }, "Buscar nos vídeos (título, fonte, termo...)", Modifier.weight(1f))
-                Spacer(Modifier.width(12.dp))
-                Button(onClick = { c.searchVideos() }, enabled = !c.videoBusy, modifier = Modifier.height(50.dp)) {
+                V5SearchBox(query, { query = it }, "Buscar nos vídeos (título, fonte, termo...)", Modifier.weight(1f).height(42.dp))
+                Spacer(Modifier.width(9.dp))
+                Button(onClick = { c.searchVideos() }, enabled = !c.videoBusy, modifier = Modifier.height(42.dp)) {
                     Icon(Icons.Default.Refresh, null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(7.dp)); Text("Buscar vídeos agora", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            Spacer(Modifier.height(11.dp))
+            Spacer(Modifier.height(7.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 V5PeriodButton("24 horas") { val p = c.periodLastHours(24); c.searchVideos(p.first, p.second) }
                 V5PeriodButton("7 dias") { val p = c.periodLastHours(168); c.searchVideos(p.first, p.second) }
@@ -771,9 +771,9 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
             }
 
             if (custom) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
                 Surface(color = Color(0xFFF8F5FF), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Purple.copy(alpha = .20f)), modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         V5LabeledField("Data inicial", startDate, { startDate = it }, "AAAA-MM-DD", Modifier.width(155.dp))
                         V5LabeledField("Hora inicial", startTime, { startTime = it.take(5) }, "00:00", Modifier.width(105.dp))
                         V5LabeledField("Data final", endDate, { endDate = it }, "AAAA-MM-DD", Modifier.width(155.dp))
@@ -807,19 +807,6 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
             V5UnstableVideoSourcesPanel(c.unstableVideoSources)
         }
 
-        if (c.unstableVideoSources.isNotEmpty()) {
-            Surface(color = Color(0xFFFFF6E8), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Gold.copy(alpha = .35f)), modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.WarningAmber, null, tint = Color(0xFFC88700), modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "${c.unstableVideoSources.size} fonte(s) apresentaram instabilidade na última busca. As demais fontes continuaram normalmente.",
-                        color = Color(0xFF8A5D00), fontSize = 11.sp
-                    )
-                }
-            }
-        }
-
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Vídeos encontrados", color = V5Ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.weight(1f)); Text("${list.size} exibido(s)", color = V5Muted, fontSize = 11.sp)
@@ -828,7 +815,7 @@ private fun V5VideosScreen(c: DesktopControllerV5, tick: Int) {
         if (list.isEmpty()) {
             V5EmptyState("Nenhum vídeo nesta visualização", "Execute uma busca manual ou selecione outras fontes de vídeo.", Icons.Default.PlayCircle, V5Purple, Modifier.weight(1f))
         } else {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 items(list, key = { it.link }) { V5VideoCard(it, it.link in c.newVideoLinks, showMatched = true) }
             }
         }
@@ -893,24 +880,27 @@ private fun V5StopScreen(c: DesktopControllerV5, tick: Int) {
 
 @Composable
 private fun V5UnstableVideoSourcesPanel(issues: List<VideoSourceIssue>) {
-    V5Card(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.WarningAmber, null, tint = V5Orange, modifier = Modifier.size(23.dp))
+    Surface(
+        color = Color(0xFFFFF8EC),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, V5Gold.copy(alpha = .36f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.WarningAmber, null, tint = V5Orange, modifier = Modifier.size(21.dp))
             Spacer(Modifier.width(9.dp))
             Column(Modifier.weight(1f)) {
-                Text("Fontes que apresentaram instabilidade", color = V5Ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                Text("A lista corresponde à última busca de vídeos e não remove a fonte da seleção.", color = V5Muted, fontSize = 10.sp)
+                Text("Fontes com instabilidade na última busca", color = V5Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    issues.take(4).joinToString("   •   ") { "${it.sourceName}: ${it.stage} (${it.failureCount})" },
+                    color = Color(0xFF9A6500),
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            Text("${issues.size} fonte(s)", color = V5Orange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(9.dp))
-        issues.take(10).forEach { issue ->
-            Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                Row(Modifier.padding(horizontal = 11.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(issue.sourceName, color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Text("${issue.stage} • ${issue.failureCount} falha(s)", color = V5Orange, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
+            Spacer(Modifier.width(10.dp))
+            V5Tag("${issues.size} fonte(s)", V5Orange, 90.dp)
         }
     }
 }
@@ -922,27 +912,20 @@ private fun V5ExecutionPanel(kind: String, busy: Boolean, p: LiveSearchProgress,
     val elapsed = if (busy && p.startedAt > 0) System.currentTimeMillis() - p.startedAt else duration
     @Suppress("UNUSED_VARIABLE") val redraw = tick
 
-    V5Card(Modifier.fillMaxWidth()) {
+    V5Card(Modifier.fillMaxWidth(), padding = 9.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(50.dp).clip(CircleShape).background((if (busy) V5Blue else V5Green).copy(alpha = .12f)),
+                Modifier.size(40.dp).clip(CircleShape).background((if (busy) V5Blue else V5Green).copy(alpha = .12f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(if (busy) Icons.Default.Sync else Icons.Default.CheckCircle, null, tint = if (busy) V5Blue else V5Green, modifier = Modifier.size(30.dp))
+                Icon(if (busy) Icons.Default.Sync else Icons.Default.CheckCircle, null, tint = if (busy) V5Blue else V5Green, modifier = Modifier.size(25.dp))
             }
-            Spacer(Modifier.width(13.dp))
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(if (busy) "$kind • busca em andamento" else "$kind • última execução concluída", color = V5Ink, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                Text(status, color = V5Muted, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(9.dp))
-                LinearProgressIndicator(
-                    progress = { fraction },
-                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(4.dp)),
-                    color = if (busy) V5Blue else V5Green,
-                    trackColor = Color(0xFFE4EDF7)
-                )
+                Text(if (busy) "$kind • busca em andamento" else "$kind • última execução concluída", color = V5Ink, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                Text(status, color = V5Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(10.dp))
             V5Stat("$pct%", "conclusão", V5Blue)
             V5Stat(p.found.toString(), "encontrados", V5Blue)
             V5Stat(fresh.toString(), "novos", V5Green)
@@ -951,22 +934,29 @@ private fun V5ExecutionPanel(kind: String, busy: Boolean, p: LiveSearchProgress,
             V5Stat(V5Duration(elapsed), "tempo", Color(0xFF3562A0))
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(6.dp))
+        LinearProgressIndicator(
+            progress = { fraction },
+            modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(4.dp)),
+            color = if (busy) V5Blue else V5Green,
+            trackColor = Color(0xFFE4EDF7)
+        )
+        Spacer(Modifier.height(6.dp))
         Surface(
             color = if (busy) V5SoftBlue else Color(0xFFE9F8F1),
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(7.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 if (busy) {
-                    "Fonte atual: ${p.currentSource.ifBlank { "Preparando..." }}   •   Consulta: ${p.currentQuery.ifBlank { "Preparando..." }}"
+                    "${p.currentSource.ifBlank { "Preparando..." }} • ${p.currentQuery.ifBlank { "Preparando consulta..." }}"
                 } else {
                     "$fresh novo(s) nesta execução. A marcação Nova é recalculada a cada nova busca."
                 },
                 color = if (busy) V5Blue else V5Green,
                 fontSize = 10.sp,
-                modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
-                maxLines = 2,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -975,31 +965,31 @@ private fun V5ExecutionPanel(kind: String, busy: Boolean, p: LiveSearchProgress,
 
 @Composable
 private fun V5Stat(value: String, label: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(72.dp)) {
-        Text(value, color = color, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
-        Text(label, color = V5Muted, fontSize = 8.sp)
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(66.dp)) {
+        Text(value, color = color, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+        Text(label, color = V5Muted, fontSize = 10.sp)
     }
 }
 
 @Composable
 private fun V5NewsCard(n: News, isNew: Boolean, c: DesktopControllerV5, showMatched: Boolean) {
     val scope = rememberCoroutineScope()
-    V5Card(Modifier.fillMaxWidth(), padding = 14.dp) {
+    V5Card(Modifier.fillMaxWidth(), padding = 11.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(58.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFE7F2FF)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Article, null, tint = V5Blue, modifier = Modifier.size(31.dp))
+            Box(Modifier.size(50.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFE7F2FF)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Article, null, tint = V5Blue, modifier = Modifier.size(27.dp))
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${n.source} • ${V5Date(n.date)}", color = V5Muted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${n.source} • ${V5Date(n.date)}", color = V5Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (isNew) { Spacer(Modifier.width(8.dp)); V5NewBadge() }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(n.title, color = V5Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
+                Text(n.title, color = V5Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
                 if (n.snippet.isNotBlank()) {
                     Spacer(Modifier.height(3.dp))
-                    Text(V5CleanText(n.snippet), color = V5Muted, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 14.sp)
+                    Text(V5CleanText(n.snippet), color = V5Muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp)
                 }
                 if (showMatched && (n.matchedTerm.isNotBlank() || n.matchedDemand.isNotBlank())) {
                     Spacer(Modifier.height(8.dp))
@@ -1022,22 +1012,22 @@ private fun V5NewsCard(n: News, isNew: Boolean, c: DesktopControllerV5, showMatc
 
 @Composable
 private fun V5VideoCard(v: VideoItem, isNew: Boolean, showMatched: Boolean) {
-    V5Card(Modifier.fillMaxWidth(), padding = 14.dp) {
+    V5Card(Modifier.fillMaxWidth(), padding = 11.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(58.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFF0E8FF)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.PlayCircle, null, tint = V5Purple, modifier = Modifier.size(33.dp))
+            Box(Modifier.size(50.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFF0E8FF)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.PlayCircle, null, tint = V5Purple, modifier = Modifier.size(29.dp))
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${v.sourceName} • ${V5Date(v.publishedAt)}", color = V5Muted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${v.sourceName} • ${V5Date(v.publishedAt)}", color = V5Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (isNew) { Spacer(Modifier.width(8.dp)); V5NewBadge() }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(v.title, color = V5Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
+                Text(v.title, color = V5Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
                 if (v.summary.isNotBlank()) {
                     Spacer(Modifier.height(3.dp))
-                    Text(V5CleanText(v.summary), color = V5Muted, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 14.sp)
+                    Text(V5CleanText(v.summary), color = V5Muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp)
                 }
                 if (showMatched && (v.matchedTerm.isNotBlank() || v.matchedDemand.isNotBlank())) {
                     Spacer(Modifier.height(8.dp))
@@ -1082,8 +1072,8 @@ private fun V5NewBadge() {
 
 @Composable
 private fun V5Tag(text: String, color: Color, maxWidth: androidx.compose.ui.unit.Dp) {
-    Surface(color = color.copy(alpha = .08f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, color.copy(alpha = .25f)), modifier = Modifier.widthIn(max = maxWidth)) {
-        Text(text, color = color, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
+    Surface(color = color.copy(alpha = .13f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, color.copy(alpha = .42f)), modifier = Modifier.widthIn(max = maxWidth)) {
+        Text(text, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
     }
 }
 
@@ -1356,8 +1346,8 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
     }
     val allNewsMode = tab == V5SourceTab.NEWS && c.newsAllSources
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        V5Card(Modifier.fillMaxWidth()) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        V5Card(Modifier.fillMaxWidth(), padding = 10.dp) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 V5TabButton("Notícias", tab == V5SourceTab.NEWS) {
                     tab = V5SourceTab.NEWS
@@ -1374,41 +1364,41 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
                     region = "Todas"; state = "Todos"
                 }
                 Spacer(Modifier.weight(1f))
-                V5SearchBox(query, { query = it }, "Pesquisar fonte...", Modifier.width(400.dp))
+                V5SearchBox(query, { query = it }, "Pesquisar fonte...", Modifier.width(390.dp).height(42.dp))
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Região", color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(65.dp))
+                Text("Região", color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(58.dp))
                 SourceCatalog.regions.forEach { r ->
                     V5FilterButton(r, region == r) { region = r; state = "Todos" }
-                    Spacer(Modifier.width(5.dp))
+                    Spacer(Modifier.width(4.dp))
                 }
             }
 
-            Spacer(Modifier.height(9.dp))
+            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Estado", color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(65.dp))
+                Text("Estado", color = V5Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(58.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
                     V5FilterButton("Todos", state == "Todos") { state = "Todos" }
-                    Spacer(Modifier.width(5.dp))
+                    Spacer(Modifier.width(4.dp))
                     SourceCatalog.states.filter { region == "Todas" || region == "Nacional" || it.third == region }.forEach { s ->
                         V5FilterButton(s.first, state == s.first) { state = s.first }
-                        Spacer(Modifier.width(5.dp))
+                        Spacer(Modifier.width(4.dp))
                     }
                 }
             }
 
             when (tab) {
                 V5SourceTab.NEWS -> {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
                     Surface(
                         color = if (c.newsAllSources) Color(0xFFE5F8EF) else Color(0xFFF6F9FD),
                         shape = RoundedCornerShape(10.dp),
                         border = BorderStroke(1.dp, if (c.newsAllSources) V5Green.copy(alpha = .35f) else V5Border),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.padding(horizontal = 11.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(40.dp).clip(RoundedCornerShape(9.dp)).background((if (c.newsAllSources) V5Green else V5Muted).copy(alpha = .12f)), contentAlignment = Alignment.Center) {
                                 Icon(Icons.Default.Public, null, tint = if (c.newsAllSources) V5Green else V5Muted)
                             }
@@ -1423,9 +1413,9 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
                     }
                 }
                 V5SourceTab.VIDEOS -> {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
                     Surface(color = Color(0xFFF8F5FF), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Purple.copy(alpha = .18f)), modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.padding(horizontal = 11.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.YouTube, null, tint = V5Red, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(10.dp))
                             Text("Fontes oficiais do YouTube incluem g1 e Domingo Espetacular, além dos canais já existentes.", color = V5Ink, fontSize = 11.sp)
@@ -1433,9 +1423,9 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
                     }
                 }
                 V5SourceTab.SPECIAL -> {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
                     Surface(color = Color(0xFFFFF8E8), shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, V5Gold.copy(alpha = .28f)), modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.padding(horizontal = 11.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Verified, null, tint = Color(0xFFC88700), modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(10.dp))
                             Text("Mídia especializada: ${SourceCatalog.specialized.size} veículos focados em Defesa, Forças Armadas e assuntos navais.", color = V5Ink, fontSize = 11.sp)
@@ -1445,9 +1435,9 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
             }
         }
 
-        V5Card(Modifier.fillMaxWidth(), padding = 13.dp) {
+        V5Card(Modifier.fillMaxWidth(), padding = 9.dp) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Storage, null, tint = V5Blue, modifier = Modifier.size(31.dp))
+                Icon(Icons.Default.Storage, null, tint = V5Blue, modifier = Modifier.size(26.dp))
                 Spacer(Modifier.width(12.dp))
                 Text("$visible fonte(s) visível(is)", color = V5Ink, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
                 if (allNewsMode) { Spacer(Modifier.width(10.dp)); V5Tag("seletor ignorado", V5Green, 130.dp) }
@@ -1480,7 +1470,7 @@ private fun V5SourcesScreen(c: DesktopControllerV5, tick: Int) {
             }
         }
 
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             if (tab == V5SourceTab.VIDEOS) {
                 items(videoList, key = { it.id }) { s ->
                     V5SourceRow(
@@ -1510,7 +1500,7 @@ private fun V5TabButton(text: String, selected: Boolean, click: () -> Unit) {
         color = if (selected) Color(0xFFEDE7FF) else Color.White,
         shape = RoundedCornerShape(9.dp),
         border = BorderStroke(1.dp, if (selected) V5Purple.copy(alpha = .25f) else V5Border),
-        modifier = Modifier.height(44.dp).clickable(onClick = click)
+        modifier = Modifier.height(36.dp).clickable(onClick = click)
     ) {
         Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(text, color = V5Ink, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
@@ -1524,7 +1514,7 @@ private fun V5FilterButton(text: String, selected: Boolean, click: () -> Unit) {
         color = if (selected) Color(0xFFDCEBFF) else Color.White,
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, V5Border),
-        modifier = Modifier.height(38.dp).clickable(onClick = click)
+        modifier = Modifier.height(34.dp).clickable(onClick = click)
     ) {
         Row(Modifier.padding(horizontal = 11.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(text, color = if (selected) V5Blue else V5Muted, fontSize = 10.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
@@ -1534,20 +1524,20 @@ private fun V5FilterButton(text: String, selected: Boolean, click: () -> Unit) {
 
 @Composable
 private fun V5SourceRow(name: String, detail: String, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) {
-    V5Card(Modifier.fillMaxWidth(), padding = 11.dp) {
+    V5Card(Modifier.fillMaxWidth(), padding = 8.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = checked, onCheckedChange = change, enabled = enabled)
-            Spacer(Modifier.width(9.dp))
-            Box(Modifier.width(68.dp).height(38.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0B4C8C)), contentAlignment = Alignment.Center) {
+            Checkbox(checked = checked, onCheckedChange = change, enabled = enabled, modifier = Modifier.size(36.dp))
+            Spacer(Modifier.width(7.dp))
+            Box(Modifier.width(60.dp).height(34.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0B4C8C)), contentAlignment = Alignment.Center) {
                 Text(name.filter { it.isLetterOrDigit() }.take(3).uppercase(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.width(15.dp))
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(name, color = V5Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(2.dp)); Text(detail, color = V5Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (!enabled) V5Tag("modo todos", V5Green, 90.dp)
-            Spacer(Modifier.width(8.dp)); Icon(Icons.Default.ChevronRight, null, tint = V5Blue)
+            Spacer(Modifier.width(6.dp)); Icon(Icons.Default.ChevronRight, null, tint = V5Blue)
         }
     }
 }
