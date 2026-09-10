@@ -344,38 +344,6 @@ private object VexFxRuntime {
     }
 }
 
-private object VexFxRuntime {
-    private val started = AtomicBoolean(false)
-    private val ready = CompletableFuture<Unit>()
-
-    private fun ensureStarted() {
-        if (!started.compareAndSet(false, true)) return
-        Thread({
-            try {
-                Platform.startup {
-                    Platform.setImplicitExit(false)
-                    ready.complete(Unit)
-                }
-            } catch (_: IllegalStateException) {
-                // JavaFX was already initialized by another component.
-                ready.complete(Unit)
-            } catch (t: Throwable) {
-                ready.completeExceptionally(t)
-            }
-        }, "monitor-video-javafx-startup").apply {
-            isDaemon = true
-            start()
-        }
-    }
-
-    fun run(action: () -> Unit) {
-        ensureStarted()
-        ready.whenComplete { _, error ->
-            if (error == null) runCatching { Platform.runLater(action) }
-        }
-    }
-}
-
 private class VexFxPreview {
     private var player: MediaPlayer? = null
     private var mediaView: MediaView? = null
