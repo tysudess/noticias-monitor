@@ -1,0 +1,127 @@
+name: Build Monitor Native Video Extractor Shell
+
+on:
+  push:
+    branches:
+      - integration/video-native-v1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout Monitor
+        uses: actions/checkout@v4
+        with:
+          ref: integration/video-native-v1
+
+      - name: Wire native video extractor tab
+        shell: pwsh
+        run: |
+          $dashboard = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt'
+          if (-not (Select-String -Path $dashboard -Pattern 'EXTRACT_VIDEO\(' -Quiet)) {
+            python tools/apply-video-native-tab.py
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add $dashboard
+            git commit -m 'feat(desktop): wire native video extractor tab'
+            git push origin HEAD:integration/video-native-v1
+          } else {
+            Write-Host 'Native video extractor tab already wired.'
+          }
+
+      - name: Setup Node.js 22 for native news core
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Checkout original News Extractor headless engine
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch integration/monitor-headless https://github.com/tysudess/Extrator-de-noticias-windows.git _integrations/news-src
+          if (-not (Test-Path '_integrations/news-src/monitor-bridge.js')) { throw 'News headless bridge ausente.' }
+
+      - name: Install News Extractor runtime dependencies
+        shell: pwsh
+        working-directory: _integrations/news-src
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile Monitor with native News and Video UI
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Create Windows distributable
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Package original News Extractor core
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $dest = Join-Path $root 'tools/ExtratorNoticiasCore'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item '_integrations/news-src/engine' $dest -Recurse -Force
+          Copy-Item '_integrations/news-src/node_modules' $dest -Recurse -Force
+          Copy-Item '_integrations/news-src/package.json' $dest -Force
+          Copy-Item '_integrations/news-src/monitor-bridge.js' $dest -Force
+          Copy-Item (Get-Command node).Source (Join-Path $dest 'node.exe') -Force
+
+      - name: Verify News Extractor remains integrated
+        shell: pwsh
+        run: |
+          $core = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/ExtratorNoticiasCore'
+          $state = '{"action":"state"}' | & (Join-Path $core 'node.exe') (Join-Path $core 'monitor-bridge.js')
+          $parsed = $state | ConvertFrom-Json
+          if (-not $parsed.ok) { throw 'Native News Extractor regression.' }
+          if ($parsed.versaoMotor -notmatch '1\.25\.19') { throw "Unexpected News engine version: $($parsed.versaoMotor)" }
+
+      - name: Verify JavaFX preview runtime is packaged
+        shell: pwsh
+        run: |
+          $app = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/app'
+          $media = Get-ChildItem $app -Recurse -File | Where-Object { $_.Name -match '^javafx-media.*\.jar$' } | Select-Object -First 1
+          $swing = Get-ChildItem $app -Recurse -File | Where-Object { $_.Name -match '^javafx-swing.*\.jar$' } | Select-Object -First 1
+          if (-not $media) { throw 'javafx-media não foi empacotado.' }
+          if (-not $swing) { throw 'javafx-swing não foi empacotado.' }
+          Write-Host "JavaFX media: $($media.FullName)"
+          Write-Host "JavaFX swing: $($swing.FullName)"
+
+      - name: Verify Monitor launcher initializes
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/MonitorDeNoticias.exe'
+          $p = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 10
+            $p.Refresh()
+            if ($p.HasExited) { throw "Monitor exited early with code $($p.ExitCode)" }
+          }
+          finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Create Monitor shell ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'Monitor-de-Noticias-v4.0.2-VIDEO-NATIVO-SHELL.zip' -Force
+
+      - name: Upload Monitor shell
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-video-native-shell
+          path: Monitor-de-Noticias-v4.0.2-VIDEO-NATIVO-SHELL.zip
+          if-no-files-found: error
+          retention-days: 7
