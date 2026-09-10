@@ -1,6 +1,7 @@
 package br.com.monitordenoticias.desktop
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -16,12 +17,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -29,8 +32,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import javafx.application.Platform
-import javafx.embed.swing.JFXPanel
+import javafx.animation.KeyFrame
+import javafx.animation.Timeline
+import javafx.embed.swing.SwingFXUtils
 import javafx.scene.Scene
+import javafx.scene.image.WritableImage
 import javafx.scene.layout.StackPane
 import javafx.scene.media.Media
 import javafx.scene.media.MediaPlayer
@@ -44,7 +50,10 @@ import org.json.JSONObject
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
+import java.awt.image.BufferedImage
 import java.io.File
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -303,9 +312,45 @@ private object VexBridge {
     }
 }
 
+private object VexFxRuntime {
+    private val started = AtomicBoolean(false)
+    private val ready = CompletableFuture<Unit>()
+
+    private fun ensureStarted() {
+        if (!started.compareAndSet(false, true)) return
+        Thread({
+            try {
+                Platform.startup {
+                    Platform.setImplicitExit(false)
+                    ready.complete(Unit)
+                }
+            } catch (_: IllegalStateException) {
+                // JavaFX was already initialized by another component.
+                ready.complete(Unit)
+            } catch (t: Throwable) {
+                ready.completeExceptionally(t)
+            }
+        }, "monitor-video-javafx-startup").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    fun run(action: () -> Unit) {
+        ensureStarted()
+        ready.whenComplete { _, error ->
+            if (error == null) runCatching { Platform.runLater(action) }
+        }
+    }
+}
+
 private class VexFxPreview {
-    @Volatile private var panel: JFXPanel? = null
     private var player: MediaPlayer? = null
+    private var mediaView: MediaView? = null
+    private var scene: Scene? = null
+    private var frameTimer: Timeline? = null
+    @Volatile private var frame: BufferedImage? = null
+
     @Volatile var currentMs: Long = 0L
         private set
     @Volatile var durationMs: Long = 0L
@@ -315,66 +360,143 @@ private class VexFxPreview {
     @Volatile var loadedPath: String = ""
         private set
 
-    /**
-     * SwingPanel invokes its factory on Swing's EDT. JFXPanel must be created there;
-     * constructing it eagerly from the Compose render thread can deadlock AWT/JavaFX
-     * when the user first opens Editor / Timeline.
-     */
-    fun createPanel(): JFXPanel {
-        val created = JFXPanel()
-        panel = created
-        Platform.setImplicitExit(false)
-        Platform.runLater {
-            if (panel === created) {
-                created.scene = Scene(StackPane().apply { style = "-fx-background-color: #06111f;" })
-            }
-        }
-        return created
-    }
+    fun latestFrame(): BufferedImage? = frame
 
     fun load(path: String, positionMs: Long = 0L, autoplay: Boolean = false) {
         if (path.isBlank()) return
-        val targetPanel = panel ?: return
-        Platform.runLater {
-            if (panel !== targetPanel) return@runLater
+        loadedPath = path
+        VexFxRuntime.run {
             runCatching {
-                player?.stop()
-                player?.dispose()
+                stopFx()
                 val media = Media(File(path).toURI().toString())
                 val mp = MediaPlayer(media)
                 val view = MediaView(mp).apply {
                     isPreserveRatio = true
-                    fitWidth = 900.0
-                    fitHeight = 500.0
+                    fitWidth = 960.0
+                    fitHeight = 540.0
                 }
-                targetPanel.scene = Scene(StackPane(view).apply { style = "-fx-background-color: #06111f;" })
+                val root = StackPane(view).apply {
+                    style = "-fx-background-color: #071426;"
+                    resize(960.0, 540.0)
+                }
+                val sc = Scene(root, 960.0, 540.0)
+                root.applyCss()
+                root.layout()
+
                 player = mp
-                loadedPath = path
+                mediaView = view
+                scene = sc
+                currentMs = positionMs.coerceAtLeast(0L)
+                durationMs = 0L
+                playing = false
+                frame = null
+
+                val timer = Timeline(KeyFrame(javafx.util.Duration.millis(125.0)) { captureFrameFx() }).apply {
+                    cycleCount = Timeline.INDEFINITE
+                }
+                frameTimer = timer
+
                 mp.setOnReady {
                     durationMs = mp.totalDuration.toMillis().toLong().coerceAtLeast(0L)
-                    mp.seek(javafx.util.Duration.millis(positionMs.toDouble()))
+                    mp.seek(javafx.util.Duration.millis(positionMs.coerceAtLeast(0L).toDouble()))
+                    captureFrameFx()
                     if (autoplay) mp.play()
                 }
-                mp.currentTimeProperty().addListener { _, _, value -> currentMs = value.toMillis().toLong().coerceAtLeast(0L) }
-                mp.statusProperty().addListener { _, _, value -> playing = value == MediaPlayer.Status.PLAYING }
+                mp.currentTimeProperty().addListener { _, _, value ->
+                    currentMs = value.toMillis().toLong().coerceAtLeast(0L)
+                }
+                mp.statusProperty().addListener { _, _, value ->
+                    playing = value == MediaPlayer.Status.PLAYING
+                    if (playing) timer.play() else {
+                        timer.pause()
+                        captureFrameFx()
+                    }
+                }
+                mp.setOnEndOfMedia {
+                    playing = false
+                    timer.pause()
+                    captureFrameFx()
+                }
+                mp.setOnError {
+                    playing = false
+                    timer.stop()
+                }
+            }.onFailure {
+                playing = false
+                durationMs = 0L
             }
         }
     }
 
-    fun play() = Platform.runLater { player?.play() }
-    fun pause() = Platform.runLater { player?.pause() }
-    fun seek(ms: Long) = Platform.runLater { player?.seek(javafx.util.Duration.millis(ms.coerceAtLeast(0L).toDouble())) }
-    fun toggle() = Platform.runLater { if (player?.status == MediaPlayer.Status.PLAYING) player?.pause() else player?.play() }
+    private fun captureFrameFx() {
+        val view = mediaView ?: return
+        runCatching {
+            val image = WritableImage(960, 540)
+            val snapped = view.snapshot(null, image)
+            frame = SwingFXUtils.fromFXImage(snapped, null)
+        }
+    }
+
+    private fun stopFx() {
+        frameTimer?.stop()
+        frameTimer = null
+        player?.stop()
+        player?.dispose()
+        player = null
+        mediaView = null
+        scene = null
+        playing = false
+    }
+
+    fun play() = VexFxRuntime.run { player?.play() }
+    fun pause() = VexFxRuntime.run { player?.pause() }
+    fun seek(ms: Long) = VexFxRuntime.run {
+        player?.seek(javafx.util.Duration.millis(ms.coerceAtLeast(0L).toDouble()))
+        Timeline(KeyFrame(javafx.util.Duration.millis(80.0)) { captureFrameFx() }).play()
+    }
+    fun toggle() = VexFxRuntime.run {
+        if (player?.status == MediaPlayer.Status.PLAYING) player?.pause() else player?.play()
+    }
     fun dispose() {
-        panel = null
-        Platform.runLater {
-            player?.stop()
-            player?.dispose()
-            player = null
-            loadedPath = ""
-            currentMs = 0L
-            durationMs = 0L
-            playing = false
+        frame = null
+        loadedPath = ""
+        currentMs = 0L
+        durationMs = 0L
+        playing = false
+        VexFxRuntime.run { stopFx() }
+    }
+}
+
+@Composable
+private fun VexPreviewSurface(preview: VexFxPreview, modifier: Modifier = Modifier) {
+    var frame by remember(preview) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(preview) {
+        var lastFrame: BufferedImage? = null
+        while (true) {
+            val latest = preview.latestFrame()
+            if (latest !== lastFrame) {
+                frame = if (latest == null) null else withContext(Dispatchers.Default) { latest.toComposeImageBitmap() }
+                lastFrame = latest
+            }
+            delay(if (preview.playing) 100 else 240)
+        }
+    }
+
+    Box(modifier.background(Color(0xFF071426)), contentAlignment = Alignment.Center) {
+        val bitmap = frame
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = "Pré-visualização do vídeo",
+                modifier = Modifier.fillMaxSize().padding(6.dp),
+                contentScale = ContentScale.Fit
+            )
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.VideoLibrary, null, tint = Color(0xFF58739F), modifier = Modifier.size(40.dp))
+                Text("Abra um vídeo para visualizar e editar", color = Color(0xFF9FB2CA), fontSize = 11.sp)
+            }
         }
     }
 }
@@ -730,7 +852,7 @@ private fun VexEditorScreen(state: VexCoreState) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
             Surface(color = Color(0xFF071426), shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, Color(0xFF1A355A)), modifier = Modifier.weight(0.68f).height(390.dp)) {
                 Column(Modifier.fillMaxSize()) {
-                    SwingPanel(factory = { preview.createPanel() }, modifier = Modifier.weight(1f).fillMaxWidth())
+                    VexPreviewSurface(preview, Modifier.weight(1f).fillMaxWidth())
                     Row(Modifier.fillMaxWidth().background(Color(0xFF0B1C31)).padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         OutlinedButton(onClick = { val c = clips.getOrNull(selectedIndex) ?: return@OutlinedButton; preview.seek((preview.currentMs - 5000).coerceAtLeast(c.startMs)); playheadMs = clipGlobalStart(selectedIndex) + (preview.currentMs - c.startMs).coerceAtLeast(0) }, enabled = selected != null) { Text("−5s") }
                         Button(onClick = {
