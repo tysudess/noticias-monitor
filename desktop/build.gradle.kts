@@ -66,7 +66,7 @@ compose.desktop {
     application {
         mainClass = "br.com.monitordenoticias.desktop.DashboardV5MainKt"
         nativeDistributions {
-            modules("java.sql", "java.instrument", "jdk.unsupported", "java.net.http")
+            modules("java.sql", "java.instrument", "jdk.unsupported", "java.net.http", "jdk.jsobject")
             targetFormats(TargetFormat.Msi)
             packageName = "MonitorDeNoticias"
             packageVersion = "4.0.2"
