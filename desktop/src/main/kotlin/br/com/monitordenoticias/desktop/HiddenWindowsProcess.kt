@@ -51,9 +51,16 @@ internal object HiddenWindowsProcess {
         if (pid != null) {
             runCatching {
                 ProcessBuilder(
-                    "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
-                    "-Command", "Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue; Get-CimInstance Win32_Process | Where-Object ParentProcessId -eq $pid | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }"
-                ).start().waitFor(5, TimeUnit.SECONDS)
+                    "powershell.exe",
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-WindowStyle", "Hidden",
+                    "-Command", "& taskkill.exe /PID $pid /T /F 2>`$null; exit 0"
+                )
+                    .redirectErrorStream(true)
+                    .start()
+                    .waitFor(8, TimeUnit.SECONDS)
             }
         }
         runCatching { process.destroyForcibly() }
