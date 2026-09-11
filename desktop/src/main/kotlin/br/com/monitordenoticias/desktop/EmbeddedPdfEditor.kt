@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.sun.jna.Native
 import com.sun.jna.Pointer
-import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.User32
 import com.sun.jna.platform.win32.WinDef.HWND
 import com.sun.jna.platform.win32.WinUser
@@ -112,7 +111,7 @@ private class PdfEditorNativeHost(
             add(File(cwd, "tools/EditorPDF/Editor-de-PDF.exe"))
             add(File(cwd, "EditorPDF/Editor-de-PDF.exe"))
             val code = runCatching {
-                File(EmbeddedPdfEditorScreen::class.java.protectionDomain.codeSource.location.toURI()).parentFile
+                File(PdfEditorNativeHost::class.java.protectionDomain.codeSource.location.toURI()).parentFile
             }.getOrNull()
             if (code != null) {
                 add(File(code, "tools/EditorPDF/Editor-de-PDF.exe"))
