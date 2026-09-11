@@ -17,6 +17,12 @@ if not workspace_patch.exists():
     raise SystemExit('patch-extractor-dedicated-workspace.py ausente.')
 runpy.run_path(str(workspace_patch), run_name='__main__')
 
+# Apenas live ativa deve usar snapshot DVR; post_live segue o fluxo normal.
+live_status_patch = ROOT / 'tools/patch-extractor-youtube-live-status.py'
+if not live_status_patch.exists():
+    raise SystemExit('patch-extractor-youtube-live-status.py ausente.')
+runpy.run_path(str(live_status_patch), run_name='__main__')
+
 src = ENGINE.read_text(encoding='utf-8')
 
 old_route = '                else -> downloadGeneric(cleanUrl, quality, proxy, "vídeo", update)\n'
