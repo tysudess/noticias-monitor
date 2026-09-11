@@ -1,4 +1,4 @@
-name: Release V8 PDF Editor Portable
+name: Release V8 PDF Editor V2 Portable
 
 on:
   push:
@@ -43,7 +43,7 @@ jobs:
           $exe = Join-Path $root 'MonitorDeNoticias.exe'
           if (-not (Test-Path $exe)) { throw 'MonitorDeNoticias.exe ausente.' }
           New-Item -ItemType Directory -Force -Path (Join-Path $root 'data') | Out-Null
-          $zipName = 'Monitor-de-Noticias-V8-Editor-PDF-Windows-Portable.zip'
+          $zipName = 'Monitor-de-Noticias-V8-Editor-PDF-V2-Windows-Portable.zip'
           if (Test-Path $zipName) { Remove-Item $zipName -Force }
           Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zipName -CompressionLevel Optimal
           $hash = (Get-FileHash $zipName -Algorithm SHA256).Hash.ToLower()
@@ -54,14 +54,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = 'v8-pdf-editor-portable-20260911'
+          $tag = 'v8-pdf-editor-layout-v2-20260911'
           if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) {
             gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag
           }
           gh release create $tag `
-            'Monitor-de-Noticias-V8-Editor-PDF-Windows-Portable.zip' `
-            'Monitor-de-Noticias-V8-Editor-PDF-Windows-Portable.zip.sha256' `
+            'Monitor-de-Noticias-V8-Editor-PDF-V2-Windows-Portable.zip' `
+            'Monitor-de-Noticias-V8-Editor-PDF-V2-Windows-Portable.zip.sha256' `
             --repo tysudess/noticias-monitor `
             --target work/v8-next `
-            --title 'Monitor de Notícias V8 + Editor de PDF — Windows Portable' `
-            --notes 'Build portable da branch work/v8-next com a nova aba Editor de PDF integrada.'
+            --title 'Monitor de Notícias V8 + Editor de PDF V2 — Windows Portable' `
+            --notes 'Editor de PDF V2 com layout baseado na referência fornecida, botão Selecionar corte, correção de recorte e capa padrão Mídia Impressa embutida.'
