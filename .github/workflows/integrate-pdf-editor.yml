@@ -20,15 +20,22 @@ jobs:
           ref: work/v8-next
           fetch-depth: 0
 
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
       - name: Patch Dashboard V5 and dependencies
         shell: pwsh
         run: |
           $dashboard = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt'
           $text = Get-Content $dashboard -Raw
-
-          if ($text -notmatch 'androidx\.compose\.ui\.awt\.SwingPanel') {
-            $text = $text.Replace('import androidx.compose.ui.window.*', "import androidx.compose.ui.window.*`r`nimport androidx.compose.ui.awt.SwingPanel")
-          }
 
           if ($text -notmatch 'PDF_EDITOR\(') {
             $old = '    SETTINGS("Configurações", "Automação, proxy, inicialização e operação do aplicativo", Icons.Default.Settings)'
@@ -61,8 +68,7 @@ jobs:
 
       - name: Compile desktop
         shell: pwsh
-        run: |
-          ./gradlew.bat :desktop:compileKotlin --stacktrace
+        run: gradle :desktop:compileKotlin --stacktrace
 
       - name: Commit integration
         shell: pwsh
