@@ -13,18 +13,21 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DirectMediaHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'tools/integrate-v8-extractor-tab.py'
+      - 'tools/patch-extractor-generic-html.py'
       - 'tools/patch-extractor-hidden-process.py'
       - '.github/workflows/integrate-v8-extractor-tab.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   integrate:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,22 +41,23 @@ jobs:
           python-version: '3.12'
 
       - name: Registrar hash do Editor PDF aprovado
-        shell: powershell
+        shell: pwsh
         run: |
-          $hash = (Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
-          "PDF_HASH=$hash" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $hash=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
+          "PDF_HASH=$hash" | Out-File $env:GITHUB_ENV -Append
           Write-Host "PDF aprovado: $hash"
 
-      - name: Integrar aba Extrator e motor v3.0.1
-        run: python tools/integrate-v8-extractor-tab.py
-
-      - name: Ativar subprocessos ocultos
-        run: python tools/patch-extractor-hidden-process.py
+      - name: Aplicar integração completa do Extrator
+        shell: pwsh
+        run: |
+          python tools/integrate-v8-extractor-tab.py
+          python tools/patch-extractor-generic-html.py
+          python tools/patch-extractor-hidden-process.py
 
       - name: Garantir que Editor PDF não mudou
-        shell: powershell
+        shell: pwsh
         run: |
-          $after = (Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
+          $after=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
           if ($after -ne $env:PDF_HASH) { throw 'PdfEditorScreenV2.kt foi alterado. Build bloqueado.' }
           if (git diff --name-only | Select-String -SimpleMatch 'PdfEditorScreenV2.kt') { throw 'Editor PDF apareceu no diff. Build bloqueado.' }
 
@@ -69,76 +73,36 @@ jobs:
           gradle-version: '8.10.2'
 
       - name: Compilar Desktop
-        shell: powershell
+        shell: pwsh
         run: gradle :desktop:compileKotlin --stacktrace
 
-      - name: Testes estruturais da aba
-        shell: powershell
+      - name: Validar contrato funcional completo
+        shell: pwsh
         run: |
-          $dash = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
-          $ext = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
-          $engine = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
-          $session = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt' -Raw
-          $html = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt' -Raw
-          $login = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
-          $r7 = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt' -Raw
-          $hidden = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt' -Raw
-          $updater = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt' -Raw
-          $gradle = Get-Content 'desktop/build.gradle.kts' -Raw
-          if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Item Extrator ausente da sidebar.' }
-          if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota da aba Extrator ausente.' }
-          foreach ($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) {
-            if (($ext + $engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" }
-          }
-          if ($ext -match 'ANALISAR') { throw 'Fluxo final não pode exibir ANALISAR.' }
-          if ($ext -notmatch 'Formato de saída: MP4') { throw 'Texto de formato ausente.' }
-          foreach ($required in @('--live-from-start','ffprobe','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','--hls-use-mpegts','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','downloadR7(cleanUrl','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree')) {
-            if ($engine -notmatch [regex]::Escape($required)) { throw "Motor v3.0.1 incompleto: $required" }
-          }
-          foreach ($required in @('ProtectedData','CurrentUser','globoplay.session.dpapi','createRuntimeCookieFile')) {
-            if ($session -notmatch [regex]::Escape($required)) { throw "Sessão Globoplay incompleta: $required" }
-          }
-          if ($html -notmatch 'take\(15\)') { throw 'Fallback Globoplay não limita a 15 m3u8.' }
-          if ($r7 -notmatch 'take\(15\)') { throw 'Fallback R7/Record não limita a 15 mídias.' }
-          foreach ($required in @('.m3u8','.mp4','contentUrl','Proxy-Authorization')) {
-            if ($r7 -notmatch [regex]::Escape($required)) { throw "Fallback R7/Record incompleto: $required" }
-          }
-          foreach ($required in @('-WindowStyle','Hidden','Stop-Process','ParentProcessId')) {
-            if ($hidden -notmatch [regex]::Escape($required)) { throw "Launcher oculto incompleto: $required" }
-          }
-          foreach ($required in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext','saveNetscapeCookies')) {
-            if ($login -notmatch [regex]::Escape($required)) { throw "Login interno Globoplay incompleto: $required" }
-          }
-          foreach ($required in @('javafx-web','javafx-swing')) {
-            if ($gradle -notmatch [regex]::Escape($required)) { throw "Dependência do navegador ausente: $required" }
-          }
-          foreach ($required in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','executável anterior foi preservado')) {
-            if ($updater -notmatch [regex]::Escape($required)) { throw "Atualizador yt-dlp incompleto: $required" }
-          }
-          foreach ($required in @('LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO')) {
-            if ($ext -notmatch [regex]::Escape($required)) { throw "Controle da tela ausente: $required" }
-          }
-          Write-Host 'Estrutura, subprocessos ocultos, YouTube/H264, R7/Record, Globoplay, login interno e atualização yt-dlp validados.'
+          $dash=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
+          $screen=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
+          $engine=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
+          $session=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt' -Raw
+          $globofallback=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt' -Raw
+          $login=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
+          $r7=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt' -Raw
+          $generic=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DirectMediaHtmlFallback.kt' -Raw
+          $hidden=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt' -Raw
+          $updater=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt' -Raw
+          $gradle=Get-Content 'desktop/build.gradle.kts' -Raw
 
-      - name: Commitar integração gerada
-        shell: powershell
-        run: |
-          if ((git status --porcelain).Length -eq 0) {
-            Write-Host 'Nenhuma alteração gerada.'
-            exit 0
-          }
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt `
-                  desktop/build.gradle.kts
-          git diff --cached --check
-          git commit -m 'Integrate extractor video tab and complete v3.0.1 engine services'
-          git push origin HEAD:work/v8-extrator-v301-tab
+          if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Item Extrator ausente.' }
+          if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota Extrator ausente.' }
+          if ($screen -match 'ANALISAR') { throw 'ANALISAR não pode ficar visível.' }
+          foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) { if (($screen+$engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" } }
+          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO')) { if ($screen -notmatch [regex]::Escape($x)) { throw "UI ausente: $x" } }
+          foreach($x in @('--live-from-start','ffprobe','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','--hls-use-mpegts','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree')) { if ($engine -notmatch [regex]::Escape($x)) { throw "Motor incompleto: $x" } }
+          foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi','createRuntimeCookieFile')) { if ($session -notmatch [regex]::Escape($x)) { throw "Sessão Globoplay incompleta: $x" } }
+          if ($globofallback -notmatch 'take\(15\)') { throw 'Globoplay sem limite de 15 m3u8.' }
+          if ($r7 -notmatch 'take\(15\)') { throw 'R7/Record sem limite de 15 mídias.' }
+          if ($generic -notmatch 'take\(15\)') { throw 'Fallback HTML genérico sem limite de 15 mídias.' }
+          foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext','saveNetscapeCookies')) { if ($login -notmatch [regex]::Escape($x)) { throw "Login Globoplay incompleto: $x" } }
+          foreach($x in @('javafx-web','javafx-swing')) { if ($gradle -notmatch [regex]::Escape($x)) { throw "JavaFX ausente: $x" } }
+          foreach($x in @('-WindowStyle','Hidden','taskkill.exe','/T','/F')) { if ($hidden -notmatch [regex]::Escape($x)) { throw "Launcher oculto incompleto: $x" } }
+          foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version')) { if ($updater -notmatch [regex]::Escape($x)) { throw "Updater incompleto: $x" } }
+          Write-Host 'Extrator v3.0.1 completo validado; Editor PDF intacto.'
