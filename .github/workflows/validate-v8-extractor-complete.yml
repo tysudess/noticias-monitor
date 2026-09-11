@@ -21,8 +21,10 @@ on:
       - 'tools/integrate-v8-extractor-tab.py'
       - 'tools/patch-extractor-generic-html.py'
       - 'tools/patch-extractor-live-current-point.py'
+      - 'tools/patch-extractor-youtube-live-status.py'
       - 'tools/patch-extractor-portable-state.py'
       - 'tools/patch-extractor-compat-retry.py'
+      - 'tools/patch-extractor-r7-reference.py'
       - 'tools/patch-extractor-portable-paths.py'
       - 'tools/patch-extractor-dedicated-workspace.py'
       - 'tools/patch-extractor-hidden-process.py'
@@ -99,13 +101,14 @@ jobs:
           if ($screen -match 'ANALISAR') { throw 'ANALISAR não pode ficar visível.' }
           foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) { if (($screen+$engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" } }
           foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO','LIMPAR HISTÓRICO','SALVAR PROXY','REMOVER PROXY','ExtractorPortableStateStore')) { if ($screen -notmatch [regex]::Escape($x)) { throw "UI/estado ausente: $x" } }
-          foreach($x in @('YouTubeLiveSnapshot.download','--download-sections','runYtDlpQuality','quality.compat','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree','jpackage.app-path','MonitorDeNoticias.exe')) { if ($engine -notmatch [regex]::Escape($x)) { throw "Motor incompleto: $x" } }
+          foreach($x in @('YouTubeLiveSnapshot.download','--download-sections','runYtDlpQuality','quality.compat','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree','jpackage.app-path','MonitorDeNoticias.exe','val r7Base = listOf("--force-ipv4", "--no-mtime")')) { if ($engine -notmatch [regex]::Escape($x)) { throw "Motor incompleto: $x" } }
+          if ($engine -match 'liveStatus == "post_live"') { throw 'post_live não pode ser tratado como live ativa.' }
           foreach($x in @('#EXT-X-ENDLIST','protocol_whitelist','playlistDuration','libx264','160k')) { if ($live -notmatch [regex]::Escape($x)) { throw "Snapshot HLS incompleto: $x" } }
-          foreach($x in @('history.txt','settings.properties','proxy.dpapi','ProtectedData','CurrentUser','loadHistory','saveQualityIndex','saveProxy')) { if ($state -notmatch [regex]::Escape($x)) { throw "Persistência portable incompleta: $x" } }
+          foreach($x in @('history.txt','settings.properties','proxy.dpapi','ProtectedData','CurrentUser','loadHistory','saveQualityIndex','saveProxy','[Console]::In.ReadToEnd()','stdinText')) { if ($state -notmatch [regex]::Escape($x)) { throw "Persistência portable incompleta: $x" } }
           foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext')) { if ($login -notmatch [regex]::Escape($x)) { throw "Login incompleto: $x" } }
-          foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi','HiddenWindowsProcess.start')) { if ($session -notmatch [regex]::Escape($x)) { throw "Sessão incompleta: $x" } }
+          foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi','HiddenWindowsProcess.start','[Console]::In.ReadToEnd()','stdinText')) { if ($session -notmatch [regex]::Escape($x)) { throw "Sessão incompleta: $x" } }
           if ($r7 -notmatch 'take\(15\)') { throw 'R7 sem limite de 15.' }
           if ($generic -notmatch 'take\(15\)') { throw 'HTML genérico sem limite de 15.' }
           foreach($x in @('-WindowStyle','Hidden','taskkill.exe','/T','/F')) { if ($hidden -notmatch [regex]::Escape($x)) { throw "Subprocesso oculto incompleto: $x" } }
-          foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','HiddenWindowsProcess.start')) { if ($updater -notmatch [regex]::Escape($x)) { throw "Updater incompleto: $x" } }
+          foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','HiddenWindowsProcess.start','Intencionalmente NÃO apagamos backup aqui')) { if ($updater -notmatch [regex]::Escape($x)) { throw "Updater incompleto: $x" } }
           Write-Host 'Contrato funcional completo validado sem alterar o Editor PDF.'
