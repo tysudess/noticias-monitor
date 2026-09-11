@@ -71,7 +71,8 @@ private enum class V5Section(val label: String, val subtitle: String, val icon: 
     TERMS("Termos", "Termos independentes para notícias e vídeos", Icons.Default.Search),
     STOP("Parar buscas", "Interrompa buscas manuais em andamento", Icons.Default.StopCircle),
     SETTINGS("Configurações", "Automação, proxy, inicialização e operação do aplicativo", Icons.Default.Settings),
-    PDF_EDITOR("Editor de PDF", "Monte, reorganize, recorte e exporte PDFs e imagens", Icons.Default.PictureAsPdf)
+    PDF_EDITOR("Editor de PDF", "Monte, reorganize, recorte e exporte PDFs e imagens", Icons.Default.PictureAsPdf),
+    EXTRACTOR("Extrator de Vídeos", "Baixe vídeos com o fluxo direto v3.0.1", Icons.Default.Download)
 }
 
 private enum class V5SourceTab { NEWS, VIDEOS, SPECIAL }
@@ -173,6 +174,7 @@ private fun V5App(c: DesktopControllerV5) {
                                 V5Section.TERMS -> V5TermsScreen(c, tick)
                                 V5Section.STOP -> V5StopScreen(c, tick)
                                 V5Section.SETTINGS -> V5SettingsScreen(c, tick)
+                                V5Section.EXTRACTOR -> ExtractorVideoScreen { section = V5Section.HOME }
                                 else -> Unit
                             }
                         }

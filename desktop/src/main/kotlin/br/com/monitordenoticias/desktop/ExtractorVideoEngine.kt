@@ -37,6 +37,7 @@ internal class ExtractorVideoEngine {
     val ffprobe = File(binDir, "ffprobe.exe")
     val deno = File(binDir, "deno.exe")
     private val activeProcess = AtomicReference<Process?>(null)
+    private val globoplaySessionStore = GloboplaySessionStore(appDir.toFile())
 
     fun cancel() {
         activeProcess.getAndSet(null)?.let { runCatching { it.destroyForcibly() } }
@@ -127,28 +128,56 @@ internal class ExtractorVideoEngine {
             .find(url)?.groupValues?.getOrNull(1)
             ?: Regex("([0-9]{6,})").find(url)?.groupValues?.getOrNull(1)
 
-        val targets = buildList {
-            add(url)
-            if (!id.isNullOrBlank()) add("globo:$id")
-        }
-        var lastError = "Falha ao baixar conteúdo do Globoplay."
-        targets.forEachIndexed { index, target ->
-            update(0, "Globoplay: tentativa ${index + 1}/${targets.size}...")
-            val result = runCatching {
-                runYtDlp(
-                    target,
-                    quality.selector,
-                    proxy,
-                    listOf("--force-ipv4", "--ignore-config", "--no-mtime"),
-                    update,
-                    exe
-                )
+        val runtimeCookie = globoplaySessionStore.createRuntimeCookieFile()
+        try {
+            val common = listOf("--force-ipv4", "--ignore-config", "--no-mtime")
+            var lastError = "Falha ao baixar conteúdo do Globoplay."
+
+            val first = runCatching {
+                update(0, "Globoplay: tentativa 1 — URL original...")
+                runYtDlp(url, quality.selector, proxy, common, update, exe, runtimeCookie, url)
             }
-            if (result.isSuccess) return result.getOrThrow()
-            lastError = friendlyError(result.exceptionOrNull()?.message.orEmpty())
+            if (first.isSuccess) return first.getOrThrow()
+            lastError = friendlyError(first.exceptionOrNull()?.message.orEmpty())
             if (lastError.contains("DRM", true)) error(lastError)
+
+            if (!id.isNullOrBlank()) {
+                val second = runCatching {
+                    update(0, "Globoplay: tentativa 2 — globo:$id...")
+                    runYtDlp("globo:$id", quality.selector, proxy, common, update, exe, runtimeCookie, url)
+                }
+                if (second.isSuccess) return second.getOrThrow()
+                lastError = friendlyError(second.exceptionOrNull()?.message.orEmpty())
+                if (lastError.contains("DRM", true)) error(lastError)
+            }
+
+            val hlsExtra = common + listOf("--hls-use-mpegts", "--downloader", "m3u8:native")
+            val hls = runCatching {
+                update(0, "Globoplay: tentativa HLS nativa...")
+                runYtDlp(url, quality.selector, proxy, hlsExtra, update, exe, runtimeCookie, url)
+            }
+            if (hls.isSuccess) return hls.getOrThrow()
+            lastError = friendlyError(hls.exceptionOrNull()?.message.orEmpty())
+            if (lastError.contains("DRM", true)) error(lastError)
+
+            val candidates = GloboplayHtmlFallback.extractM3u8Candidates(url, proxy).take(15)
+            for ((index, candidate) in candidates.withIndex()) {
+                val fallback = runCatching {
+                    update(0, "Globoplay: mídia HLS ${index + 1}/${candidates.size}...")
+                    runYtDlp(candidate, quality.selector, proxy, hlsExtra, update, exe, runtimeCookie, url)
+                }
+                if (fallback.isSuccess) return fallback.getOrThrow()
+                lastError = friendlyError(fallback.exceptionOrNull()?.message.orEmpty())
+                if (lastError.contains("DRM", true)) error(lastError)
+            }
+
+            if (runtimeCookie == null && (lastError.contains("autent", true) || lastError.contains("sessão", true) || lastError.contains("login", true))) {
+                error("Globoplay requer autenticação. Abra Configurações > Globoplay, faça login e use SALVAR SESSÃO E VOLTAR.")
+            }
+            error(lastError)
+        } finally {
+            runCatching { runtimeCookie?.delete() }
         }
-        error(lastError)
     }
 
     private fun downloadGeneric(
@@ -168,7 +197,9 @@ internal class ExtractorVideoEngine {
         proxy: String,
         extra: List<String>,
         update: (Int, String) -> Unit,
-        executable: File = ytDlp
+        executable: File = ytDlp,
+        cookieFile: File? = null,
+        referer: String? = null
     ): File {
         videosDir.mkdirs()
         val before = videosDir.listFiles()?.associateBy { it.absolutePath.lowercase(Locale.ROOT) }.orEmpty()
@@ -184,6 +215,8 @@ internal class ExtractorVideoEngine {
             "--print", "after_move:FINAL_FILE:%(filepath)s"
         )
         addCommonRuntime(cmd, proxy)
+        if (cookieFile != null && cookieFile.exists()) cmd += listOf("--cookies", cookieFile.absolutePath)
+        if (!referer.isNullOrBlank()) cmd += listOf("--referer", referer)
         cmd += extra
         cmd += url
 
