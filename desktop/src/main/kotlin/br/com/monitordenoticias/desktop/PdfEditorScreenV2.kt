@@ -119,14 +119,82 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         header.add(right,BorderLayout.EAST);return header
     }
 
-    private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}
+    private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER)}
 
     private fun buildLeftPanel():JComponent {
-        val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(7,5,7,5);preferredSize=Dimension(150,1);minimumSize=Dimension(146,1)}
-        p.add(navButton("⇧","Arquivos","Img/PDF",V2_BLUE,true){chooseAll()});p.add(gap(6));p.add(navButton("PDF","PDF",null,Color(232,74,78)){choosePdfs()});p.add(gap(6));p.add(navButton("✂","Corte",null,V2_PURPLE){startCrop()});p.add(gap(6));p.add(navButton("▣","Remover",null,V2_RED){deleteSelected()});p.add(gap(6));p.add(navButton("⟳","Girar",null,Color(61,157,255)){showTransformMenu()});p.add(gap(6));p.add(navButton("▤","Criar",null,Color(84,153,230)){createBlankPage()});p.add(gap(6));p.add(navButton("▥","Excluir",null,V2_RED){deleteSelected()});p.add(gap(6));p.add(navButton("▧","Capa",null,Color(25,201,142)){changeCover()});p.add(gap(6));p.add(navButton("↕","Ordem",null,V2_CYAN){focusReorder()});p.add(gap(12))
-        val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,124);preferredSize=Dimension(138,124);border=EmptyBorder(7,5,7,5)}
-        listOf(label("☁",24f,Font.BOLD,Color(153,195,239)),label("Arraste",11f,Font.PLAIN,Color(202,219,238)),label("PDF/imagem",11f,Font.PLAIN,Color(202,219,238)),label("ou selecione",9.5f,Font.PLAIN,V2_MUTED)).forEach{it.alignmentX=CENTER_ALIGNMENT;drop.add(it)}
-        drop.add(gap(8));drop.add(blueButton("Selecionar"){chooseAll()}.apply{alignmentX=CENTER_ALIGNMENT;maximumSize=Dimension(128,32)});installFileDrop(drop);p.add(drop);return p
+        val p = RoundedPanel(16, V2_BG_2, V2_BORDER_SOFT).apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            border = EmptyBorder(8, 7, 8, 7)
+            preferredSize = Dimension(166, 1)
+            minimumSize = Dimension(162, 1)
+        }
+
+        fun addNav(component: JComponent, gapAfter: Int = 3) {
+            component.alignmentX = LEFT_ALIGNMENT
+            p.add(component)
+            if (gapAfter > 0) p.add(gap(gapAfter))
+        }
+
+        addNav(navButton("⇧", "Arquivos", "Img / PDF", V2_BLUE, true) { chooseAll() }, 5)
+        addNav(navButton("PDF", "PDF", null, Color(232, 74, 78)) { choosePdfs() })
+        addNav(navButton("✂", "Cortar", null, V2_PURPLE) { startCrop() })
+        addNav(navButton("▣", "Redimensionar", null, V2_RED) { showResizeInfo() })
+        addNav(navButton("⟳", "Girar", null, Color(61, 157, 255)) { showTransformMenu() })
+        addNav(navButton("▤", "Criar", null, Color(84, 153, 230)) { createBlankPage() })
+        addNav(navButton("▥", "Excluir", null, V2_RED) { deleteSelected() })
+        addNav(navButton("▧", "Capa", null, Color(25, 201, 142)) { changeCover() })
+        addNav(navButton("↕", "Ordenar", null, V2_CYAN) { focusReorder() }, 10)
+
+        val drop = object : JPanel() {
+            init {
+                isOpaque = false
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                maximumSize = Dimension(Int.MAX_VALUE, 166)
+                preferredSize = Dimension(150, 166)
+                border = EmptyBorder(13, 8, 9, 8)
+                alignmentX = LEFT_ALIGNMENT
+            }
+            override fun paintComponent(g: Graphics) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.paint = GradientPaint(0f, 0f, Color(29, 49, 70), 0f, height.toFloat(), Color(12, 34, 56))
+                g2.fillRoundRect(0, 0, width - 1, height - 1, 14, 14)
+                g2.color = Color(117, 154, 192)
+                g2.stroke = BasicStroke(1.1f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 1f, floatArrayOf(4f, 4f), 0f)
+                g2.drawRoundRect(0, 0, width - 1, height - 1, 14, 14)
+                g2.dispose()
+                super.paintComponent(g)
+            }
+        }
+        listOf(
+            label("☁", 25f, Font.BOLD, Color(205, 231, 255)),
+            label("Arraste", 11.5f, Font.PLAIN, Color(205, 219, 236)),
+            label("PDF/imagem", 11.5f, Font.PLAIN, Color(205, 219, 236)),
+            label("ou selecione", 10f, Font.PLAIN, V2_MUTED)
+        ).forEach { it.alignmentX = CENTER_ALIGNMENT; drop.add(it) }
+        drop.add(gap(9))
+        drop.add(blueButton("Selecionar") { chooseAll() }.apply {
+            alignmentX = CENTER_ALIGNMENT
+            maximumSize = Dimension(138, 38)
+            preferredSize = Dimension(138, 38)
+            font = font.deriveFont(Font.BOLD, 14f)
+        })
+        installFileDrop(drop)
+        p.add(drop)
+        p.add(Box.createVerticalGlue())
+        return p
+    }
+
+    private fun showResizeInfo() {
+        val idx = thumbList.selectedIndex
+        if (idx !in pages.indices) {
+            showError("Selecione uma página para redimensionar.")
+            return
+        }
+        val options = arrayOf("75%", "90%", "100%", "110%", "125%")
+        val selected = JOptionPane.showInputDialog(this, "Escolha a escala de visualização da página:", "Redimensionar", JOptionPane.PLAIN_MESSAGE, null, options, "100%") as? String ?: return
+        val factor = selected.removeSuffix("%").toDoubleOrNull()?.div(100.0) ?: 1.0
+        setZoom(factor)
     }
 
     private fun buildCenterPanel():JComponent {
@@ -211,6 +279,12 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         controls.add(squareControl("↶") { undo() })
         controls.add(squareControl("↷") { redo() })
         controls.add(controlButton("▱  Limpar") { clearAll() })
+        controls.add(Box.createHorizontalStrut(8))
+        controls.add(StyledButton("GERAR PDF", V2_GREEN, Color.WHITE, Color(29,229,123)).apply {
+            preferredSize = Dimension(112,36)
+            font = font.deriveFont(Font.BOLD,12.5f)
+            addActionListener { exportPdf() }
+        })
         previewStack.add(controls, BorderLayout.NORTH)
         body.add(previewStack, BorderLayout.CENTER)
 
@@ -299,7 +373,35 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
     private fun gap(h:Int)=Box.createVerticalStrut(h)
     private fun statusPill(t:String,a:Color):JComponent=RoundedPanel(12,Color(6,32,49),a).apply{layout=BorderLayout();preferredSize=Dimension(154,44);border=EmptyBorder(0,15,0,15);add(label(t,13f,Font.BOLD,a),BorderLayout.CENTER)}
     private fun styledSquareButton(t:String,a:()->Unit)=StyledButton(t,Color(17,42,68),V2_TEXT,V2_BORDER).apply{preferredSize=Dimension(44,44);font=font.deriveFont(Font.BOLD,18f);addActionListener{a()}}
-    private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(5,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)42 else 50);preferredSize=Dimension(138,if(sub==null)42 else 50);toolTipText=if(sub==null)t else "$t - $sub";add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(30,30);layout=BorderLayout();add(label(i,if(i=="PDF")9.5f else 15.5f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,12.5f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,9.5f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}
+    private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit):JComponent {
+        val fill = if (active) Color(16, 76, 154) else V2_BG_2
+        val line = if (active) V2_BLUE else V2_BG_2
+        return StyledButton("", fill, V2_TEXT, line).apply {
+            layout = BorderLayout(9, 0)
+            maximumSize = Dimension(Int.MAX_VALUE, if (active) 58 else 52)
+            preferredSize = Dimension(150, if (active) 58 else 52)
+            minimumSize = Dimension(150, if (active) 58 else 52)
+            alignmentX = LEFT_ALIGNMENT
+            border = EmptyBorder(5, 8, 5, 8)
+            toolTipText = if (sub == null) t else "$t - $sub"
+            add(RoundedPanel(8, Color(a.red, a.green, a.blue, 35), a).apply {
+                preferredSize = Dimension(36, 36)
+                minimumSize = Dimension(36, 36)
+                layout = BorderLayout()
+                add(label(i, if (i == "PDF") 10f else 17f, Font.BOLD, a).apply {
+                    horizontalAlignment = SwingConstants.CENTER
+                }, BorderLayout.CENTER)
+            }, BorderLayout.WEST)
+            add(JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                isOpaque = false
+                add(label(t, 14.5f, Font.BOLD, V2_TEXT))
+                if (sub != null) add(label(sub, 10.5f, Font.PLAIN, Color(156, 190, 224)))
+            }, BorderLayout.CENTER)
+            addActionListener { act() }
+        }
+    }
+
     private fun blueButton(t:String,a:()->Unit)=StyledButton(t,V2_BLUE_2,Color.WHITE,V2_BLUE).apply{font=font.deriveFont(Font.BOLD,13f);addActionListener{a()}}
     private fun controlButton(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(96,36);font=font.deriveFont(Font.BOLD,11.5f);addActionListener{a()}}
     private fun squareControl(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(42,36);font=font.deriveFont(Font.BOLD,16f);addActionListener{a()}}
