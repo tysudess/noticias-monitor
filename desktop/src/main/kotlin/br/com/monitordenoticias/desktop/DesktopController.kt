@@ -108,7 +108,7 @@ class DesktopController(
         set(v) { prefs.edit().putBoolean("desktop_proxy_enabled", v).apply(); applyProxySettings() }
 
     var proxyHost: String
-        get() = prefs.getString("desktop_proxy_host", "proxy-7db.mb").orEmpty().ifBlank { "proxy-7db.mb" }
+        get() = prefs.getString("desktop_proxy_host", "proxy-7dn.mb").orEmpty().ifBlank { "proxy-7dn.mb" }
         set(v) { prefs.edit().putString("desktop_proxy_host", v.trim()).apply() }
 
     var proxyPort: Int
@@ -142,7 +142,7 @@ class DesktopController(
     fun saveProxy(enabled: Boolean, host: String, port: Int, username: String, password: String) {
         prefs.edit()
             .putBoolean("desktop_proxy_enabled", enabled)
-            .putString("desktop_proxy_host", host.trim().ifBlank { "proxy-7db.mb" })
+            .putString("desktop_proxy_host", host.trim().ifBlank { "proxy-7dn.mb" })
             .putInt("desktop_proxy_port", port.coerceIn(1, 65535))
             .putString("desktop_proxy_username", username.trim())
             .putString("desktop_proxy_password", password)
@@ -152,7 +152,7 @@ class DesktopController(
 
     fun applyProxySettings() {
         val enabled = prefs.getBoolean("desktop_proxy_enabled", false)
-        val host = prefs.getString("desktop_proxy_host", "proxy-7db.mb").orEmpty().ifBlank { "proxy-7db.mb" }
+        val host = prefs.getString("desktop_proxy_host", "proxy-7dn.mb").orEmpty().ifBlank { "proxy-7dn.mb" }
         val port = prefs.getInt("desktop_proxy_port", 6060).coerceIn(1, 65535)
         val user = prefs.getString("desktop_proxy_username", "").orEmpty()
         val pass = prefs.getString("desktop_proxy_password", "").orEmpty()
