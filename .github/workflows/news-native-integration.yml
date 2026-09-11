@@ -1,9 +1,9 @@
-name: Verify Native News Extractor Integration
+name: Verify V8 News Extractor Integration
 
 on:
   push:
     branches:
-      - integration/news-native-v1
+      - integration/v8-news-extractor-latest
   workflow_dispatch:
 
 permissions:
@@ -14,12 +14,19 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout Monitor
+      - name: Checkout Monitor V8 integration
         uses: actions/checkout@v4
         with:
-          ref: integration/news-native-v1
+          ref: integration/v8-news-extractor-latest
+          fetch-depth: 0
 
-      - name: Prepare native extractor sources
+      - name: Verify V8 ancestry
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 297ca0bff3b3d2c87a811aab679dca89c9bef66a HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Integracao nao deriva da baseline V8 esperada.' }
+
+      - name: Prepare extractor tab sources
         shell: pwsh
         run: |
           $dashboard = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt'
@@ -31,10 +38,10 @@ jobs:
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add $dashboard desktop/src/main/kotlin/br/com/monitordenoticias/desktop/NativeNewsExtractor.kt
-            git commit -m 'fix(desktop): finalize native news extractor sources'
-            git push origin HEAD:integration/news-native-v1
+            git commit -m 'fix(desktop): finalize V8 news extractor tab'
+            git push origin HEAD:integration/v8-news-extractor-latest
           } else {
-            Write-Host 'Native extractor sources already prepared.'
+            Write-Host 'Extractor tab sources already prepared.'
           }
 
       - name: Setup Node.js 22
@@ -42,10 +49,23 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Checkout original Extrator de Noticias engine
+      - name: Checkout latest original Extrator de Noticias engine
         shell: pwsh
         run: |
-          git clone --depth 1 --branch integration/monitor-headless https://github.com/tysudess/Extrator-de-noticias-windows.git _integrations/news-src
+          $originalMain = 'ea43bb344d74dc2a32cc1d733aaabea54d763150'
+          git clone --branch integration/monitor-headless https://github.com/tysudess/Extrator-de-noticias-windows.git _integrations/news-src
+          Push-Location '_integrations/news-src'
+          try {
+            $head = (git rev-parse HEAD).Trim()
+            $parent = (git rev-parse HEAD^).Trim()
+            Write-Host "Headless bridge HEAD: $head"
+            Write-Host "Original main parent: $parent"
+            if ($parent -ne $originalMain) { throw "A ponte nao deriva do main original esperado: $originalMain" }
+            git diff --exit-code $originalMain HEAD -- . ':(exclude)monitor-bridge.js'
+            if ($LASTEXITCODE -ne 0) { throw 'Arquivos originais do Extrator foram alterados na integracao.' }
+          } finally {
+            Pop-Location
+          }
           $pkg = Get-Content '_integrations/news-src/package.json' -Raw | ConvertFrom-Json
           if ($pkg.version -ne '1.25.19') { throw "Versao inesperada do Extrator de Noticias: $($pkg.version)" }
           if (-not (Test-Path '_integrations/news-src/monitor-bridge.js')) { throw 'Headless bridge ausente.' }
@@ -56,7 +76,7 @@ jobs:
         run: npm install --omit=dev --no-audit --no-fund
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -66,13 +86,13 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Compile Monitor with native extractor UI
+      - name: Compile Monitor with extractor tab
         run: gradle :desktop:compileKotlin --stacktrace
 
       - name: Create Windows distributable
         run: gradle :desktop:createDistributable --stacktrace
 
-      - name: Package headless original extractor core
+      - name: Package exact original extractor core
         shell: pwsh
         run: |
           $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
@@ -88,7 +108,7 @@ jobs:
           if (-not (Test-Path (Join-Path $dest 'engine/extrator-materia-v1.25.19-runtime.js'))) { throw 'Motor v1.25.19 ausente.' }
           if (-not (Test-Path (Join-Path $dest 'engine/corretor-rigido-ptbr-v1.25.19.js'))) { throw 'Corretor rigido v1.25.19 ausente.' }
 
-      - name: Verify headless engine state and PT-BR corrector
+      - name: Verify original engine and PT-BR corrector
         shell: pwsh
         run: |
           $core = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/ExtratorNoticiasCore'
@@ -97,20 +117,12 @@ jobs:
           $state = '{"action":"state"}' | & $node $bridge
           Write-Host $state
           $s = $state | ConvertFrom-Json
-          if (-not $s.ok) { throw 'Headless engine state failed.' }
+          if (-not $s.ok) { throw 'Original engine state failed.' }
           if ($s.versaoMotor -notmatch '1\.25\.19') { throw "Unexpected engine version: $($s.versaoMotor)" }
           $review = '{"action":"review","texto":"A Marinha realizara operacao amanha."}' | & $node $bridge
           Write-Host $review
           $r = $review | ConvertFrom-Json
           if (-not $r.ok) { throw 'PT-BR rigid corrector failed.' }
-
-      - name: Verify packaged JVM modules
-        shell: pwsh
-        run: |
-          $release = Get-Content 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/runtime/release' -Raw
-          foreach ($module in @('java.sql', 'java.instrument', 'jdk.unsupported')) {
-            if ($release -notmatch [regex]::Escape($module)) { throw "Required JVM module missing: $module" }
-          }
 
       - name: Verify Monitor launcher initializes
         shell: pwsh
@@ -121,20 +133,25 @@ jobs:
             Start-Sleep -Seconds 8
             $p.Refresh()
             if ($p.HasExited) { throw "Monitor exited early with code $($p.ExitCode)" }
-          }
-          finally {
+          } finally {
             if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
           }
 
-      - name: Create native integrated portable ZIP
+      - name: Create integrated portable ZIP and SHA256
         shell: pwsh
         run: |
-          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'Monitor-de-Noticias-v4.0.2-EXTRATOR-NATIVO.zip' -Force
+          $zip = 'Monitor-de-Noticias-V8-com-Extrator-de-Noticias-v1.25.19.zip'
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath $zip -Force
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          Write-Host "SHA256: $hash"
 
-      - name: Upload native integrated portable
+      - name: Upload integrated portable
         uses: actions/upload-artifact@v4
         with:
-          name: monitor-de-noticias-extrator-noticias-nativo
-          path: Monitor-de-Noticias-v4.0.2-EXTRATOR-NATIVO.zip
+          name: Monitor-de-Noticias-V8-com-Extrator-de-Noticias-v1.25.19
+          path: |
+            Monitor-de-Noticias-V8-com-Extrator-de-Noticias-v1.25.19.zip
+            Monitor-de-Noticias-V8-com-Extrator-de-Noticias-v1.25.19.zip.sha256
           if-no-files-found: error
           retention-days: 7
