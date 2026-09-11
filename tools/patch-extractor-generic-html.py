@@ -62,6 +62,12 @@ if not compat_patch.exists():
     raise SystemExit('patch-extractor-compat-retry.py ausente.')
 runpy.run_path(str(compat_patch), run_name='__main__')
 
+# R7/Record fiel à referência: IPv4 + no-mtime + candidatos antes de diagnóstico final.
+r7_patch = ROOT / 'tools/patch-extractor-r7-reference.py'
+if not r7_patch.exists():
+    raise SystemExit('patch-extractor-r7-reference.py ausente.')
+runpy.run_path(str(r7_patch), run_name='__main__')
+
 # Diretórios portáteis sempre relativos ao launcher real do jpackage.
 paths_patch = ROOT / 'tools/patch-extractor-portable-paths.py'
 if not paths_patch.exists():
