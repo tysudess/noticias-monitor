@@ -1,0 +1,152 @@
+name: Verify V8 PDF Editor Integration
+
+on:
+  push:
+    branches:
+      - integration/v8-news-pdf-editor
+    paths:
+      - '.github/workflows/pdf-editor-integration.yml'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/EmbeddedPdfEditor.kt'
+      - 'tools/apply-pdf-editor-tab.py'
+      - 'tools/fix-pdf-host.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-pdf-editor:
+    runs-on: windows-latest
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout Monitor integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration/v8-news-pdf-editor
+          fetch-depth: 0
+
+      - name: Wire PDF Editor tab and normalize host source
+        shell: pwsh
+        run: |
+          python tools/apply-pdf-editor-tab.py
+          python tools/fix-pdf-host.py
+          if (git status --porcelain) {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/EmbeddedPdfEditor.kt
+            git commit -m 'feat(desktop): wire original PDF editor v0.3.1 tab'
+            git push origin HEAD:integration/v8-news-pdf-editor
+          }
+
+      - name: Verify original PDF Editor release metadata
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $json = gh api repos/tysudess/EditorPDF-Windows-v0.1-PROJETO1/releases/tags/v0.3.1 | ConvertFrom-Json
+          if ($json.tag_name -ne 'v0.3.1') { throw 'Release v0.3.1 não localizado.' }
+          $asset = $json.assets | Where-Object { $_.name -eq 'Editor-de-PDF-Windows-Portable-v0.3.1.zip' } | Select-Object -First 1
+          if (-not $asset) { throw 'Portable oficial v0.3.1 ausente.' }
+          if ($asset.digest -ne 'sha256:5e77fe45812af26ebbdb4ebde7eb205561e9a5d40e36e94400d7669e080d113e') {
+            throw "Digest oficial inesperado: $($asset.digest)"
+          }
+
+      - name: Download exact official PDF Editor v0.3.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path '_pdf-release' | Out-Null
+          gh release download v0.3.1 --repo tysudess/EditorPDF-Windows-v0.1-PROJETO1 --pattern 'Editor-de-PDF-Windows-Portable-v0.3.1.zip' --dir '_pdf-release'
+          $zip = Resolve-Path '_pdf-release/Editor-de-PDF-Windows-Portable-v0.3.1.zip'
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne '5e77fe45812af26ebbdb4ebde7eb205561e9a5d40e36e94400d7669e080d113e') {
+            throw "SHA-256 do Editor de PDF não corresponde ao release oficial: $hash"
+          }
+          New-Item -ItemType Directory -Force -Path '_pdf-original' | Out-Null
+          Expand-Archive -Path $zip -DestinationPath '_pdf-original' -Force
+          $exe = Get-ChildItem '_pdf-original' -Recurse -Filter 'Editor-de-PDF.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'Editor-de-PDF.exe não encontrado no Portable oficial.' }
+          Write-Host "Editor original localizado em $($exe.FullName)"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile Monitor with News Extractor and PDF Editor tabs
+        shell: pwsh
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Create Windows distributable
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Install untouched original PDF Editor into Monitor package
+        shell: pwsh
+        run: |
+          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $dest = Join-Path $root 'tools/EditorPDF'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $exe = Get-ChildItem '_pdf-original' -Recurse -Filter 'Editor-de-PDF.exe' | Select-Object -First 1
+          $sourceRoot = $exe.Directory.FullName
+          Copy-Item (Join-Path $sourceRoot '*') $dest -Recurse -Force
+          if (-not (Test-Path (Join-Path $dest 'Editor-de-PDF.exe'))) { throw 'Editor PDF não foi incluído no pacote.' }
+
+      - name: Verify original PDF Editor launches
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/EditorPDF/Editor-de-PDF.exe'
+          $p = Start-Process -FilePath $exe -WorkingDirectory $exe.DirectoryName -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $p.Refresh()
+            if ($p.HasExited) { throw "Editor de PDF original encerrou prematuramente. Exit=$($p.ExitCode)" }
+          }
+          finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Verify Monitor launcher initializes
+        shell: pwsh
+        run: |
+          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $exe = Join-Path $root 'MonitorDeNoticias.exe'
+          $p = Start-Process -FilePath $exe -WorkingDirectory $root -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $p.Refresh()
+            if ($p.HasExited) { throw "Monitor encerrou prematuramente. Exit=$($p.ExitCode)" }
+          }
+          finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Create integrated V8 ZIP and SHA256
+        shell: pwsh
+        run: |
+          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $zip = Join-Path $PWD 'Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF.zip" | Set-Content 'Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF.zip.sha256'
+          Write-Host "SHA256: $hash"
+
+      - name: Upload integrated build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF
+          path: |
+            Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF.zip
+            Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
