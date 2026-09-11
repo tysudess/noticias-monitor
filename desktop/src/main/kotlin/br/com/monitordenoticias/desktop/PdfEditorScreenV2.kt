@@ -118,14 +118,14 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         header.add(right,BorderLayout.EAST);return header
     }
 
-    private fun buildWorkspace():JComponent=JPanel(BorderLayout(6,0)).apply{background=V2_BG;border=EmptyBorder(8,8,6,8);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}
+    private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(6,4,5,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}
 
     private fun buildLeftPanel():JComponent {
-        val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(9,6,9,6);preferredSize=Dimension(190,1);minimumSize=Dimension(184,1)}
+        val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(8,4,8,4);preferredSize=Dimension(166,1);minimumSize=Dimension(160,1)}
         p.add(navButton("⇧","Arquivos","Img/PDF",V2_BLUE,true){chooseAll()});p.add(gap(6));p.add(navButton("PDF","PDF",null,Color(232,74,78)){choosePdfs()});p.add(gap(6));p.add(navButton("✂","Corte",null,V2_PURPLE){startCrop()});p.add(gap(6));p.add(navButton("▣","Remover",null,V2_RED){deleteSelected()});p.add(gap(6));p.add(navButton("⟳","Girar",null,Color(61,157,255)){showTransformMenu()});p.add(gap(6));p.add(navButton("▤","Criar",null,Color(84,153,230)){createBlankPage()});p.add(gap(6));p.add(navButton("▥","Excluir",null,V2_RED){deleteSelected()});p.add(gap(6));p.add(navButton("▧","Capa",null,Color(25,201,142)){changeCover()});p.add(gap(6));p.add(navButton("↕","Ordem",null,V2_CYAN){focusReorder()});p.add(gap(12))
-        val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,118);preferredSize=Dimension(176,118);border=EmptyBorder(8,6,8,6)}
+        val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,106);preferredSize=Dimension(154,106);border=EmptyBorder(6,5,6,5)}
         listOf(label("☁",24f,Font.BOLD,Color(153,195,239)),label("Arraste",11f,Font.PLAIN,Color(202,219,238)),label("PDF/imagem",11f,Font.PLAIN,Color(202,219,238)),label("ou selecione",9.5f,Font.PLAIN,V2_MUTED)).forEach{it.alignmentX=CENTER_ALIGNMENT;drop.add(it)}
-        drop.add(gap(8));drop.add(blueButton("Selecionar"){chooseAll()}.apply{alignmentX=CENTER_ALIGNMENT;maximumSize=Dimension(164,32)});installFileDrop(drop);p.add(drop);p.add(Box.createVerticalGlue());return p
+        drop.add(gap(8));drop.add(blueButton("Selecionar"){chooseAll()}.apply{alignmentX=CENTER_ALIGNMENT;maximumSize=Dimension(146,31)});installFileDrop(drop);p.add(drop);p.add(Box.createVerticalGlue());return p
     }
 
     private fun buildCenterPanel():JComponent {
@@ -160,8 +160,8 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         val thumbs = RoundedPanel(12, Color(8, 28, 48), V2_BORDER_SOFT).apply {
             layout = BorderLayout(0, 8)
             border = EmptyBorder(8, 8, 8, 8)
-            preferredSize = Dimension(96, 1)
-            minimumSize = Dimension(90, 320)
+            preferredSize = Dimension(88, 1)
+            minimumSize = Dimension(84, 320)
         }
         val th = JPanel(BorderLayout()).apply { isOpaque = false }
         th.add(label("▦", 14f, Font.BOLD, V2_TEXT), BorderLayout.WEST)
@@ -184,7 +184,7 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         val previewStack = JPanel(BorderLayout(0, 8)).apply { isOpaque = false }
         preview.background = Color(8, 26, 45)
         preview.border = BorderFactory.createDashedBorder(Color(86, 124, 165), 2f, 6f, 4f, false)
-        preview.minimumSize = Dimension(720, 660)
+        preview.minimumSize = Dimension(780, 680)
         preview.onCrop = { c ->
             val idx = thumbList.selectedIndex
             if (idx in pages.indices) {
@@ -279,8 +279,34 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
     }
     private fun createThumbnail(page:PdfV2Page):ImageIcon{val src=renderFinalPage(page,58);val s=min(56.0/src.width,84.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))}
     private fun changeCover(){val fc=JFileChooser().apply{fileFilter=FileNameExtensionFilter("Imagem","jpg","jpeg","png","webp","bmp","tiff","tif")};if(fc.showOpenDialog(this)!=JFileChooser.APPROVE_OPTION)return;runCatching{val img=ImageIO.read(fc.selectedFile)?:error("Imagem inválida");ImageIO.write(img,"png",customCoverFile);customCover=customCoverFile;saveConfig();refreshCoverPreview()}.onFailure{showError("Não foi possível trocar a capa: ${it.message}")}}
-    private fun embeddedDefaultCover():BufferedImage{return runCatching{val s=javaClass.getResourceAsStream("/pdf-default-cover.b64")?:error("Recurso da capa não encontrado");val encoded=s.bufferedReader(Charsets.UTF_8).use{it.readText()};val bytes=Base64.getDecoder().decode(encoded.trim());ImageIO.read(ByteArrayInputStream(bytes))?:error("Capa padrão inválida")}.getOrElse{BufferedImage(1245,2048,BufferedImage.TYPE_INT_RGB).also{img->val g=img.createGraphics();g.color=Color(28,28,28);g.fillRect(0,0,img.width,img.height);g.color=Color.WHITE;g.font=Font("SansSerif",Font.BOLD,90);g.drawString("RADAR DE NOTÍCIAS",120,700);g.drawString("MÍDIA IMPRESSA",190,1180);g.dispose()}}}
-    private fun currentCoverImage():BufferedImage{val f=customCover;return if(f!=null&&f.exists())ImageIO.read(f)?:embeddedDefaultCover() else embeddedDefaultCover()}
+    private fun embeddedDefaultCover():BufferedImage{
+        val loaded=runCatching{val s=javaClass.getResourceAsStream("/pdf-default-cover.b64")?:error("Recurso da capa não encontrado");val encoded=s.bufferedReader(Charsets.UTF_8).use{it.readText()};val bytes=Base64.getDecoder().decode(encoded.trim());ImageIO.read(ByteArrayInputStream(bytes))?:error("Capa padrão inválida")}.getOrNull()
+        if(loaded!=null&&loaded.width>=1100&&loaded.height>=1700)return ensureRgbV2(loaded)
+        val base=loaded?:BufferedImage(768,1024,BufferedImage.TYPE_INT_RGB).also{img->val g=img.createGraphics();g.color=Color(25,25,25);g.fillRect(0,0,img.width,img.height);g.dispose()}
+        val img=BufferedImage(1245,2048,BufferedImage.TYPE_INT_RGB)
+        val g=img.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+        g.setRenderingHint(RenderingHints.KEY_RENDERING,RenderingHints.VALUE_RENDER_QUALITY)
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON)
+        g.drawImage(base,0,0,img.width,img.height,null)
+        g.color=Color(0,0,0,45);g.fillRect(0,0,img.width,img.height)
+        fun drawOutlined(text:String,size:Int,y:Int){
+            g.font=Font("SansSerif",Font.BOLD,size)
+            val fm=g.fontMetrics
+            val x=(img.width-fm.stringWidth(text))/2
+            g.color=Color.BLACK
+            for(dx in -5..5)for(dy in -5..5)if(dx*dx+dy*dy<=30)g.drawString(text,x+dx,y+dy)
+            g.color=Color.WHITE
+            g.drawString(text,x,y)
+        }
+        drawOutlined("RADAR DE",170,625)
+        drawOutlined("NOTÍCIAS",170,825)
+        drawOutlined("MÍDIA",165,1250)
+        drawOutlined("IMPRESSA",170,1495)
+        g.dispose()
+        return img
+    }
+    private fun currentCoverImage():BufferedImage{val f=customCover;if(f!=null&&f.exists()){val img=ImageIO.read(f);if(img!=null&&img.width>=900&&img.height>=1300)return img};return embeddedDefaultCover()}
     private fun refreshCoverPreview(){val img=runCatching{currentCoverImage()}.getOrElse{embeddedDefaultCover()};val s=min(205.0/img.width,154.0/img.height);coverPreview.icon=ImageIcon(img.getScaledInstance(max(1,(img.width*s).roundToInt()),max(1,(img.height*s).roundToInt()),Image.SCALE_SMOOTH))}
     private fun exportPdf(){if(pages.isEmpty()&&!includeCover.isSelected){showError("Adicione ao menos uma página ou mantenha a capa ativada.");return};val fc=JFileChooser().apply{dialogTitle="Salvar PDF";selectedFile=File(if(includeCover.isSelected)"RADAR DE NOTICIAS - MIDIA IMPRESSA.pdf" else "documento.pdf");fileFilter=FileNameExtensionFilter("PDF","pdf")};if(fc.showSaveDialog(this)!=JFileChooser.APPROVE_OPTION)return;var outFile=fc.selectedFile;if(!outFile.name.lowercase().endsWith(".pdf"))outFile=File(outFile.parentFile,outFile.name+".pdf");val q=quality.selectedItem as? PdfV2ExportQuality?:PdfV2ExportQuality.HIGH;try{cursor=Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR);PDDocument().use{out->if(titleField.text.isNotBlank())out.documentInformation.title=titleField.text.trim();if(authorField.text.isNotBlank())out.documentInformation.author=authorField.text.trim();if(includeCover.isSelected)appendRaster(out,currentCoverImage(),q);pages.forEach{p->if(p.kind==PdfV2ItemKind.PDF&&p.rotation==0&&!p.flipX&&p.crop==null)appendVector(out,p)else appendRaster(out,renderFinalPage(p,q.dpi),q)};out.save(outFile)};val o=arrayOf("OK","Abrir pasta");val c=JOptionPane.showOptionDialog(this,"PDF gerado com sucesso!\n${outFile.absolutePath}","Exportação concluída",JOptionPane.DEFAULT_OPTION,JOptionPane.INFORMATION_MESSAGE,null,o,o[0]);if(c==1&&Desktop.isDesktopSupported())Desktop.getDesktop().open(outFile.parentFile)}catch(e:Exception){showError("Erro ao gerar PDF: ${e.message}")}finally{cursor=Cursor.getDefaultCursor()}}
     private fun appendVector(out:PDDocument,data:PdfV2Page){Loader.loadPDF(File(data.path)).use{src->val sp=src.getPage(data.pageNo?:0);val box=sp.cropBox?:sp.mediaBox;val pw=595.276f;val ph=pw*box.height/box.width;val target=PDPage(PDRectangle(pw,ph));out.addPage(target);val form=LayerUtility(out).importPageAsForm(src,data.pageNo?:0);val scale=min(pw/box.width,ph/box.height);val x=(pw-box.width*scale)/2f;val y=(ph-box.height*scale)/2f;PDPageContentStream(out,target).use{cs->cs.transform(Matrix.getTranslateInstance(x,y));cs.transform(Matrix.getScaleInstance(scale,scale));cs.drawForm(form)}}}
@@ -298,7 +324,7 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
     private fun gap(h:Int)=Box.createVerticalStrut(h)
     private fun statusPill(t:String,a:Color):JComponent=RoundedPanel(12,Color(6,32,49),a).apply{layout=BorderLayout();preferredSize=Dimension(154,44);border=EmptyBorder(0,15,0,15);add(label(t,13f,Font.BOLD,a),BorderLayout.CENTER)}
     private fun styledSquareButton(t:String,a:()->Unit)=StyledButton(t,Color(17,42,68),V2_TEXT,V2_BORDER).apply{preferredSize=Dimension(44,44);font=font.deriveFont(Font.BOLD,18f);addActionListener{a()}}
-    private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(6,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)42 else 52);preferredSize=Dimension(176,if(sub==null)42 else 52);toolTipText=if(sub==null)t else "$t - $sub";add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(30,30);layout=BorderLayout();add(label(i,if(i=="PDF")9.5f else 15.5f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,12.5f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,9.5f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}
+    private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(6,0);alignmentX=LEFT_ALIGNMENT;maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)40 else 48);preferredSize=Dimension(158,if(sub==null)40 else 48);toolTipText=if(sub==null)t else "$t - $sub";add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(28,28);layout=BorderLayout();add(label(i,if(i=="PDF")9f else 15f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,12f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,9f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}
     private fun blueButton(t:String,a:()->Unit)=StyledButton(t,V2_BLUE_2,Color.WHITE,V2_BLUE).apply{font=font.deriveFont(Font.BOLD,13f);addActionListener{a()}}
     private fun controlButton(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(96,36);font=font.deriveFont(Font.BOLD,11.5f);addActionListener{a()}}
     private fun squareControl(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(42,36);font=font.deriveFont(Font.BOLD,16f);addActionListener{a()}}
