@@ -43,6 +43,8 @@ private enum class ExtractorPage { DOWNLOAD, HISTORY, SETTINGS }
 fun ExtractorVideoScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val engine = remember { ExtractorVideoEngine() }
+    val sessionStore = remember { GloboplaySessionStore(engine.appDir.toFile()) }
+    val updater = remember { YtDlpUpdater(engine) }
     var page by remember { mutableStateOf(ExtractorPage.DOWNLOAD) }
     var url by remember { mutableStateOf("") }
     var qualityIndex by remember { mutableIntStateOf(1) }
@@ -51,6 +53,9 @@ fun ExtractorVideoScreen(onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(listOf<String>()) }
     var proxy by remember { mutableStateOf("") }
+    var settingsStatus by remember { mutableStateOf("") }
+    var sessionSaved by remember { mutableStateOf(sessionStore.hasSavedSession()) }
+    var updatingYtDlp by remember { mutableStateOf(false) }
 
     fun startDownload() {
         if (busy || url.trim().isEmpty()) return
@@ -189,7 +194,10 @@ fun ExtractorVideoScreen(onBack: () -> Unit) {
                 shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, ExBorder)
             ) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    Modifier.padding(20.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Text("CONFIGURAÇÕES", color = ExText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Text("Proxy opcional", color = ExText, fontWeight = FontWeight.SemiBold)
                     OutlinedTextField(
@@ -205,10 +213,50 @@ fun ExtractorVideoScreen(onBack: () -> Unit) {
                             unfocusedBorderColor = ExBorder
                         )
                     )
+                    Text("O mesmo proxy é aplicado ao yt-dlp e aos fallbacks HTML/HLS.", color = ExMuted)
+
+                    HorizontalDivider(color = ExBorder)
+                    Text("Globoplay", color = ExText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        "O mesmo proxy é aplicado às rotas yt-dlp. Login interno do Globoplay, sessão DPAPI e atualização atômica do yt-dlp serão adicionados nesta área.",
+                        if (sessionSaved) "Sessão protegida salva neste usuário do Windows (DPAPI)." else "Nenhuma sessão Globoplay salva.",
+                        color = if (sessionSaved) ExCyan else ExMuted
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            enabled = sessionSaved,
+                            onClick = {
+                                val deleted = sessionStore.deleteSavedSession()
+                                sessionSaved = sessionStore.hasSavedSession()
+                                settingsStatus = if (deleted) "Sessão Globoplay apagada." else "Não foi possível apagar a sessão Globoplay."
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ExDanger)
+                        ) { Text("APAGAR SESSÃO") }
+                    }
+                    Text(
+                        "O login interno será conectado aqui usando a página oficial do Globoplay. A senha não será armazenada; somente os cookies da sessão serão protegidos por DPAPI.",
                         color = ExMuted
                     )
+
+                    HorizontalDivider(color = ExBorder)
+                    Text("yt-dlp", color = ExText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Button(
+                        enabled = !updatingYtDlp && !busy,
+                        onClick = {
+                            updatingYtDlp = true
+                            settingsStatus = "Preparando atualização do yt-dlp..."
+                            scope.launch {
+                                val result = updater.update { settingsStatus = it }
+                                settingsStatus = result.message
+                                updatingYtDlp = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ExBlue)
+                    ) { Text(if (updatingYtDlp) "ATUALIZANDO..." else "ATUALIZAR YT-DLP", fontWeight = FontWeight.Bold) }
+                    Text("A atualização só substitui o executável depois de baixar e validar a nova versão. Em caso de falha, o anterior é preservado.", color = ExMuted)
+
+                    if (settingsStatus.isNotBlank()) {
+                        Text(settingsStatus, color = ExCyan)
+                    }
                 }
             }
         }
