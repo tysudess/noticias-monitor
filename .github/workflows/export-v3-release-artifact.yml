@@ -1,0 +1,30 @@
+name: Export V3 Release Artifact
+
+on:
+  push:
+    branches: ["work/v8-next-a4-crop-fix"]
+    paths:
+      - ".github/workflows/export-v3-release-artifact.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download published portable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh release download v8-pdf-editor-workspace-v3-hd-20260911 \
+            --repo tysudess/noticias-monitor \
+            --pattern 'Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip' \
+            --dir out
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-editor-v3-portable
+          path: out/Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip
+          compression-level: 0
