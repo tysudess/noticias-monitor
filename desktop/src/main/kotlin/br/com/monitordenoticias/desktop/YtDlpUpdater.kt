@@ -37,17 +37,30 @@ internal class YtDlpUpdater(private val engine: ExtractorVideoEngine) {
 
             val installedVersion = validate(target)
             require(installedVersion.isNotBlank()) { "Falha ao validar o yt-dlp após a substituição." }
+
+            // Só descartamos o binário anterior depois de validar o novo no local definitivo.
             if (backup.exists()) backup.delete()
             YtDlpUpdateResult(true, "yt-dlp atualizado e validado: $installedVersion")
         } catch (e: Exception) {
             runCatching { temp.delete() }
-            if ((!target.exists() || runCatching { validate(target).isBlank() }.getOrDefault(true)) && backup.exists()) {
-                runCatching { Files.move(backup.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING) }
+            val currentIsValid = target.exists() && runCatching { validate(target).isNotBlank() }.getOrDefault(false)
+            if (!currentIsValid && backup.exists()) {
+                runCatching {
+                    if (target.exists()) target.delete()
+                    Files.move(backup.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                }
             }
-            YtDlpUpdateResult(false, "Atualização não aplicada. O executável anterior foi preservado. ${e.message.orEmpty()}")
+
+            val restored = target.exists() && runCatching { validate(target).isNotBlank() }.getOrDefault(false)
+            val suffix = when {
+                restored -> "O executável anterior foi restaurado e preservado."
+                backup.exists() -> "O backup anterior foi preservado em ${backup.name} para recuperação."
+                else -> "Não foi possível confirmar a restauração automática do executável anterior."
+            }
+            YtDlpUpdateResult(false, "Atualização não aplicada. $suffix ${e.message.orEmpty()}")
         } finally {
             runCatching { temp.delete() }
-            if (target.exists() && backup.exists()) runCatching { backup.delete() }
+            // Intencionalmente NÃO apagamos backup aqui. Em falha, ele deve permanecer disponível.
         }
     }
 
