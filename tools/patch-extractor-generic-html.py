@@ -56,6 +56,12 @@ if not state_patch.exists():
     raise SystemExit('patch-extractor-portable-state.py ausente.')
 runpy.run_path(str(state_patch), run_name='__main__')
 
+# Cancelamento invalida callbacks/resultados antigos antes de liberar novo download.
+cancel_patch = ROOT / 'tools/patch-extractor-cancel-token.py'
+if not cancel_patch.exists():
+    raise SystemExit('patch-extractor-cancel-token.py ausente.')
+runpy.run_path(str(cancel_patch), run_name='__main__')
+
 # Seletores de compatibilidade: segunda tentativa exata da referência em todas as qualidades.
 compat_patch = ROOT / 'tools/patch-extractor-compat-retry.py'
 if not compat_patch.exists():
