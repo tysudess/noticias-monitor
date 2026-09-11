@@ -162,7 +162,7 @@ private fun V5App(c: DesktopControllerV5) {
                             V5Section.TERMS -> V5TermsScreen(c, tick)
                             V5Section.STOP -> V5StopScreen(c, tick)
                             V5Section.SETTINGS -> V5SettingsScreen(c, tick)
-                            V5Section.PDF_EDITOR -> PdfEditorScreen()
+                            V5Section.PDF_EDITOR -> PdfEditorScreenV2()
                             else -> Unit
                         }
                     }
@@ -1824,4 +1824,5 @@ private suspend fun V5FetchWeather(): V5Weather? = withContext(Dispatchers.IO) {
         )
     }.getOrNull()
 }
+
 
