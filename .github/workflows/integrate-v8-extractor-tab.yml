@@ -9,6 +9,8 @@ on:
       - 'desktop/build.gradle.kts'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorPortableStateStore.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YouTubeLiveSnapshot.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
@@ -18,6 +20,13 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'tools/integrate-v8-extractor-tab.py'
       - 'tools/patch-extractor-generic-html.py'
+      - 'tools/patch-extractor-live-current-point.py'
+      - 'tools/patch-extractor-youtube-live-status.py'
+      - 'tools/patch-extractor-portable-state.py'
+      - 'tools/patch-extractor-compat-retry.py'
+      - 'tools/patch-extractor-r7-reference.py'
+      - 'tools/patch-extractor-portable-paths.py'
+      - 'tools/patch-extractor-dedicated-workspace.py'
       - 'tools/patch-extractor-hidden-process.py'
       - '.github/workflows/integrate-v8-extractor-tab.yml'
 
@@ -45,7 +54,6 @@ jobs:
         run: |
           $hash=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
           "PDF_HASH=$hash" | Out-File $env:GITHUB_ENV -Append
-          Write-Host "PDF aprovado: $hash"
 
       - name: Aplicar integração completa do Extrator
         shell: pwsh
@@ -58,8 +66,8 @@ jobs:
         shell: pwsh
         run: |
           $after=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
-          if ($after -ne $env:PDF_HASH) { throw 'PdfEditorScreenV2.kt foi alterado. Build bloqueado.' }
-          if (git diff --name-only | Select-String -SimpleMatch 'PdfEditorScreenV2.kt') { throw 'Editor PDF apareceu no diff. Build bloqueado.' }
+          if($after -ne $env:PDF_HASH){throw 'Editor PDF foi alterado.'}
+          if(git diff --name-only | Select-String -SimpleMatch 'PdfEditorScreenV2.kt'){throw 'Editor PDF apareceu no diff.'}
 
       - name: Configurar Java 17
         uses: actions/setup-java@v5
@@ -82,6 +90,8 @@ jobs:
           $dash=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
           $screen=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
           $engine=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
+          $live=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YouTubeLiveSnapshot.kt' -Raw
+          $state=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorPortableStateStore.kt' -Raw
           $session=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt' -Raw
           $globofallback=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt' -Raw
           $login=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
@@ -91,18 +101,21 @@ jobs:
           $updater=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt' -Raw
           $gradle=Get-Content 'desktop/build.gradle.kts' -Raw
 
-          if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Item Extrator ausente.' }
-          if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota Extrator ausente.' }
-          if ($screen -match 'ANALISAR') { throw 'ANALISAR não pode ficar visível.' }
-          foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) { if (($screen+$engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" } }
-          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO')) { if ($screen -notmatch [regex]::Escape($x)) { throw "UI ausente: $x" } }
-          foreach($x in @('--live-from-start','ffprobe','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','--hls-use-mpegts','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree')) { if ($engine -notmatch [regex]::Escape($x)) { throw "Motor incompleto: $x" } }
-          foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi','createRuntimeCookieFile')) { if ($session -notmatch [regex]::Escape($x)) { throw "Sessão Globoplay incompleta: $x" } }
-          if ($globofallback -notmatch 'take\(15\)') { throw 'Globoplay sem limite de 15 m3u8.' }
-          if ($r7 -notmatch 'take\(15\)') { throw 'R7/Record sem limite de 15 mídias.' }
-          if ($generic -notmatch 'take\(15\)') { throw 'Fallback HTML genérico sem limite de 15 mídias.' }
-          foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext','saveNetscapeCookies')) { if ($login -notmatch [regex]::Escape($x)) { throw "Login Globoplay incompleto: $x" } }
-          foreach($x in @('javafx-web','javafx-swing')) { if ($gradle -notmatch [regex]::Escape($x)) { throw "JavaFX ausente: $x" } }
-          foreach($x in @('-WindowStyle','Hidden','taskkill.exe','/T','/F')) { if ($hidden -notmatch [regex]::Escape($x)) { throw "Launcher oculto incompleto: $x" } }
-          foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version')) { if ($updater -notmatch [regex]::Escape($x)) { throw "Updater incompleto: $x" } }
+          if($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"'){throw 'Item Extrator ausente.'}
+          if($dash -notmatch 'else if \(section == V5Section.EXTRACTOR\)'){throw 'Extrator não está em workspace dedicada.'}
+          if($screen -match 'ANALISAR'){throw 'ANALISAR não pode ficar visível.'}
+          foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')){if(($screen+$engine) -notmatch [regex]::Escape($q)){throw "Qualidade ausente: $q"}}
+          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO','LIMPAR HISTÓRICO','SALVAR PROXY','REMOVER PROXY')){if($screen -notmatch [regex]::Escape($x)){throw "UI ausente: $x"}}
+          foreach($x in @('YouTubeLiveSnapshot.download','--download-sections','runYtDlpQuality','quality.compat','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree','jpackage.app-path','val r7Base = listOf("--force-ipv4", "--no-mtime")')){if($engine -notmatch [regex]::Escape($x)){throw "Motor incompleto: $x"}}
+          if($engine -match 'liveStatus == "post_live"'){throw 'post_live não pode ser tratado como live ativa.'}
+          foreach($x in @('#EXT-X-ENDLIST','protocol_whitelist','playlistDuration','libx264','160k')){if($live -notmatch [regex]::Escape($x)){throw "Snapshot HLS incompleto: $x"}}
+          foreach($x in @('history.txt','settings.properties','proxy.dpapi','ProtectedData','CurrentUser','[Console]::In.ReadToEnd()','stdinText')){if($state -notmatch [regex]::Escape($x)){throw "Persistência incompleta: $x"}}
+          foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi','[Console]::In.ReadToEnd()','stdinText')){if($session -notmatch [regex]::Escape($x)){throw "Sessão Globoplay incompleta: $x"}}
+          if($globofallback -notmatch 'take\(15\)'){throw 'Globoplay sem limite de 15.'}
+          if($r7 -notmatch 'take\(15\)'){throw 'R7 sem limite de 15.'}
+          if($generic -notmatch 'take\(15\)'){throw 'Fallback genérico sem limite de 15.'}
+          foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext')){if($login -notmatch [regex]::Escape($x)){throw "Login incompleto: $x"}}
+          foreach($x in @('javafx-web','javafx-swing','jdk.jsobject')){if($gradle -notmatch [regex]::Escape($x)){throw "Runtime JavaFX incompleto: $x"}}
+          foreach($x in @('-WindowStyle','Hidden','taskkill.exe','/T','/F')){if($hidden -notmatch [regex]::Escape($x)){throw "Launcher oculto incompleto: $x"}}
+          foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','HiddenWindowsProcess.start','Intencionalmente NÃO apagamos backup aqui')){if($updater -notmatch [regex]::Escape($x)){throw "Updater incompleto: $x"}}
           Write-Host 'Extrator v3.0.1 completo validado; Editor PDF intacto.'
