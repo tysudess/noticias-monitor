@@ -37,6 +37,7 @@ jobs:
           $oldWorkspace = 'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER)}'
           $newWorkspace = 'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}'
           $text = $text.Replace($oldWorkspace, $newWorkspace)
+          $text = $text.Replace('        addNav(navButton("⟳", "Girar", null, Color(61, 157, 255)) { showTransformMenu() })', '')
           $text = [regex]::Replace($text, '(?s)\s*controls\.add\(Box\.createHorizontalStrut\(8\)\)\s*controls\.add\(StyledButton\("GERAR PDF".*?\n\s*\}\)', '')
           $right = [string]::Join("`n", @(
             '    private fun buildRightPanel():JComponent {',
@@ -88,7 +89,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add $path
-          git commit -m "fix: restore PDF cover panel without extra metadata fields"
+          git commit -m "fix: restore cover panel and remove rotate button"
           git push origin HEAD:work/v8-next-a4-crop-fix
 
       - name: Build Windows portable
@@ -111,7 +112,7 @@ jobs:
           tag_name: v8-pdf-editor-cover-restored-20260911
           name: Monitor de Notícias V8 + Editor PDF — Capa Restaurada
           body: |
-            Mantém capa padrão, preview, trocar capa e gerar PDF. Remove somente Título da capa, Autor, Qualidade de exportação e o quadro informativo azul. Mantém sidebar final, corte e qualidade.
+            Mantém capa padrão, preview, trocar capa e gerar PDF. Remove Título da capa, Autor, Qualidade de exportação, quadro informativo azul e o botão Girar da lateral. Mantém sidebar final, corte e qualidade.
           files: |
             release/Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip
             release/Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip.sha256
