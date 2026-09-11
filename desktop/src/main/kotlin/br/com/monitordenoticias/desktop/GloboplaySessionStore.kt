@@ -54,12 +54,12 @@ internal class GloboplaySessionStore(private val baseDir: File) {
             "-Command", script
         )
         val process = HiddenWindowsProcess.start(command, sessionDir)
-        val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText()
         val ok = process.waitFor(30, TimeUnit.SECONDS)
         if (!ok) {
             HiddenWindowsProcess.destroyTree(process)
             error("Tempo excedido ao proteger a sessão do Globoplay.")
         }
+        val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText()
         if (process.exitValue() != 0) error(output.takeLast(1000))
         return output
     }
