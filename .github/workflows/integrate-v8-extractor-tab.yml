@@ -39,11 +39,6 @@ jobs:
       - name: Integrar aba Extrator
         run: python tools/integrate-v8-extractor-tab.py
 
-      - name: Normalizar módulo do motor
-        shell: pwsh
-        run: |
-          python -c "from pathlib import Path; p=Path(r'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'); s=p.read_text(encoding='utf-8'); s=s.replace(chr(34)+'$1://***:***@'+chr(34), chr(34)+'\\$1://***:***@'+chr(34)); p.write_text(s, encoding='utf-8')"
-
       - name: Garantir que Editor PDF não mudou
         shell: powershell
         run: |
@@ -93,6 +88,6 @@ jobs:
           }
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt
-          git commit -m 'Integrate extractor video tab and validate v3.0.1 engine'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
+          git commit -m 'Integrate extractor video tab into monitor'
           git push origin HEAD:work/v8-extrator-v301-tab
