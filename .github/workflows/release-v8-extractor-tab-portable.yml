@@ -12,8 +12,11 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'tools/integrate-v8-extractor-tab.py'
+      - 'tools/patch-extractor-hidden-process.py'
       - '.github/workflows/release-v8-extractor-tab-portable.yml'
 
 permissions:
@@ -46,6 +49,10 @@ jobs:
       - name: Aplicar integração idempotente do Extrator
         shell: pwsh
         run: python tools/integrate-v8-extractor-tab.py
+
+      - name: Ativar subprocessos ocultos
+        shell: pwsh
+        run: python tools/patch-extractor-hidden-process.py
 
       - name: Garantir que Editor PDF não mudou
         shell: pwsh
@@ -144,14 +151,20 @@ jobs:
           $ext = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
           $engine = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
           $login = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
+          $r7 = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt' -Raw
+          $hidden = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt' -Raw
           if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Aba Extrator ausente.' }
           if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota Extrator ausente.' }
           if ($ext -match 'ANALISAR') { throw 'Fluxo final não pode exibir ANALISAR.' }
           foreach ($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) {
             if (($ext + $engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" }
           }
-          foreach ($required in @('--live-from-start','libx264','m3u8:native','GloboplayHtmlFallback.extractM3u8Candidates','createRuntimeCookieFile')) {
+          foreach ($required in @('--live-from-start','libx264','m3u8:native','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','createRuntimeCookieFile','HiddenWindowsProcess.start')) {
             if ($engine -notmatch [regex]::Escape($required)) { throw "Motor incompleto: $required" }
+          }
+          if ($r7 -notmatch 'take\(15\)') { throw 'Fallback R7/Record deve limitar a 15 mídias.' }
+          foreach ($required in @('-WindowStyle','Hidden','Stop-Process')) {
+            if ($hidden -notmatch [regex]::Escape($required)) { throw "Launcher oculto incompleto: $required" }
           }
           foreach ($required in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView')) {
             if ($login -notmatch [regex]::Escape($required)) { throw "Login interno incompleto: $required" }
@@ -187,7 +200,7 @@ jobs:
             --target work/v8-extrator-v301-tab `
             --prerelease `
             --title 'Monitor V8 + Extrator de Vídeos v3.0.1 — Preview Portable' `
-            --notes 'Preview da integração do Extrator de Vídeos como aba interna do Monitor. Inclui yt-dlp nightly, yt-dlp stable, FFmpeg, FFprobe e Deno em bin/, pasta Videos relativa, rotas YouTube/Live/H.264, R7/Record e Globoplay com login interno oficial, sessão DPAPI, HLS e fallback m3u8. Editor de PDF permanece protegido e inalterado.'
+            --notes 'Preview da integração do Extrator de Vídeos como aba interna do Monitor. Inclui yt-dlp nightly, yt-dlp stable, FFmpeg, FFprobe e Deno em bin/, pasta Videos relativa, subprocessos ocultos, rotas YouTube/Live/H.264, R7/Record e Globoplay com login interno oficial, sessão DPAPI, HLS e fallback m3u8. Editor de PDF permanece protegido e inalterado.'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
