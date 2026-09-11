@@ -16,6 +16,20 @@ internal object HiddenWindowsProcess {
                 .start()
         }
 
+        val executableName = runCatching { File(command.first()).name.lowercase() }.getOrDefault("")
+        if (executableName == "powershell.exe") {
+            val args = command.drop(1).toMutableList()
+            if (args.none { it.equals("-WindowStyle", ignoreCase = true) }) {
+                args.add(0, "Hidden")
+                args.add(0, "-WindowStyle")
+            }
+            return ProcessBuilder(listOf(command.first()) + args)
+                .directory(directory)
+                .redirectErrorStream(true)
+                .also { it.environment().putAll(environment) }
+                .start()
+        }
+
         val script = buildString {
             append("& ")
             command.forEachIndexed { index, arg ->
