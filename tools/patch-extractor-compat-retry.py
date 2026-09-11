@@ -11,8 +11,14 @@ if 'private fun runYtDlpQuality(' not in src:
     marker = '    private fun runYtDlp(\n'
     if marker not in src:
         raise SystemExit('runYtDlp não encontrado para inserir fallback compatível.')
-    helper = '''    private fun runYtDlpQuality(\n        url: String,\n        quality: ExtractorQuality,\n        proxy: String,\n        extra: List<String>,\n        update: (Int, String) -> Unit,\n        executable: File = ytDlp,\n        cookieFile: File? = null,\n        referer: String? = null\n    ): File {\n        val primary = runCatching {\n            runYtDlp(url, quality.selector, proxy, extra, update, executable, cookieFile, referer)\n        }\n        if (primary.isSuccess) return primary.getOrThrow()\n        if (quality.compat == quality.selector) throw primary.exceptionOrNull() ?: IllegalStateException("Falha no formato principal.")\n        update(0, "Formato principal indisponível. Tentando modo compatível em ${quality.label}...")\n        return runYtDlp(url, quality.compat, proxy, extra, update, executable, cookieFile, referer)\n    }\n\n'''
+    helper = '''    private fun runYtDlpQuality(\n        url: String,\n        quality: ExtractorQuality,\n        proxy: String,\n        extra: List<String>,\n        update: (Int, String) -> Unit,\n        executable: File = ytDlp,\n        cookieFile: File? = null,\n        referer: String? = null\n    ): File {\n        val primary = runCatching {\n            runYtDlp(url, quality.selector, proxy, extra, update, executable, cookieFile, referer)\n        }\n        if (primary.isSuccess) return primary.getOrThrow()\n\n        val primaryError = primary.exceptionOrNull() ?: IllegalStateException("Falha no formato principal.")\n        val low = primaryError.message.orEmpty().lowercase(Locale.ROOT)\n        val compatibilityFailure = listOf(\n            "403",\n            "forbidden",\n            "requested format",\n            "format is not available",\n            "qualidade escolhida não está disponível",\n            "sign in",\n            "autenticação",\n            "player response"\n        ).any { low.contains(it) }\n\n        if (!compatibilityFailure || quality.compat == quality.selector) throw primaryError\n        update(0, "Formato principal incompatível. Tentando modo compatível em ${quality.label}...")\n        return runYtDlp(url, quality.compat, proxy, extra, update, executable, cookieFile, referer)\n    }\n\n'''
     src = src.replace(marker, helper + marker, 1)
+else:
+    # Atualiza versões antigas do helper já geradas em árvores locais/CI idempotentes.
+    start = src.index('    private fun runYtDlpQuality(')
+    end = src.index('    private fun runYtDlp(', start)
+    helper = '''    private fun runYtDlpQuality(\n        url: String,\n        quality: ExtractorQuality,\n        proxy: String,\n        extra: List<String>,\n        update: (Int, String) -> Unit,\n        executable: File = ytDlp,\n        cookieFile: File? = null,\n        referer: String? = null\n    ): File {\n        val primary = runCatching {\n            runYtDlp(url, quality.selector, proxy, extra, update, executable, cookieFile, referer)\n        }\n        if (primary.isSuccess) return primary.getOrThrow()\n\n        val primaryError = primary.exceptionOrNull() ?: IllegalStateException("Falha no formato principal.")\n        val low = primaryError.message.orEmpty().lowercase(Locale.ROOT)\n        val compatibilityFailure = listOf(\n            "403",\n            "forbidden",\n            "requested format",\n            "format is not available",\n            "qualidade escolhida não está disponível",\n            "sign in",\n            "autenticação",\n            "player response"\n        ).any { low.contains(it) }\n\n        if (!compatibilityFailure || quality.compat == quality.selector) throw primaryError\n        update(0, "Formato principal incompatível. Tentando modo compatível em ${quality.label}...")\n        return runYtDlp(url, quality.compat, proxy, extra, update, executable, cookieFile, referer)\n    }\n\n'''
+    src = src[:start] + helper + src[end:]
 
 replacements = {
     'return runYtDlp(url, quality.selector, proxy, emptyList(), update)':
@@ -39,5 +45,6 @@ ENGINE.write_text(src, encoding='utf-8')
 updated = ENGINE.read_text(encoding='utf-8')
 assert 'private fun runYtDlpQuality(' in updated
 assert 'quality.compat' in updated
-assert 'Formato principal indisponível. Tentando modo compatível' in updated
-print('Retry automático com seletores compatíveis integrado às rotas do Extrator.')
+assert 'compatibilityFailure' in updated
+assert 'Formato principal incompatível. Tentando modo compatível' in updated
+print('Retry compatível alinhado à referência: apenas falhas de compatibilidade/formato/player.')
