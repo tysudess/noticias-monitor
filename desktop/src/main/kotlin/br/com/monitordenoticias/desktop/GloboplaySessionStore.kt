@@ -1,0 +1,66 @@
+package br.com.monitordenoticias.desktop
+
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.util.Base64
+import java.util.concurrent.TimeUnit
+
+internal class GloboplaySessionStore(private val baseDir: File) {
+    private val sessionDir = File(baseDir, "data/extractor").apply { mkdirs() }
+    private val encryptedFile = File(sessionDir, "globoplay.session.dpapi")
+
+    fun hasSavedSession(): Boolean = encryptedFile.exists() && encryptedFile.length() > 0
+
+    fun saveNetscapeCookies(cookieText: String): Result<Unit> = runCatching {
+        require(cookieText.isNotBlank()) { "A sessão do Globoplay está vazia." }
+        val plain = Base64.getEncoder().encodeToString(cookieText.toByteArray(StandardCharsets.UTF_8))
+        val protected = runPowerShell(
+            """
+            Add-Type -AssemblyName System.Security
+            ${'$'}bytes=[Convert]::FromBase64String('$plain')
+            ${'$'}enc=[System.Security.Cryptography.ProtectedData]::Protect(${'$'}bytes,${'$'}null,[System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+            [Convert]::ToBase64String(${'$'}enc)
+            """.trimIndent()
+        ).trim()
+        require(protected.isNotBlank()) { "O Windows não retornou os dados protegidos da sessão." }
+        encryptedFile.writeText(protected, Charsets.UTF_8)
+    }
+
+    fun createRuntimeCookieFile(): File? {
+        if (!hasSavedSession()) return null
+        return runCatching {
+            val encrypted = encryptedFile.readText(Charsets.UTF_8).trim()
+            val decodedB64 = runPowerShell(
+                """
+                Add-Type -AssemblyName System.Security
+                ${'$'}enc=[Convert]::FromBase64String('$encrypted')
+                ${'$'}plain=[System.Security.Cryptography.ProtectedData]::Unprotect(${'$'}enc,${'$'}null,[System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+                [Convert]::ToBase64String(${'$'}plain)
+                """.trimIndent()
+            ).trim()
+            val cookieText = String(Base64.getDecoder().decode(decodedB64), StandardCharsets.UTF_8)
+            File.createTempFile("globoplay-session-", ".cookies.txt").apply {
+                writeText(cookieText, Charsets.UTF_8)
+                deleteOnExit()
+            }
+        }.getOrNull()
+    }
+
+    fun deleteSavedSession(): Boolean = !encryptedFile.exists() || encryptedFile.delete()
+
+    private fun runPowerShell(script: String): String {
+        val command = listOf(
+            "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-Command", script
+        )
+        val process = ProcessBuilder(command).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText()
+        val ok = process.waitFor(30, TimeUnit.SECONDS)
+        if (!ok) {
+            process.destroyForcibly()
+            error("Tempo excedido ao proteger a sessão do Globoplay.")
+        }
+        if (process.exitValue() != 0) error(output.takeLast(1000))
+        return output
+    }
+}
