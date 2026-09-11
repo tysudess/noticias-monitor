@@ -56,12 +56,14 @@ internal class ExtractorPortableStateStore(baseDir: File) {
         }
         val plainB64 = Base64.getEncoder().encodeToString(value.toByteArray(StandardCharsets.UTF_8))
         val encrypted = runPowerShell(
-            """
-            Add-Type -AssemblyName System.Security
-            ${'$'}bytes=[Convert]::FromBase64String('$plainB64')
-            ${'$'}enc=[System.Security.Cryptography.ProtectedData]::Protect(${'$'}bytes,${'$'}null,[System.Security.Cryptography.DataProtectionScope]::CurrentUser)
-            [Convert]::ToBase64String(${'$'}enc)
-            """.trimIndent()
+            script = """
+                Add-Type -AssemblyName System.Security
+                ${'$'}inputB64=[Console]::In.ReadToEnd().Trim()
+                ${'$'}bytes=[Convert]::FromBase64String(${'$'}inputB64)
+                ${'$'}enc=[System.Security.Cryptography.ProtectedData]::Protect(${'$'}bytes,${'$'}null,[System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+                [Convert]::ToBase64String(${'$'}enc)
+            """.trimIndent(),
+            stdinText = plainB64
         ).trim()
         require(encrypted.isNotBlank()) { "O Windows não retornou os dados protegidos do proxy." }
         proxyFile.writeText(encrypted, Charsets.UTF_8)
@@ -71,19 +73,21 @@ internal class ExtractorPortableStateStore(baseDir: File) {
         if (!proxyFile.exists() || proxyFile.length() == 0L) return@runCatching ""
         val encrypted = proxyFile.readText(Charsets.UTF_8).trim()
         val plainB64 = runPowerShell(
-            """
-            Add-Type -AssemblyName System.Security
-            ${'$'}enc=[Convert]::FromBase64String('$encrypted')
-            ${'$'}plain=[System.Security.Cryptography.ProtectedData]::Unprotect(${'$'}enc,${'$'}null,[System.Security.Cryptography.DataProtectionScope]::CurrentUser)
-            [Convert]::ToBase64String(${'$'}plain)
-            """.trimIndent()
+            script = """
+                Add-Type -AssemblyName System.Security
+                ${'$'}inputB64=[Console]::In.ReadToEnd().Trim()
+                ${'$'}enc=[Convert]::FromBase64String(${'$'}inputB64)
+                ${'$'}plain=[System.Security.Cryptography.ProtectedData]::Unprotect(${'$'}enc,${'$'}null,[System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+                [Convert]::ToBase64String(${'$'}plain)
+            """.trimIndent(),
+            stdinText = encrypted
         ).trim()
         String(Base64.getDecoder().decode(plainB64), StandardCharsets.UTF_8)
     }.getOrDefault("")
 
     fun deleteProxy(): Boolean = !proxyFile.exists() || proxyFile.delete()
 
-    private fun runPowerShell(script: String): String {
+    private fun runPowerShell(script: String, stdinText: String): String {
         val process = HiddenWindowsProcess.start(
             listOf(
                 "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
@@ -91,6 +95,10 @@ internal class ExtractorPortableStateStore(baseDir: File) {
             ),
             dataDir
         )
+        process.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+            writer.write(stdinText)
+            writer.flush()
+        }
         val finished = process.waitFor(30, TimeUnit.SECONDS)
         if (!finished) {
             HiddenWindowsProcess.destroyTree(process)
