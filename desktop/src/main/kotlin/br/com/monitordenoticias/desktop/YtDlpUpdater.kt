@@ -61,14 +61,14 @@ internal class YtDlpUpdater(private val engine: ExtractorVideoEngine) {
     }
 
     private fun validate(executable: File): String {
-        val process = ProcessBuilder(executable.absolutePath, "--version")
-            .directory(engine.appDir.toFile())
-            .redirectErrorStream(true)
-            .start()
+        val process = HiddenWindowsProcess.start(
+            listOf(executable.absolutePath, "--version"),
+            engine.appDir.toFile()
+        )
         val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText().trim()
         val finished = process.waitFor(30, TimeUnit.SECONDS)
         if (!finished) {
-            process.destroyForcibly()
+            HiddenWindowsProcess.destroyTree(process)
             return ""
         }
         return if (process.exitValue() == 0) output.lineSequence().firstOrNull().orEmpty() else ""
