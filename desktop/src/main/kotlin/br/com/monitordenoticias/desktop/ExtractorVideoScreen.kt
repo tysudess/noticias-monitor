@@ -213,7 +213,7 @@ fun ExtractorVideoScreen(onBack: () -> Unit) {
                             unfocusedBorderColor = ExBorder
                         )
                     )
-                    Text("O mesmo proxy é aplicado ao yt-dlp e aos fallbacks HTML/HLS.", color = ExMuted)
+                    Text("O mesmo proxy é aplicado ao navegador interno, yt-dlp e fallbacks HTML/HLS.", color = ExMuted)
 
                     HorizontalDivider(color = ExBorder)
                     Text("Globoplay", color = ExText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -222,6 +222,18 @@ fun ExtractorVideoScreen(onBack: () -> Unit) {
                         color = if (sessionSaved) ExCyan else ExMuted
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            enabled = !busy,
+                            onClick = {
+                                settingsStatus = "Abrindo login oficial do Globoplay..."
+                                GloboplayLoginWindow(null, engine, proxy) { saved, message ->
+                                    sessionSaved = saved
+                                    settingsStatus = message
+                                }.open()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ExPurple)
+                        ) { Text("LOGIN GLOBOPLAY", fontWeight = FontWeight.Bold) }
+
                         OutlinedButton(
                             enabled = sessionSaved,
                             onClick = {
@@ -233,7 +245,7 @@ fun ExtractorVideoScreen(onBack: () -> Unit) {
                         ) { Text("APAGAR SESSÃO") }
                     }
                     Text(
-                        "O login interno será conectado aqui usando a página oficial do Globoplay. A senha não será armazenada; somente os cookies da sessão serão protegidos por DPAPI.",
+                        "O login abre a página oficial dentro do Monitor. O programa não recebe nem armazena sua senha; ao salvar, somente os cookies da sessão Globoplay são protegidos pelo DPAPI do Windows.",
                         color = ExMuted
                     )
 
