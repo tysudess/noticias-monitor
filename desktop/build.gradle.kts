@@ -53,13 +53,20 @@ dependencies {
     implementation("com.twelvemonkeys.imageio:imageio-webp:3.12.0")
     implementation("com.twelvemonkeys.imageio:imageio-tiff:3.12.0")
     implementation("net.sf.kxml:kxml2:2.3.0")
+
+    // Navegador interno do login Globoplay. Mantido isolado do restante do Monitor.
+    implementation("org.openjfx:javafx-base:17.0.16:win")
+    implementation("org.openjfx:javafx-graphics:17.0.16:win")
+    implementation("org.openjfx:javafx-controls:17.0.16:win")
+    implementation("org.openjfx:javafx-swing:17.0.16:win")
+    implementation("org.openjfx:javafx-web:17.0.16:win")
 }
 
 compose.desktop {
     application {
         mainClass = "br.com.monitordenoticias.desktop.DashboardV5MainKt"
         nativeDistributions {
-            modules("java.sql", "java.instrument", "jdk.unsupported")
+            modules("java.sql", "java.instrument", "jdk.unsupported", "java.net.http")
             targetFormats(TargetFormat.Msi)
             packageName = "MonitorDeNoticias"
             packageVersion = "4.0.2"
@@ -74,4 +81,3 @@ compose.desktop {
         }
     }
 }
-
