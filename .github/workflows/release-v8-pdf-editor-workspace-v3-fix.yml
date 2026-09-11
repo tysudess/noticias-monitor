@@ -1,0 +1,75 @@
+name: Release V8 PDF Editor Workspace V3 Fixed
+
+on:
+  push:
+    branches: ["work/v8-next-a4-crop-fix"]
+    paths:
+      - ".github/workflows/release-v8-pdf-editor-workspace-v3-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v8-next-a4-crop-fix
+          fetch-depth: 0
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Repair HD cover property
+        shell: pwsh
+        run: |
+          $path = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
+          $text = Get-Content $path -Raw -Encoding UTF8
+          $bad = 'private val customCoverFile = File(dataDir, "capa_padrao_usuario.png")`n    private val hdDefaultCoverFile = File(dataDir, "capa_padrao.png")'
+          $good = 'private val customCoverFile = File(dataDir, "capa_padrao_usuario.png")' + [Environment]::NewLine + '    private val hdDefaultCoverFile = File(dataDir, "capa_padrao.png")'
+          $text = $text.Replace($bad, $good)
+          Set-Content $path $text -Encoding UTF8
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add $path
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "fix: repair HD cover property declaration"
+            git push origin HEAD:work/v8-next-a4-crop-fix
+          }
+
+      - name: Build Windows portable
+        shell: pwsh
+        run: |
+          gradle.bat :desktop:compileKotlin --no-daemon
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gradle.bat :desktop:createDistributable --no-daemon
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/MonitorDeNoticias.exe')) { throw 'MonitorDeNoticias.exe nao encontrado' }
+
+      - name: Package ZIP and checksum
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'release/Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip' -Force
+          (Get-FileHash 'release/Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip' -Algorithm SHA256).Hash.ToLower() + '  Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip' | Set-Content 'release/Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip.sha256'
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v8-pdf-editor-workspace-v3-hd-20260911
+          name: Monitor de Notícias V8 + Editor PDF V3 Workspace HD — Windows Portable
+          body: |
+            Editor PDF com área de edição ampliada, barra lateral interna compacta, miniaturas à direita, controles junto ao preview e suporte a capa padrão HD em data/capa_padrao.png. Mantém corte e exportação sem perda.
+          files: |
+            release/Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip
+            release/Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip.sha256
