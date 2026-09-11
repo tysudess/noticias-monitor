@@ -34,94 +34,26 @@ jobs:
         run: |
           $path = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
           $text = Get-Content $path -Raw -Encoding UTF8
-
-          $text = $text.Replace(
-            'add(buildHeader(), BorderLayout.NORTH); add(buildWorkspace(), BorderLayout.CENTER); add(buildFooter(), BorderLayout.SOUTH)',
-            'add(buildCompactHeader(), BorderLayout.NORTH); add(buildWorkspace(), BorderLayout.CENTER)'
-          )
-
-          $anchor = '    private fun buildHeader(): JComponent {'
-          $compact = @'
-    private fun buildCompactHeader(): JComponent {
-        return JPanel(BorderLayout()).apply {
-            background = Color(4, 22, 39)
-            preferredSize = Dimension(1, 48)
-            border = BorderFactory.createMatteBorder(0, 0, 1, 0, V2_BORDER_SOFT)
-            add(label("▣  Editor de PDF", 18f, Font.BOLD, V2_TEXT).apply { border = EmptyBorder(0, 14, 0, 0) }, BorderLayout.WEST)
-            val tools = JPanel(FlowLayout(FlowLayout.RIGHT, 7, 6)).apply { isOpaque = false; border = EmptyBorder(0, 0, 0, 8) }
-            tools.add(squareControl("−") { setZoom(zoom - .15) })
-            tools.add(zoomLabel.apply { foreground = V2_TEXT; horizontalAlignment = SwingConstants.CENTER; preferredSize = Dimension(48, 34) })
-            tools.add(squareControl("+") { setZoom(zoom + .15) })
-            tools.add(controlButton("⛶ Ajustar") { setZoom(1.0) }.apply { preferredSize = Dimension(84, 36) })
-            tools.add(squareControl("↶") { undo() })
-            tools.add(squareControl("↷") { redo() })
-            add(tools, BorderLayout.EAST)
-        }
-    }
-
-'@
-          if (-not $text.Contains('private fun buildCompactHeader()')) {
-            $text = $text.Replace($anchor, $compact + $anchor)
-          }
-
-          $text = $text.Replace(
-            'private fun buildWorkspace():JComponent=JPanel(BorderLayout(6,0)).apply{background=V2_BG;border=EmptyBorder(8,8,6,8);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}',
-            'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}'
-          )
-
-          $text = $text.Replace(
-            'preferredSize=Dimension(190,1);minimumSize=Dimension(184,1)',
-            'preferredSize=Dimension(150,1);minimumSize=Dimension(146,1)'
-          )
-          $text = $text.Replace(
-            'border=EmptyBorder(9,6,9,6)',
-            'border=EmptyBorder(7,5,7,5)'
-          )
-          $text = $text.Replace(
-            'p.add(gap(12))\n        val drop=',
-            'p.add(gap(8));p.add(Box.createVerticalGlue())\n        val drop='
-          )
-          $text = $text.Replace(
-            'maximumSize=Dimension(Int.MAX_VALUE,118);preferredSize=Dimension(176,118);border=EmptyBorder(8,6,8,6)',
-            'maximumSize=Dimension(Int.MAX_VALUE,124);preferredSize=Dimension(138,124);border=EmptyBorder(7,5,7,5)'
-          )
-          $text = $text.Replace(
-            'maximumSize=Dimension(164,32)',
-            'maximumSize=Dimension(128,32)'
-          )
+          $text = $text.Replace('add(buildHeader(), BorderLayout.NORTH); add(buildWorkspace(), BorderLayout.CENTER); add(buildFooter(), BorderLayout.SOUTH)','add(buildWorkspace(), BorderLayout.CENTER)')
+          $text = $text.Replace('private fun buildWorkspace():JComponent=JPanel(BorderLayout(6,0)).apply{background=V2_BG;border=EmptyBorder(8,8,6,8);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}','private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}')
+          $text = $text.Replace('preferredSize=Dimension(190,1);minimumSize=Dimension(184,1)','preferredSize=Dimension(150,1);minimumSize=Dimension(146,1)')
+          $text = $text.Replace('border=EmptyBorder(9,6,9,6)','border=EmptyBorder(7,5,7,5)')
+          $text = $text.Replace('p.add(gap(12))`n        val drop=','p.add(gap(8));p.add(Box.createVerticalGlue())`n        val drop=')
+          $text = $text.Replace('maximumSize=Dimension(Int.MAX_VALUE,118);preferredSize=Dimension(176,118);border=EmptyBorder(8,6,8,6)','maximumSize=Dimension(Int.MAX_VALUE,124);preferredSize=Dimension(138,124);border=EmptyBorder(7,5,7,5)')
+          $text = $text.Replace('maximumSize=Dimension(164,32)','maximumSize=Dimension(128,32)')
           $text = $text.Replace('installFileDrop(drop);p.add(drop);p.add(Box.createVerticalGlue());return p','installFileDrop(drop);p.add(drop);return p')
-
-          $text = $text.Replace(
-            'preferredSize = Dimension(96, 1)\n            minimumSize = Dimension(90, 320)',
-            'preferredSize = Dimension(112, 1)\n            minimumSize = Dimension(106, 320)'
-          )
+          $text = $text.Replace('preferredSize = Dimension(96, 1)`n            minimumSize = Dimension(90, 320)','preferredSize = Dimension(112, 1)`n            minimumSize = Dimension(106, 320)')
           $text = $text.Replace('body.add(thumbs, BorderLayout.WEST)','body.add(thumbs, BorderLayout.EAST)')
           $text = $text.Replace('preview.minimumSize = Dimension(720, 660)','preview.minimumSize = Dimension(760, 700)')
           $text = $text.Replace('previewStack.add(controls, BorderLayout.SOUTH)','previewStack.add(controls, BorderLayout.NORTH)')
-
-          $text = $text.Replace(
-            'preferredSize=Dimension(244,1);minimumSize=Dimension(236,1)',
-            'preferredSize=Dimension(220,1);minimumSize=Dimension(214,1)'
-          )
+          $text = $text.Replace('preferredSize=Dimension(244,1);minimumSize=Dimension(236,1)','preferredSize=Dimension(220,1);minimumSize=Dimension(214,1)')
           $text = $text.Replace('preferredSize=Dimension(222,168)','preferredSize=Dimension(198,152)')
           $text = $text.Replace('maximumSize=Dimension(Int.MAX_VALUE,168)','maximumSize=Dimension(Int.MAX_VALUE,152)')
           $text = $text.Replace('preferredSize=Dimension(226,62)','preferredSize=Dimension(202,58)')
           $text = $text.Replace('maximumSize=Dimension(Int.MAX_VALUE,62)','maximumSize=Dimension(Int.MAX_VALUE,58)')
-
-          $text = $text.Replace(
-            'private val customCoverFile = File(dataDir, "capa_padrao_usuario.png")',
-            'private val customCoverFile = File(dataDir, "capa_padrao_usuario.png")\n    private val hdDefaultCoverFile = File(dataDir, "capa_padrao.png")'
-          )
-
-          $oldCover = 'private fun currentCoverImage():BufferedImage{val f=customCover;return if(f!=null&&f.exists())ImageIO.read(f)?:embeddedDefaultCover() else embeddedDefaultCover()}'
-          $newCover = 'private fun currentCoverImage():BufferedImage{val f=customCover;if(f!=null&&f.exists())return ImageIO.read(f)?:embeddedDefaultCover();if(hdDefaultCoverFile.exists())return ImageIO.read(hdDefaultCoverFile)?:embeddedDefaultCover();return embeddedDefaultCover()}'
-          $text = $text.Replace($oldCover, $newCover)
-
-          $text = $text.Replace(
-            'private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(6,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)42 else 52);preferredSize=Dimension(176,if(sub==null)42 else 52);',
-            'private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(5,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)42 else 50);preferredSize=Dimension(138,if(sub==null)42 else 50);'
-          )
-
+          $text = $text.Replace('private val customCoverFile = File(dataDir, "capa_padrao_usuario.png")','private val customCoverFile = File(dataDir, "capa_padrao_usuario.png")`n    private val hdDefaultCoverFile = File(dataDir, "capa_padrao.png")')
+          $text = $text.Replace('private fun currentCoverImage():BufferedImage{val f=customCover;return if(f!=null&&f.exists())ImageIO.read(f)?:embeddedDefaultCover() else embeddedDefaultCover()}','private fun currentCoverImage():BufferedImage{val f=customCover;if(f!=null&&f.exists())return ImageIO.read(f)?:embeddedDefaultCover();if(hdDefaultCoverFile.exists())return ImageIO.read(hdDefaultCoverFile)?:embeddedDefaultCover();return embeddedDefaultCover()}')
+          $text = $text.Replace('private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(6,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)42 else 52);preferredSize=Dimension(176,if(sub==null)42 else 52);','private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(5,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)42 else 50);preferredSize=Dimension(138,if(sub==null)42 else 50);')
           Set-Content $path $text -Encoding UTF8
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -149,7 +81,7 @@ jobs:
           tag_name: v8-pdf-editor-workspace-v3-20260911
           name: Monitor de Notícias V8 + Editor PDF V3 Workspace — Windows Portable
           body: |
-            Editor PDF reorganizado para priorizar a área real de edição: barra interna compacta, lateral de ferramentas estreita, miniaturas à direita, controles no topo e suporte a capa padrão HD externa em data/capa_padrao.png. Mantém corte e exportação sem perda.
+            Editor PDF reorganizado para priorizar a área real de edição: cabeçalho interno grande removido, lateral de ferramentas estreita, miniaturas à direita, controles junto ao preview e suporte a capa padrão HD externa em data/capa_padrao.png. Mantém corte e exportação sem perda.
           files: |
             release/Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip
             release/Monitor-de-Noticias-V8-Editor-PDF-V3-Workspace-Windows-Portable.zip.sha256
