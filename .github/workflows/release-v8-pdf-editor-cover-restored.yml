@@ -1,0 +1,136 @@
+name: Release V8 PDF Editor Cover Restored
+
+on:
+  push:
+    branches: ["work/v8-next-a4-crop-fix"]
+    paths:
+      - ".github/workflows/release-v8-pdf-editor-cover-restored.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v8-next-a4-crop-fix
+          fetch-depth: 0
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Restore cover panel only
+        shell: pwsh
+        run: |
+          $path = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
+          $text = Get-Content $path -Raw -Encoding UTF8
+
+          $text = $text.Replace(
+            'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER)}',
+            'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}'
+          )
+
+          $compactGenerate = @'
+        controls.add(Box.createHorizontalStrut(8))
+        controls.add(StyledButton("GERAR PDF", V2_GREEN, Color.WHITE, Color(29,229,123)).apply {
+            preferredSize = Dimension(112,36)
+            font = font.deriveFont(Font.BOLD,12.5f)
+            addActionListener { exportPdf() }
+        })
+'@
+          $text = $text.Replace($compactGenerate, '')
+
+          $start = $text.IndexOf('    private fun buildRightPanel():JComponent {')
+          $end = $text.IndexOf('    private fun buildFooter():JComponent', $start)
+          if ($start -lt 0 -or $end -le $start) { throw 'buildRightPanel nao encontrado' }
+
+          $right = @'
+    private fun buildRightPanel():JComponent {
+        val p = RoundedPanel(16, V2_BG_2, V2_BORDER_SOFT).apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            border = EmptyBorder(10, 8, 10, 8)
+            preferredSize = Dimension(220, 1)
+            minimumSize = Dimension(214, 1)
+        }
+
+        p.add(label("▣  Capa e Exportação", 16f, Font.BOLD, V2_TEXT))
+        p.add(gap(10))
+
+        includeCover.foreground = Color(207,223,240)
+        includeCover.background = V2_BG_2
+        includeCover.isBorderPainted = false
+        includeCover.isFocusPainted = false
+        includeCover.horizontalAlignment = SwingConstants.LEFT
+        includeCover.alignmentX = LEFT_ALIGNMENT
+        includeCover.maximumSize = Dimension(Int.MAX_VALUE, 32)
+        includeCover.addActionListener { styleCoverToggle() }
+        styleCoverToggle()
+        p.add(includeCover)
+        p.add(gap(8))
+
+        p.add(RoundedPanel(12, Color(26,48,72), V2_BORDER_SOFT).apply {
+            layout = BorderLayout()
+            maximumSize = Dimension(Int.MAX_VALUE, 220)
+            preferredSize = Dimension(198, 220)
+            border = EmptyBorder(7,7,7,7)
+            coverPreview.horizontalAlignment = SwingConstants.CENTER
+            coverPreview.verticalAlignment = SwingConstants.CENTER
+            add(coverPreview, BorderLayout.CENTER)
+        })
+
+        p.add(gap(8))
+        p.add(controlButton("▧  Trocar capa") { changeCover() }.apply {
+            maximumSize = Dimension(Int.MAX_VALUE, 40)
+            alignmentX = LEFT_ALIGNMENT
+        })
+
+        p.add(Box.createVerticalGlue())
+        p.add(greenButton("▣  GERAR PDF", "Exportar documento final") { exportPdf() })
+        return p
+    }
+
+'@
+
+          $text = $text.Substring(0, $start) + $right + $text.Substring($end)
+          Set-Content $path $text -Encoding UTF8
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add $path
+          git commit -m "fix: restore PDF cover panel without extra metadata fields"
+          git push origin HEAD:work/v8-next-a4-crop-fix
+
+      - name: Build Windows portable
+        shell: pwsh
+        run: |
+          gradle.bat :desktop:compileKotlin --no-daemon
+          gradle.bat :desktop:createDistributable --no-daemon
+          if (-not (Test-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/MonitorDeNoticias.exe')) { throw 'MonitorDeNoticias.exe nao encontrado' }
+
+      - name: Package ZIP and checksum
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'release/Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip' -Force
+          (Get-FileHash 'release/Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip' -Algorithm SHA256).Hash.ToLower() + '  Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip' | Set-Content 'release/Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip.sha256'
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v8-pdf-editor-cover-restored-20260911
+          name: Monitor de Notícias V8 + Editor PDF — Capa Restaurada
+          body: |
+            Corrige a interpretação do ajuste anterior: mantém a capa padrão, preview, trocar capa e gerar PDF. Remove somente Título da capa, Autor, Qualidade de exportação e o quadro informativo azul. Mantém sidebar final, corte e qualidade.
+          files: |
+            release/Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip
+            release/Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip.sha256
