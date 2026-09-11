@@ -6,12 +6,13 @@ import java.util.concurrent.TimeUnit
 internal object HiddenWindowsProcess {
     private val isWindows: Boolean = System.getProperty("os.name", "").contains("Windows", ignoreCase = true)
 
-    fun start(command: List<String>, directory: File): Process {
+    fun start(command: List<String>, directory: File, environment: Map<String, String> = emptyMap()): Process {
         require(command.isNotEmpty()) { "Comando vazio." }
         if (!isWindows) {
             return ProcessBuilder(command)
                 .directory(directory)
                 .redirectErrorStream(true)
+                .also { it.environment().putAll(environment) }
                 .start()
         }
 
@@ -36,6 +37,7 @@ internal object HiddenWindowsProcess {
         )
             .directory(directory)
             .redirectErrorStream(true)
+            .also { it.environment().putAll(environment) }
             .start()
     }
 
