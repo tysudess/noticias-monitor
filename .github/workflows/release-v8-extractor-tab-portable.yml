@@ -13,9 +13,11 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DirectMediaHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'tools/integrate-v8-extractor-tab.py'
+      - 'tools/patch-extractor-generic-html.py'
       - 'tools/patch-extractor-hidden-process.py'
       - '.github/workflows/release-v8-extractor-tab-portable.yml'
 
@@ -37,8 +39,8 @@ jobs:
       - name: Registrar hash do Editor PDF aprovado
         shell: pwsh
         run: |
-          $hash = (Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
-          "PDF_HASH=$hash" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $hash=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
+          "PDF_HASH=$hash" | Out-File $env:GITHUB_ENV -Append
           Write-Host "PDF aprovado: $hash"
 
       - name: Configurar Python
@@ -46,18 +48,17 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Aplicar integração idempotente do Extrator
+      - name: Aplicar integração completa do Extrator
         shell: pwsh
-        run: python tools/integrate-v8-extractor-tab.py
-
-      - name: Ativar subprocessos ocultos
-        shell: pwsh
-        run: python tools/patch-extractor-hidden-process.py
+        run: |
+          python tools/integrate-v8-extractor-tab.py
+          python tools/patch-extractor-generic-html.py
+          python tools/patch-extractor-hidden-process.py
 
       - name: Garantir que Editor PDF não mudou
         shell: pwsh
         run: |
-          $after = (Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
+          $after=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
           if ($after -ne $env:PDF_HASH) { throw 'PdfEditorScreenV2.kt foi alterado. Release bloqueado.' }
           if (git diff --name-only | Select-String -SimpleMatch 'PdfEditorScreenV2.kt') { throw 'Editor PDF apareceu no diff. Release bloqueado.' }
 
@@ -83,116 +84,101 @@ jobs:
       - name: Preparar binários do Extrator
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
+          $ErrorActionPreference='Stop'
+          $ProgressPreference='SilentlyContinue'
           New-Item -ItemType Directory -Force -Path 'extractor-bin' | Out-Null
-
           Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe' -OutFile 'extractor-bin/yt-dlp.exe' -TimeoutSec 180
           Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' -OutFile 'extractor-bin/yt-dlp-stable.exe' -TimeoutSec 180
-
           Invoke-WebRequest -Uri 'https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip' -OutFile 'deno.zip' -TimeoutSec 180
-          Expand-Archive -Path 'deno.zip' -DestinationPath 'deno-temp' -Force
+          Expand-Archive 'deno.zip' 'deno-temp' -Force
           Copy-Item 'deno-temp/deno.exe' 'extractor-bin/deno.exe' -Force
 
-          $ffSources = @(
+          $ffSources=@(
             'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n9.0-latest-win64-gpl-9.0.zip',
             'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
           )
-          $ok = $false
-          foreach ($url in $ffSources) {
-            try {
-              Invoke-WebRequest -Uri $url -OutFile 'ffmpeg.zip' -TimeoutSec 240
-              if ((Get-Item 'ffmpeg.zip').Length -gt 1000000) { $ok = $true; break }
+          $ok=$false
+          foreach($source in $ffSources){
+            try{
+              Invoke-WebRequest -Uri $source -OutFile 'ffmpeg.zip' -TimeoutSec 240
+              if((Get-Item 'ffmpeg.zip').Length -gt 1000000){$ok=$true;break}
             } catch { Write-Warning $_.Exception.Message }
           }
-          if (-not $ok) { throw 'Não foi possível baixar FFmpeg.' }
-          Expand-Archive -Path 'ffmpeg.zip' -DestinationPath 'ffmpeg-temp' -Force
-          $ffmpeg = Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1
-          $ffprobe = Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffprobe.exe' | Select-Object -First 1
-          if (-not $ffmpeg -or -not $ffprobe) { throw 'ffmpeg/ffprobe não encontrados no pacote baixado.' }
+          if(-not $ok){throw 'Não foi possível baixar FFmpeg.'}
+          Expand-Archive 'ffmpeg.zip' 'ffmpeg-temp' -Force
+          $ffmpeg=Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1
+          $ffprobe=Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffprobe.exe' | Select-Object -First 1
+          if(-not $ffmpeg -or -not $ffprobe){throw 'ffmpeg/ffprobe ausentes.'}
           Copy-Item $ffmpeg.FullName 'extractor-bin/ffmpeg.exe' -Force
           Copy-Item $ffprobe.FullName 'extractor-bin/ffprobe.exe' -Force
 
           & 'extractor-bin/yt-dlp.exe' --version
+          if($LASTEXITCODE -ne 0){throw 'yt-dlp nightly inválido.'}
           & 'extractor-bin/yt-dlp-stable.exe' --version
+          if($LASTEXITCODE -ne 0){throw 'yt-dlp stable inválido.'}
           & 'extractor-bin/deno.exe' --version
+          if($LASTEXITCODE -ne 0){throw 'Deno inválido.'}
           & 'extractor-bin/ffmpeg.exe' -version | Select-Object -First 1
+          if($LASTEXITCODE -ne 0){throw 'FFmpeg inválido.'}
           & 'extractor-bin/ffprobe.exe' -version | Select-Object -First 1
+          if($LASTEXITCODE -ne 0){throw 'FFprobe inválido.'}
 
       - name: Montar Monitor Portable com Extrator
         shell: pwsh
         run: |
-          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
-          if (-not (Test-Path $root)) { throw 'Distribuição Windows não foi gerada.' }
-          $exe = Join-Path $root 'MonitorDeNoticias.exe'
-          if (-not (Test-Path $exe)) { throw 'MonitorDeNoticias.exe ausente.' }
-
-          $bin = Join-Path $root 'bin'
-          New-Item -ItemType Directory -Force -Path $bin | Out-Null
-          Copy-Item 'extractor-bin/yt-dlp.exe' (Join-Path $bin 'yt-dlp.exe') -Force
-          Copy-Item 'extractor-bin/yt-dlp-stable.exe' (Join-Path $bin 'yt-dlp-stable.exe') -Force
-          Copy-Item 'extractor-bin/ffmpeg.exe' (Join-Path $bin 'ffmpeg.exe') -Force
-          Copy-Item 'extractor-bin/ffprobe.exe' (Join-Path $bin 'ffprobe.exe') -Force
-          Copy-Item 'extractor-bin/deno.exe' (Join-Path $bin 'deno.exe') -Force
-
-          New-Item -ItemType Directory -Force -Path (Join-Path $root 'Videos') | Out-Null
-          New-Item -ItemType Directory -Force -Path (Join-Path $root 'data/extractor') | Out-Null
-
-          foreach ($name in @('yt-dlp.exe','yt-dlp-stable.exe','ffmpeg.exe','ffprobe.exe','deno.exe')) {
-            $path = Join-Path $bin $name
-            if (-not (Test-Path $path)) { throw "Binário ausente no portable: $name" }
-            if ((Get-Item $path).Length -lt 100000) { throw "Binário parece inválido: $name" }
+          $root='desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if(-not (Test-Path $root)){throw 'Distribuição Windows não foi gerada.'}
+          if(-not (Test-Path (Join-Path $root 'MonitorDeNoticias.exe'))){throw 'MonitorDeNoticias.exe ausente.'}
+          $bin=Join-Path $root 'bin'
+          New-Item -ItemType Directory -Force $bin | Out-Null
+          foreach($name in @('yt-dlp.exe','yt-dlp-stable.exe','ffmpeg.exe','ffprobe.exe','deno.exe')){
+            Copy-Item (Join-Path 'extractor-bin' $name) (Join-Path $bin $name) -Force
+            $path=Join-Path $bin $name
+            if(-not (Test-Path $path) -or (Get-Item $path).Length -lt 100000){throw "Binário inválido no portable: $name"}
           }
+          New-Item -ItemType Directory -Force (Join-Path $root 'Videos') | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $root 'data/extractor') | Out-Null
 
-      - name: Validar estrutura do Extrator no código
+      - name: Validar contrato do Extrator
         shell: pwsh
         run: |
-          $dash = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
-          $ext = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
-          $engine = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
-          $login = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
-          $r7 = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt' -Raw
-          $hidden = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt' -Raw
-          if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Aba Extrator ausente.' }
-          if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota Extrator ausente.' }
-          if ($ext -match 'ANALISAR') { throw 'Fluxo final não pode exibir ANALISAR.' }
-          foreach ($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) {
-            if (($ext + $engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" }
-          }
-          foreach ($required in @('--live-from-start','libx264','m3u8:native','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','createRuntimeCookieFile','HiddenWindowsProcess.start')) {
-            if ($engine -notmatch [regex]::Escape($required)) { throw "Motor incompleto: $required" }
-          }
-          if ($r7 -notmatch 'take\(15\)') { throw 'Fallback R7/Record deve limitar a 15 mídias.' }
-          foreach ($required in @('-WindowStyle','Hidden','Stop-Process')) {
-            if ($hidden -notmatch [regex]::Escape($required)) { throw "Launcher oculto incompleto: $required" }
-          }
-          foreach ($required in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView')) {
-            if ($login -notmatch [regex]::Escape($required)) { throw "Login interno incompleto: $required" }
-          }
-          if ($ext -notmatch 'LOGIN GLOBOPLAY') { throw 'Botão LOGIN GLOBOPLAY ausente.' }
+          $dash=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
+          $screen=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
+          $engine=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
+          $login=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
+          $r7=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt' -Raw
+          $generic=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DirectMediaHtmlFallback.kt' -Raw
+          $hidden=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt' -Raw
+          if($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"'){throw 'Aba Extrator ausente.'}
+          if($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen'){throw 'Rota Extrator ausente.'}
+          if($screen -match 'ANALISAR'){throw 'ANALISAR não pode ficar visível.'}
+          foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')){if(($screen+$engine) -notmatch [regex]::Escape($q)){throw "Qualidade ausente: $q"}}
+          foreach($x in @('--live-from-start','libx264','m3u8:native','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','createRuntimeCookieFile','HiddenWindowsProcess.start')){if($engine -notmatch [regex]::Escape($x)){throw "Motor incompleto: $x"}}
+          if($r7 -notmatch 'take\(15\)'){throw 'R7 sem limite 15.'}
+          if($generic -notmatch 'take\(15\)'){throw 'Fallback genérico sem limite 15.'}
+          foreach($x in @('-WindowStyle','Hidden','taskkill.exe','/T','/F')){if($hidden -notmatch [regex]::Escape($x)){throw "Launcher oculto incompleto: $x"}}
+          foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView')){if($login -notmatch [regex]::Escape($x)){throw "Login interno incompleto: $x"}}
+          if($screen -notmatch 'LOGIN GLOBOPLAY'){throw 'LOGIN GLOBOPLAY ausente.'}
 
       - name: Criar ZIP e SHA256
         shell: pwsh
         run: |
-          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
-          $zipName = 'Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip'
-          $zip = Join-Path $PWD $zipName
-          if (Test-Path $zip) { Remove-Item $zip -Force }
-          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
-          if ((Get-Item $zip).Length -lt 1000000) { throw 'ZIP final parece incompleto.' }
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          $root=Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $zipName='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip'
+          if(Test-Path $zipName){Remove-Item $zipName -Force}
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zipName -CompressionLevel Optimal
+          if((Get-Item $zipName).Length -lt 1000000){throw 'ZIP final parece incompleto.'}
+          $hash=(Get-FileHash $zipName -Algorithm SHA256).Hash.ToLower()
           "$hash  $zipName" | Set-Content "$zipName.sha256"
-          Write-Host "SHA256: $hash"
+          Write-Host "SHA256=$hash"
 
       - name: Publicar release de teste
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = 'v8-extrator-videos-v301-preview'
-          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) {
-            gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag
-          }
+          $tag='v8-extrator-videos-v301-preview'
+          if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag}
           gh release create $tag `
             'Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip' `
             'Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip.sha256' `
@@ -200,7 +186,7 @@ jobs:
             --target work/v8-extrator-v301-tab `
             --prerelease `
             --title 'Monitor V8 + Extrator de Vídeos v3.0.1 — Preview Portable' `
-            --notes 'Preview da integração do Extrator de Vídeos como aba interna do Monitor. Inclui yt-dlp nightly, yt-dlp stable, FFmpeg, FFprobe e Deno em bin/, pasta Videos relativa, subprocessos ocultos, rotas YouTube/Live/H.264, R7/Record e Globoplay com login interno oficial, sessão DPAPI, HLS e fallback m3u8. Editor de PDF permanece protegido e inalterado.'
+            --notes 'Preview completa: Extrator como aba interna do Monitor, cinco binários portáteis, subprocessos ocultos, YouTube/Live/H.264, R7/Record, fallback HTML/mídia direta, Globoplay com login interno oficial, sessão DPAPI, HLS/m3u8 e atualizador seguro do yt-dlp. Editor de PDF protegido e inalterado.'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
