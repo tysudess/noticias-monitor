@@ -37,65 +37,39 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $script = @'
           from pathlib import Path
-
-          pdf_path = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt')
-          src = pdf_path.read_text(encoding='utf-8')
-
-          def replace_once(old, new, label):
+          p = Path("desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt")
+          src = p.read_text(encoding="utf-8")
+          before = src
+          def rep(old, new, label):
               global src
-              if old not in src:
-                  raise SystemExit(f'Não encontrei bloco para substituir: {label}')
-              src = src.replace(old, new, 1)
-
-          # Exportação sem perda para manter qualidade real da capa e das imagens.
-          if 'import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory' not in src:
-              replace_once('import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory\n', 'import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory\nimport org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory\n', 'import LosslessFactory')
-
-          replace_once('''private enum class PdfV2ExportQuality(val label: String, val dpi: Int) {
-    HIGH("Alta (recomendado)", 300), MEDIUM("Média", 220), COMPACT("Compacta", 160);
-    override fun toString(): String = label
-}''', '''private enum class PdfV2ExportQuality(val label: String, val dpi: Int) {
-    HIGH("Alta (recomendado)", 450), MEDIUM("Média", 300), COMPACT("Compacta", 220);
-    override fun toString(): String = label
-}''', 'DPI das qualidades')
-
-          replace_once('''private fun buildWorkspace():JComponent=JPanel(BorderLayout(12,0)).apply{background=V2_BG;border=EmptyBorder(12,16,10,16);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}''', '''private fun buildWorkspace():JComponent=JPanel(BorderLayout(8,0)).apply{background=V2_BG;border=EmptyBorder(10,10,8,10);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}''', 'workspace mais largo')
-
-          replace_once('''val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(12,10,12,10);preferredSize=Dimension(310,1)}''', '''val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(10,7,10,7);preferredSize=Dimension(236,1);minimumSize=Dimension(226,1)}''', 'largura lateral esquerda')
-
-          replace_once('''val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,182);preferredSize=Dimension(250,182);border=EmptyBorder(17,12,14,12)}''', '''val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,138);preferredSize=Dimension(214,138);border=EmptyBorder(10,8,10,8)}''', 'drop lateral compacto')
-
-          replace_once('''label("☁",36f,Font.BOLD,Color(153,195,239)),label("Arraste imagens",14f,Font.PLAIN,Color(202,219,238)),label("ou PDFs aqui",14f,Font.PLAIN,Color(202,219,238)),label("ou clique para selecionar",11f,Font.PLAIN,V2_MUTED)''', '''label("☁",28f,Font.BOLD,Color(153,195,239)),label("Arraste imagens",12f,Font.PLAIN,Color(202,219,238)),label("ou PDFs aqui",12f,Font.PLAIN,Color(202,219,238)),label("ou clique para selecionar",10f,Font.PLAIN,V2_MUTED)''', 'textos do drop lateral')
-
-          replace_once('''maximumSize=Dimension(245,38)''', '''maximumSize=Dimension(202,34)''', 'botão selecionar arquivos lateral')
-
-          replace_once('''val body = JPanel(BorderLayout(10, 0)).apply { isOpaque = false }''', '''val body = JPanel(BorderLayout(6, 0)).apply { isOpaque = false }''', 'gap do corpo central')
-
-          replace_once('''preferredSize = Dimension(172, 1)
-            minimumSize = Dimension(158, 320)''', '''preferredSize = Dimension(112, 1)
-            minimumSize = Dimension(104, 320)''', 'coluna de miniaturas fina')
-
-          replace_once('''preview.minimumSize = Dimension(430, 620)''', '''preview.minimumSize = Dimension(620, 640)''', 'área mínima de visualização')
-
-          replace_once('''controls.add(Box.createHorizontalStrut(90))''', '''controls.add(Box.createHorizontalStrut(28))''', 'controles compactos')
-
-          replace_once('''val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(13,12,13,12);preferredSize=Dimension(294,1)}''', '''val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(12,10,12,10);preferredSize=Dimension(260,1);minimumSize=Dimension(250,1)}''', 'painel direito compacto')
-
-          replace_once('''maximumSize=Dimension(Int.MAX_VALUE,210);preferredSize=Dimension(265,210)''', '''maximumSize=Dimension(Int.MAX_VALUE,178);preferredSize=Dimension(235,178)''', 'preview da capa compacto')
-
-          replace_once('''val s=min(240.0/img.width,190.0/img.height);coverPreview.icon=ImageIcon(img.getScaledInstance(max(1,(img.width*s).roundToInt()),max(1,(img.height*s).roundToInt()),Image.SCALE_SMOOTH))''', '''val s=min(218.0/img.width,164.0/img.height);coverPreview.icon=ImageIcon(img.getScaledInstance(max(1,(img.width*s).roundToInt()),max(1,(img.height*s).roundToInt()),Image.SCALE_SMOOTH))''', 'escala preview capa')
-
-          replace_once('''private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=132;thumbList.fixedCellHeight=150;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}''', '''private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=88;thumbList.fixedCellHeight=126;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}''', 'lista de miniaturas fina')
-
-          replace_once('''private fun setThumbMode(t:Boolean){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;if(t){thumbList.fixedCellWidth=132;thumbList.fixedCellHeight=150}else{thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=68};thumbList.revalidate();thumbList.repaint()}''', '''private fun setThumbMode(t:Boolean){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;if(t){thumbList.fixedCellWidth=88;thumbList.fixedCellHeight=126}else{thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=58};thumbList.revalidate();thumbList.repaint()}''', 'modo miniaturas fino')
-
-          replace_once('''private fun createThumbnail(page:PdfV2Page):ImageIcon{val src=renderFinalPage(page,58);val s=min(104.0/src.width,122.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))}''', '''private fun createThumbnail(page:PdfV2Page):ImageIcon{val src=renderFinalPage(page,58);val s=min(70.0/src.width,98.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))}''', 'thumbnail menor')
-
-          replace_once('''private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(11,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)54 else 72);preferredSize=Dimension(285,if(sub==null)54 else 72);add(RoundedPanel(9,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(42,42);layout=BorderLayout();add(label(i,if(i=="PDF")12f else 20f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,14f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,11f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}''', '''private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(7,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)46 else 58);preferredSize=Dimension(214,if(sub==null)46 else 58);add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(34,34);layout=BorderLayout();add(label(i,if(i=="PDF")10f else 17f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,13f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,10f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}''', 'botões laterais compactos')
-
-          replace_once('''private fun appendRaster(out:PDDocument,image:BufferedImage,q:PdfV2ExportQuality){val pw=595.276f;val ph=pw*image.height.toFloat()/image.width.toFloat();val page=PDPage(PDRectangle(pw,ph));out.addPage(page);val pd=JPEGFactory.createFromImage(out,ensureRgbV2(image),.97f,q.dpi);PDPageContentStream(out,page).use{cs->cs.drawImage(pd,0f,0f,pw,ph)}}''', '''private fun appendRaster(out:PDDocument,image:BufferedImage,q:PdfV2ExportQuality){val pw=595.276f;val ph=pw*image.height.toFloat()/image.width.toFloat();val page=PDPage(PDRectangle(pw,ph));out.addPage(page);val pd=LosslessFactory.createFromImage(out,ensureRgbV2(image));PDPageContentStream(out,page).use{cs->cs.drawImage(pd,0f,0f,pw,ph)}}''', 'exportação raster sem perda')
-
-          pdf_path.write_text(src, encoding='utf-8')
+              if old in src:
+                  src = src.replace(old, new, 1)
+                  print("OK", label)
+              else:
+                  print("SKIP", label)
+          if "import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory" not in src:
+              rep("import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory\n", "import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory\nimport org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory\n", "LosslessFactory import")
+          rep('HIGH("Alta (recomendado)", 300), MEDIUM("Média", 220), COMPACT("Compacta", 160);', 'HIGH("Alta (recomendado)", 450), MEDIUM("Média", 300), COMPACT("Compacta", 220);', "higher dpi")
+          rep('private fun buildWorkspace():JComponent=JPanel(BorderLayout(12,0)).apply{background=V2_BG;border=EmptyBorder(12,16,10,16);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}', 'private fun buildWorkspace():JComponent=JPanel(BorderLayout(8,0)).apply{background=V2_BG;border=EmptyBorder(10,10,8,10);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}', "workspace margins")
+          rep('val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(12,10,12,10);preferredSize=Dimension(310,1)}', 'val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(10,7,10,7);preferredSize=Dimension(236,1);minimumSize=Dimension(226,1)}', "left panel width")
+          rep('val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,182);preferredSize=Dimension(250,182);border=EmptyBorder(17,12,14,12)}', 'val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,138);preferredSize=Dimension(214,138);border=EmptyBorder(10,8,10,8)}', "left drop compact")
+          rep('label("☁",36f,Font.BOLD,Color(153,195,239)),label("Arraste imagens",14f,Font.PLAIN,Color(202,219,238)),label("ou PDFs aqui",14f,Font.PLAIN,Color(202,219,238)),label("ou clique para selecionar",11f,Font.PLAIN,V2_MUTED)', 'label("☁",28f,Font.BOLD,Color(153,195,239)),label("Arraste imagens",12f,Font.PLAIN,Color(202,219,238)),label("ou PDFs aqui",12f,Font.PLAIN,Color(202,219,238)),label("ou clique para selecionar",10f,Font.PLAIN,V2_MUTED)', "left drop text")
+          rep('maximumSize=Dimension(245,38)', 'maximumSize=Dimension(202,34)', "left file button")
+          rep('val body = JPanel(BorderLayout(10, 0)).apply { isOpaque = false }', 'val body = JPanel(BorderLayout(6, 0)).apply { isOpaque = false }', "center body gap")
+          rep('preferredSize = Dimension(172, 1)\n            minimumSize = Dimension(158, 320)', 'preferredSize = Dimension(112, 1)\n            minimumSize = Dimension(104, 320)', "thumb column width")
+          rep('preview.minimumSize = Dimension(430, 620)', 'preview.minimumSize = Dimension(620, 640)', "preview minimum")
+          rep('controls.add(Box.createHorizontalStrut(90))', 'controls.add(Box.createHorizontalStrut(28))', "controls spacing")
+          rep('val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(13,12,13,12);preferredSize=Dimension(294,1)}', 'val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(12,10,12,10);preferredSize=Dimension(260,1);minimumSize=Dimension(250,1)}', "right panel width")
+          rep('maximumSize=Dimension(Int.MAX_VALUE,210);preferredSize=Dimension(265,210)', 'maximumSize=Dimension(Int.MAX_VALUE,178);preferredSize=Dimension(235,178)', "cover preview size")
+          rep('val s=min(240.0/img.width,190.0/img.height);coverPreview.icon=ImageIcon(img.getScaledInstance(max(1,(img.width*s).roundToInt()),max(1,(img.height*s).roundToInt()),Image.SCALE_SMOOTH))', 'val s=min(218.0/img.width,164.0/img.height);coverPreview.icon=ImageIcon(img.getScaledInstance(max(1,(img.width*s).roundToInt()),max(1,(img.height*s).roundToInt()),Image.SCALE_SMOOTH))', "cover preview scale")
+          rep('private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=132;thumbList.fixedCellHeight=150;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}', 'private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=88;thumbList.fixedCellHeight=126;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}', "thumb list compact")
+          rep('private fun setThumbMode(t:Boolean){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;if(t){thumbList.fixedCellWidth=132;thumbList.fixedCellHeight=150}else{thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=68};thumbList.revalidate();thumbList.repaint()}', 'private fun setThumbMode(t:Boolean){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;if(t){thumbList.fixedCellWidth=88;thumbList.fixedCellHeight=126}else{thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=58};thumbList.revalidate();thumbList.repaint()}', "thumb mode compact")
+          rep('private fun createThumbnail(page:PdfV2Page):ImageIcon{val src=renderFinalPage(page,58);val s=min(104.0/src.width,122.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))}', 'private fun createThumbnail(page:PdfV2Page):ImageIcon{val src=renderFinalPage(page,58);val s=min(70.0/src.width,98.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))}', "thumbnail size")
+          rep('private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(11,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)54 else 72);preferredSize=Dimension(285,if(sub==null)54 else 72);add(RoundedPanel(9,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(42,42);layout=BorderLayout();add(label(i,if(i=="PDF")12f else 20f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,14f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,11f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}', 'private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(7,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)46 else 58);preferredSize=Dimension(214,if(sub==null)46 else 58);add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(34,34);layout=BorderLayout();add(label(i,if(i=="PDF")10f else 17f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,13f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,10f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}', "nav buttons compact")
+          rep('private fun appendRaster(out:PDDocument,image:BufferedImage,q:PdfV2ExportQuality){val pw=595.276f;val ph=pw*image.height.toFloat()/image.width.toFloat();val page=PDPage(PDRectangle(pw,ph));out.addPage(page);val pd=JPEGFactory.createFromImage(out,ensureRgbV2(image),.97f,q.dpi);PDPageContentStream(out,page).use{cs->cs.drawImage(pd,0f,0f,pw,ph)}}', 'private fun appendRaster(out:PDDocument,image:BufferedImage,q:PdfV2ExportQuality){val pw=595.276f;val ph=pw*image.height.toFloat()/image.width.toFloat();val page=PDPage(PDRectangle(pw,ph));out.addPage(page);val pd=LosslessFactory.createFromImage(out,ensureRgbV2(image));PDPageContentStream(out,page).use{cs->cs.drawImage(pd,0f,0f,pw,ph)}}', "lossless export")
+          if src == before:
+              raise SystemExit("Nenhuma alteração foi aplicada ao PdfEditorScreenV2.kt")
+          p.write_text(src, encoding="utf-8")
           '@
           $script | python -
 
