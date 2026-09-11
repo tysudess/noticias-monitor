@@ -9,6 +9,8 @@ on:
       - 'desktop/build.gradle.kts'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorPortableStateStore.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YouTubeLiveSnapshot.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
@@ -18,11 +20,13 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'tools/integrate-v8-extractor-tab.py'
       - 'tools/patch-extractor-generic-html.py'
+      - 'tools/patch-extractor-live-current-point.py'
+      - 'tools/patch-extractor-portable-state.py'
       - 'tools/patch-extractor-hidden-process.py'
       - '.github/workflows/validate-v8-extractor-complete.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -77,6 +81,8 @@ jobs:
           $dash=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
           $screen=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
           $engine=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
+          $live=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YouTubeLiveSnapshot.kt' -Raw
+          $state=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorPortableStateStore.kt' -Raw
           $login=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
           $session=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt' -Raw
           $r7=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt' -Raw
@@ -88,23 +94,14 @@ jobs:
           if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota Extrator ausente.' }
           if ($screen -match 'ANALISAR') { throw 'ANALISAR não pode ficar visível.' }
           foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) { if (($screen+$engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" } }
-          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO')) { if ($screen -notmatch [regex]::Escape($x)) { throw "UI ausente: $x" } }
-          foreach($x in @('--live-from-start','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree')) { if ($engine -notmatch [regex]::Escape($x)) { throw "Motor incompleto: $x" } }
+          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO','LIMPAR HISTÓRICO','ExtractorPortableStateStore')) { if ($screen -notmatch [regex]::Escape($x)) { throw "UI/estado ausente: $x" } }
+          foreach($x in @('YouTubeLiveSnapshot.download','--download-sections','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree')) { if ($engine -notmatch [regex]::Escape($x)) { throw "Motor incompleto: $x" } }
+          foreach($x in @('#EXT-X-ENDLIST','protocol_whitelist','playlistDuration','libx264','160k')) { if ($live -notmatch [regex]::Escape($x)) { throw "Snapshot HLS incompleto: $x" } }
+          foreach($x in @('history.txt','settings.properties','proxy.dpapi','ProtectedData','CurrentUser','loadHistory','saveQualityIndex','saveProxy')) { if ($state -notmatch [regex]::Escape($x)) { throw "Persistência portable incompleta: $x" } }
           foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext')) { if ($login -notmatch [regex]::Escape($x)) { throw "Login incompleto: $x" } }
           foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi')) { if ($session -notmatch [regex]::Escape($x)) { throw "Sessão incompleta: $x" } }
           if ($r7 -notmatch 'take\(15\)') { throw 'R7 sem limite de 15.' }
           if ($generic -notmatch 'take\(15\)') { throw 'HTML genérico sem limite de 15.' }
-          foreach($x in @('-WindowStyle','Hidden','Stop-Process')) { if ($hidden -notmatch [regex]::Escape($x)) { throw "Subprocesso oculto incompleto: $x" } }
+          foreach($x in @('-WindowStyle','Hidden','taskkill.exe','/T','/F')) { if ($hidden -notmatch [regex]::Escape($x)) { throw "Subprocesso oculto incompleto: $x" } }
           foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version')) { if ($updater -notmatch [regex]::Escape($x)) { throw "Updater incompleto: $x" } }
-          Write-Host 'Contrato funcional completo validado.'
-
-      - name: Persistir patches validados
-        shell: pwsh
-        run: |
-          if ((git status --porcelain).Length -eq 0) { exit 0 }
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt
-          git diff --cached --check
-          git commit -m 'Apply validated complete extractor engine integration'
-          git push origin HEAD:work/v8-extrator-v301-tab
+          Write-Host 'Contrato funcional completo validado sem alterar o Editor PDF.'
