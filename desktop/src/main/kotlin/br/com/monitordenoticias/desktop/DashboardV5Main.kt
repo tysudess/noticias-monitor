@@ -141,7 +141,15 @@ private fun V5App(c: DesktopControllerV5) {
     }
 
     if (section == V5Section.PDF_EDITOR) {
-        PdfEditorScreenV2 { section = V5Section.HOME }
+        Column(Modifier.fillMaxSize().background(V5Bg)) {
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                V5Sidebar(section, { section = it }, c, tick)
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    PdfEditorScreenV2 { section = V5Section.HOME }
+                }
+            }
+            V5Footer(c, tick)
+        }
     } else {
         Column(Modifier.fillMaxSize().background(V5Bg)) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
