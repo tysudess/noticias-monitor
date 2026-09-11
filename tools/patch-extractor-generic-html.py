@@ -11,6 +11,12 @@ PORTABLE_STATE = BASE / 'ExtractorPortableStateStore.kt'
 if not ENGINE.exists() or not FALLBACK.exists() or not LIVE_SNAPSHOT.exists() or not PORTABLE_STATE.exists():
     raise SystemExit('Motor, fallback HTML, YouTubeLiveSnapshot.kt ou ExtractorPortableStateStore.kt ausente.')
 
+# Workspace dedicada como o Editor de PDF, sem alterar PdfEditorScreenV2.kt.
+workspace_patch = ROOT / 'tools/patch-extractor-dedicated-workspace.py'
+if not workspace_patch.exists():
+    raise SystemExit('patch-extractor-dedicated-workspace.py ausente.')
+runpy.run_path(str(workspace_patch), run_name='__main__')
+
 src = ENGINE.read_text(encoding='utf-8')
 
 old_route = '                else -> downloadGeneric(cleanUrl, quality, proxy, "vídeo", update)\n'
