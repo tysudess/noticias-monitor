@@ -65,8 +65,11 @@ fun ExtractorVideoScreen(onBack: () -> Unit) {
         status = "Iniciando download direto em ${chosen.label}..."
         scope.launch {
             val result = engine.download(url.trim(), chosen, proxy) { pct, msg ->
-                progress = pct.coerceIn(0, 100) / 100f
-                if (msg.isNotBlank()) status = msg
+                // O motor trabalha em Dispatchers.IO; trazemos mudanças de UI de volta ao scope Compose.
+                scope.launch {
+                    progress = pct.coerceIn(0, 100) / 100f
+                    if (msg.isNotBlank()) status = msg
+                }
             }
             busy = false
             result.fold(
@@ -227,8 +230,10 @@ fun ExtractorVideoScreen(onBack: () -> Unit) {
                             onClick = {
                                 settingsStatus = "Abrindo login oficial do Globoplay..."
                                 GloboplayLoginWindow(null, engine, proxy) { saved, message ->
-                                    sessionSaved = saved
-                                    settingsStatus = message
+                                    scope.launch {
+                                        sessionSaved = saved
+                                        settingsStatus = message
+                                    }
                                 }.open()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = ExPurple)
@@ -257,7 +262,9 @@ fun ExtractorVideoScreen(onBack: () -> Unit) {
                             updatingYtDlp = true
                             settingsStatus = "Preparando atualização do yt-dlp..."
                             scope.launch {
-                                val result = updater.update { settingsStatus = it }
+                                val result = updater.update { message ->
+                                    scope.launch { settingsStatus = message }
+                                }
                                 settingsStatus = result.message
                                 updatingYtDlp = false
                             }
