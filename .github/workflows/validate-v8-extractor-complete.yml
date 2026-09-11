@@ -22,6 +22,9 @@ on:
       - 'tools/patch-extractor-generic-html.py'
       - 'tools/patch-extractor-live-current-point.py'
       - 'tools/patch-extractor-portable-state.py'
+      - 'tools/patch-extractor-compat-retry.py'
+      - 'tools/patch-extractor-portable-paths.py'
+      - 'tools/patch-extractor-dedicated-workspace.py'
       - 'tools/patch-extractor-hidden-process.py'
       - '.github/workflows/validate-v8-extractor-complete.yml'
 
@@ -91,17 +94,18 @@ jobs:
           $updater=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt' -Raw
 
           if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Aba Extrator ausente.' }
-          if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota Extrator ausente.' }
+          if ($dash -notmatch 'else if \(section == V5Section.EXTRACTOR\)') { throw 'Extrator não está em workspace dedicada.' }
+          if ($dash -notmatch 'ExtractorVideoScreen \{ section = V5Section.HOME \}') { throw 'Workspace dedicada do Extrator ausente.' }
           if ($screen -match 'ANALISAR') { throw 'ANALISAR não pode ficar visível.' }
           foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) { if (($screen+$engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" } }
-          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO','LIMPAR HISTÓRICO','ExtractorPortableStateStore')) { if ($screen -notmatch [regex]::Escape($x)) { throw "UI/estado ausente: $x" } }
-          foreach($x in @('YouTubeLiveSnapshot.download','--download-sections','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree')) { if ($engine -notmatch [regex]::Escape($x)) { throw "Motor incompleto: $x" } }
+          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO','LIMPAR HISTÓRICO','SALVAR PROXY','REMOVER PROXY','ExtractorPortableStateStore')) { if ($screen -notmatch [regex]::Escape($x)) { throw "UI/estado ausente: $x" } }
+          foreach($x in @('YouTubeLiveSnapshot.download','--download-sections','runYtDlpQuality','quality.compat','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree','jpackage.app-path','MonitorDeNoticias.exe')) { if ($engine -notmatch [regex]::Escape($x)) { throw "Motor incompleto: $x" } }
           foreach($x in @('#EXT-X-ENDLIST','protocol_whitelist','playlistDuration','libx264','160k')) { if ($live -notmatch [regex]::Escape($x)) { throw "Snapshot HLS incompleto: $x" } }
           foreach($x in @('history.txt','settings.properties','proxy.dpapi','ProtectedData','CurrentUser','loadHistory','saveQualityIndex','saveProxy')) { if ($state -notmatch [regex]::Escape($x)) { throw "Persistência portable incompleta: $x" } }
           foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext')) { if ($login -notmatch [regex]::Escape($x)) { throw "Login incompleto: $x" } }
-          foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi')) { if ($session -notmatch [regex]::Escape($x)) { throw "Sessão incompleta: $x" } }
+          foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi','HiddenWindowsProcess.start')) { if ($session -notmatch [regex]::Escape($x)) { throw "Sessão incompleta: $x" } }
           if ($r7 -notmatch 'take\(15\)') { throw 'R7 sem limite de 15.' }
           if ($generic -notmatch 'take\(15\)') { throw 'HTML genérico sem limite de 15.' }
           foreach($x in @('-WindowStyle','Hidden','taskkill.exe','/T','/F')) { if ($hidden -notmatch [regex]::Escape($x)) { throw "Subprocesso oculto incompleto: $x" } }
-          foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version')) { if ($updater -notmatch [regex]::Escape($x)) { throw "Updater incompleto: $x" } }
+          foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','HiddenWindowsProcess.start')) { if ($updater -notmatch [regex]::Escape($x)) { throw "Updater incompleto: $x" } }
           Write-Host 'Contrato funcional completo validado sem alterar o Editor PDF.'
