@@ -1,0 +1,181 @@
+name: Verify V8 Spreadsheet Automation Integration
+
+on:
+  push:
+    branches:
+      - integration/v8-news-pdf-editor-planilhas
+    paths:
+      - '.github/workflows/spreadsheet-automation-integration.yml'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/EmbeddedSpreadsheetAutomation.kt'
+      - 'tools/apply-spreadsheet-automation-tab.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-integrated-v8:
+    runs-on: windows-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Checkout integrated V8 branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration/v8-news-pdf-editor-planilhas
+          fetch-depth: 0
+
+      - name: Wire Spreadsheet Automation tab
+        shell: pwsh
+        run: |
+          python tools/apply-spreadsheet-automation-tab.py
+          if (git status --porcelain) {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
+            git commit -m 'feat(desktop): wire original spreadsheet automation v1.1.1 tab'
+            git push origin HEAD:integration/v8-news-pdf-editor-planilhas
+          }
+          $dashboard = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
+          if ($dashboard -notmatch 'SPREADSHEET_AUTOMATION\("Automação de Planilhas"') { throw 'Aba Automação de Planilhas não foi incluída.' }
+          if ($dashboard -notmatch 'V5Section\.SPREADSHEET_AUTOMATION -> EmbeddedSpreadsheetAutomationScreen\(\)') { throw 'Rota da Automação de Planilhas não foi ligada.' }
+
+      - name: Verify official Spreadsheet Automation v1.1.1 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $json = gh api repos/tysudess/automa-o-planilhas/releases/tags/v1.1.1 | ConvertFrom-Json
+          if ($json.tag_name -ne 'v1.1.1') { throw 'Release v1.1.1 não localizado.' }
+          $asset = $json.assets | Where-Object { $_.name -eq 'AutomacaoPlanilhas-Windows-Portable-v1.1.1.exe' } | Select-Object -First 1
+          if (-not $asset) { throw 'Executável oficial da Automação de Planilhas v1.1.1 ausente.' }
+          if ($asset.digest -ne 'sha256:29989ad506aa80a2d28d8d523a81083f44d39b9e06a2329c2ee500a88b4fd6e0') {
+            throw "Digest oficial inesperado para Automação de Planilhas: $($asset.digest)"
+          }
+
+      - name: Download exact official Spreadsheet Automation v1.1.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path '_spreadsheet-original' | Out-Null
+          gh release download v1.1.1 --repo tysudess/automa-o-planilhas --pattern 'AutomacaoPlanilhas-Windows-Portable-v1.1.1.exe' --dir '_spreadsheet-original'
+          $exe = (Resolve-Path '_spreadsheet-original/AutomacaoPlanilhas-Windows-Portable-v1.1.1.exe').Path
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne '29989ad506aa80a2d28d8d523a81083f44d39b9e06a2329c2ee500a88b4fd6e0') {
+            throw "SHA-256 da Automação de Planilhas não corresponde ao release oficial: $hash"
+          }
+
+      - name: Download exact official PDF Editor v0.3.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path '_pdf-release' | Out-Null
+          gh release download v0.3.1 --repo tysudess/EditorPDF-Windows-v0.1-PROJETO1 --pattern 'Editor-de-PDF-Windows-Portable-v0.3.1.zip' --dir '_pdf-release'
+          $zip = (Resolve-Path '_pdf-release/Editor-de-PDF-Windows-Portable-v0.3.1.zip').Path
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne '5e77fe45812af26ebbdb4ebde7eb205561e9a5d40e36e94400d7669e080d113e') { throw "SHA-256 do Editor de PDF inesperado: $hash" }
+          New-Item -ItemType Directory -Force -Path '_pdf-original' | Out-Null
+          Expand-Archive -Path $zip -DestinationPath '_pdf-original' -Force
+          $pdfExe = Get-ChildItem '_pdf-original' -Recurse -Filter 'Editor-de-PDF.exe' | Select-Object -First 1
+          if (-not $pdfExe) { throw 'Editor-de-PDF.exe não encontrado.' }
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile integrated Monitor
+        shell: pwsh
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Create Windows distributable
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Install untouched original tools into Monitor package
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias').Path
+
+          $pdfDest = Join-Path $root 'tools/EditorPDF'
+          New-Item -ItemType Directory -Force -Path $pdfDest | Out-Null
+          $pdfExe = Get-ChildItem '_pdf-original' -Recurse -Filter 'Editor-de-PDF.exe' | Select-Object -First 1
+          Copy-Item (Join-Path $pdfExe.Directory.FullName '*') $pdfDest -Recurse -Force
+          if (-not (Test-Path (Join-Path $pdfDest 'Editor-de-PDF.exe'))) { throw 'Editor PDF não foi incluído no pacote.' }
+
+          $sheetDest = Join-Path $root 'tools/AutomacaoPlanilhas'
+          New-Item -ItemType Directory -Force -Path $sheetDest | Out-Null
+          Copy-Item '_spreadsheet-original/AutomacaoPlanilhas-Windows-Portable-v1.1.1.exe' $sheetDest -Force
+          if (-not (Test-Path (Join-Path $sheetDest 'AutomacaoPlanilhas-Windows-Portable-v1.1.1.exe'))) { throw 'Automação de Planilhas não foi incluída no pacote.' }
+
+      - name: Smoke test original PDF Editor
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/EditorPDF/Editor-de-PDF.exe').Path
+          $working = Split-Path -Parent $exe
+          $p = Start-Process -FilePath $exe -WorkingDirectory $working -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $p.Refresh()
+            if ($p.HasExited) { throw "Editor de PDF encerrou prematuramente. Exit=$($p.ExitCode)" }
+          } finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Smoke test original Spreadsheet Automation
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/AutomacaoPlanilhas/AutomacaoPlanilhas-Windows-Portable-v1.1.1.exe').Path
+          $working = Split-Path -Parent $exe
+          $p = Start-Process -FilePath $exe -WorkingDirectory $working -PassThru
+          try {
+            Start-Sleep -Seconds 12
+            $p.Refresh()
+            if ($p.HasExited) { throw "Automação de Planilhas encerrou prematuramente. Exit=$($p.ExitCode)" }
+          } finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Smoke test Monitor launcher
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias').Path
+          $exe = Join-Path $root 'MonitorDeNoticias.exe'
+          $p = Start-Process -FilePath $exe -WorkingDirectory $root -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $p.Refresh()
+            if ($p.HasExited) { throw "Monitor encerrou prematuramente. Exit=$($p.ExitCode)" }
+          } finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+      - name: Create integrated V8 ZIP and SHA256
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias').Path
+          $zip = Join-Path $PWD 'Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF-AUTOMACAO-PLANILHAS.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF-AUTOMACAO-PLANILHAS.zip" | Set-Content 'Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF-AUTOMACAO-PLANILHAS.zip.sha256'
+          Write-Host "SHA256: $hash"
+
+      - name: Upload integrated build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF-AUTOMACAO-PLANILHAS
+          path: |
+            Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF-AUTOMACAO-PLANILHAS.zip
+            Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF-AUTOMACAO-PLANILHAS.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
