@@ -23,6 +23,7 @@ on:
       - 'tools/patch-extractor-live-current-point.py'
       - 'tools/patch-extractor-youtube-live-status.py'
       - 'tools/patch-extractor-portable-state.py'
+      - 'tools/patch-extractor-cancel-token.py'
       - 'tools/patch-extractor-compat-retry.py'
       - 'tools/patch-extractor-r7-reference.py'
       - 'tools/patch-extractor-portable-paths.py'
