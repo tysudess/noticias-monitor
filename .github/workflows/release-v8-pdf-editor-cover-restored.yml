@@ -34,76 +34,57 @@ jobs:
         run: |
           $path = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
           $text = Get-Content $path -Raw -Encoding UTF8
-
-          $text = $text.Replace(
-            'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER)}',
-            'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}'
-          )
-
-          $compactGenerate = @'
-        controls.add(Box.createHorizontalStrut(8))
-        controls.add(StyledButton("GERAR PDF", V2_GREEN, Color.WHITE, Color(29,229,123)).apply {
-            preferredSize = Dimension(112,36)
-            font = font.deriveFont(Font.BOLD,12.5f)
-            addActionListener { exportPdf() }
-        })
-'@
-          $text = $text.Replace($compactGenerate, '')
-
-          $start = $text.IndexOf('    private fun buildRightPanel():JComponent {')
-          $end = $text.IndexOf('    private fun buildFooter():JComponent', $start)
-          if ($start -lt 0 -or $end -le $start) { throw 'buildRightPanel nao encontrado' }
-
-          $right = @'
-    private fun buildRightPanel():JComponent {
-        val p = RoundedPanel(16, V2_BG_2, V2_BORDER_SOFT).apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            border = EmptyBorder(10, 8, 10, 8)
-            preferredSize = Dimension(220, 1)
-            minimumSize = Dimension(214, 1)
-        }
-
-        p.add(label("▣  Capa e Exportação", 16f, Font.BOLD, V2_TEXT))
-        p.add(gap(10))
-
-        includeCover.foreground = Color(207,223,240)
-        includeCover.background = V2_BG_2
-        includeCover.isBorderPainted = false
-        includeCover.isFocusPainted = false
-        includeCover.horizontalAlignment = SwingConstants.LEFT
-        includeCover.alignmentX = LEFT_ALIGNMENT
-        includeCover.maximumSize = Dimension(Int.MAX_VALUE, 32)
-        includeCover.addActionListener { styleCoverToggle() }
-        styleCoverToggle()
-        p.add(includeCover)
-        p.add(gap(8))
-
-        p.add(RoundedPanel(12, Color(26,48,72), V2_BORDER_SOFT).apply {
-            layout = BorderLayout()
-            maximumSize = Dimension(Int.MAX_VALUE, 220)
-            preferredSize = Dimension(198, 220)
-            border = EmptyBorder(7,7,7,7)
-            coverPreview.horizontalAlignment = SwingConstants.CENTER
-            coverPreview.verticalAlignment = SwingConstants.CENTER
-            add(coverPreview, BorderLayout.CENTER)
-        })
-
-        p.add(gap(8))
-        p.add(controlButton("▧  Trocar capa") { changeCover() }.apply {
-            maximumSize = Dimension(Int.MAX_VALUE, 40)
-            alignmentX = LEFT_ALIGNMENT
-        })
-
-        p.add(Box.createVerticalGlue())
-        p.add(greenButton("▣  GERAR PDF", "Exportar documento final") { exportPdf() })
-        return p
-    }
-
-'@
-
-          $text = $text.Substring(0, $start) + $right + $text.Substring($end)
+          $oldWorkspace = 'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER)}'
+          $newWorkspace = 'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}'
+          $text = $text.Replace($oldWorkspace, $newWorkspace)
+          $text = [regex]::Replace($text, '(?s)\s*controls\.add\(Box\.createHorizontalStrut\(8\)\)\s*controls\.add\(StyledButton\("GERAR PDF".*?\n\s*\}\)', '')
+          $right = [string]::Join("`n", @(
+            '    private fun buildRightPanel():JComponent {',
+            '        val p = RoundedPanel(16, V2_BG_2, V2_BORDER_SOFT).apply {',
+            '            layout = BoxLayout(this, BoxLayout.Y_AXIS)',
+            '            border = EmptyBorder(10, 8, 10, 8)',
+            '            preferredSize = Dimension(220, 1)',
+            '            minimumSize = Dimension(214, 1)',
+            '        }',
+            '',
+            '        p.add(label("▣  Capa e Exportação", 16f, Font.BOLD, V2_TEXT))',
+            '        p.add(gap(10))',
+            '        includeCover.foreground = Color(207,223,240)',
+            '        includeCover.background = V2_BG_2',
+            '        includeCover.isBorderPainted = false',
+            '        includeCover.isFocusPainted = false',
+            '        includeCover.horizontalAlignment = SwingConstants.LEFT',
+            '        includeCover.alignmentX = LEFT_ALIGNMENT',
+            '        includeCover.maximumSize = Dimension(Int.MAX_VALUE, 32)',
+            '        includeCover.addActionListener { styleCoverToggle() }',
+            '        styleCoverToggle()',
+            '        p.add(includeCover)',
+            '        p.add(gap(8))',
+            '',
+            '        p.add(RoundedPanel(12, Color(26,48,72), V2_BORDER_SOFT).apply {',
+            '            layout = BorderLayout()',
+            '            maximumSize = Dimension(Int.MAX_VALUE, 220)',
+            '            preferredSize = Dimension(198, 220)',
+            '            border = EmptyBorder(7,7,7,7)',
+            '            coverPreview.horizontalAlignment = SwingConstants.CENTER',
+            '            coverPreview.verticalAlignment = SwingConstants.CENTER',
+            '            add(coverPreview, BorderLayout.CENTER)',
+            '        })',
+            '        p.add(gap(8))',
+            '        p.add(controlButton("▧  Trocar capa") { changeCover() }.apply {',
+            '            maximumSize = Dimension(Int.MAX_VALUE, 40)',
+            '            alignmentX = LEFT_ALIGNMENT',
+            '        })',
+            '        p.add(Box.createVerticalGlue())',
+            '        p.add(greenButton("▣  GERAR PDF", "Exportar documento final") { exportPdf() })',
+            '        return p',
+            '    }',
+            ''
+          ))
+          $pattern = '(?s)    private fun buildRightPanel\(\):JComponent \{.*?(?=    private fun buildFooter\(\):JComponent)'
+          if (-not [regex]::IsMatch($text, $pattern)) { throw 'buildRightPanel nao encontrado' }
+          $text = [regex]::Replace($text, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $right })
           Set-Content $path $text -Encoding UTF8
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add $path
@@ -130,7 +111,7 @@ jobs:
           tag_name: v8-pdf-editor-cover-restored-20260911
           name: Monitor de Notícias V8 + Editor PDF — Capa Restaurada
           body: |
-            Corrige a interpretação do ajuste anterior: mantém a capa padrão, preview, trocar capa e gerar PDF. Remove somente Título da capa, Autor, Qualidade de exportação e o quadro informativo azul. Mantém sidebar final, corte e qualidade.
+            Mantém capa padrão, preview, trocar capa e gerar PDF. Remove somente Título da capa, Autor, Qualidade de exportação e o quadro informativo azul. Mantém sidebar final, corte e qualidade.
           files: |
             release/Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip
             release/Monitor-de-Noticias-V8-Editor-PDF-Capa-Restaurada-Windows-Portable.zip.sha256
