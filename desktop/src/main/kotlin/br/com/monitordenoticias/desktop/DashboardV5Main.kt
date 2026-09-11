@@ -140,36 +140,39 @@ private fun V5App(c: DesktopControllerV5) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(V5Bg)) {
-        Row(Modifier.weight(1f).fillMaxWidth()) {
-            V5Sidebar(section, { section = it }, c, tick)
-            Column(Modifier.weight(1f).fillMaxHeight()) {
-                if (section == V5Section.HOME) {
-                    V5HomeHeader(c, { section = it }, tick)
-                    V5Home(c, { section = it }, tick)
-                } else {
-                    V5PageHeader(section, c, tick)
-                    Box(
-                        Modifier.weight(1f).fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 10.dp)
-                    ) {
-                        when (section) {
-                            V5Section.NEWS -> V5NewsScreen(c, tick)
-                            V5Section.VIDEOS -> V5VideosScreen(c, tick)
-                            V5Section.DEMANDS -> V5DemandsScreen(c, tick)
-                            V5Section.SOURCES -> V5SourcesScreen(c, tick)
-                            V5Section.HISTORY -> V5HistoryScreen(c, tick)
-                            V5Section.TERMS -> V5TermsScreen(c, tick)
-                            V5Section.STOP -> V5StopScreen(c, tick)
-                            V5Section.SETTINGS -> V5SettingsScreen(c, tick)
-                            V5Section.PDF_EDITOR -> PdfEditorScreenV2()
-                            else -> Unit
+    if (section == V5Section.PDF_EDITOR) {
+        PdfEditorScreenV2 { section = V5Section.HOME }
+    } else {
+        Column(Modifier.fillMaxSize().background(V5Bg)) {
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                V5Sidebar(section, { section = it }, c, tick)
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    if (section == V5Section.HOME) {
+                        V5HomeHeader(c, { section = it }, tick)
+                        V5Home(c, { section = it }, tick)
+                    } else {
+                        V5PageHeader(section, c, tick)
+                        Box(
+                            Modifier.weight(1f).fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 10.dp)
+                        ) {
+                            when (section) {
+                                V5Section.NEWS -> V5NewsScreen(c, tick)
+                                V5Section.VIDEOS -> V5VideosScreen(c, tick)
+                                V5Section.DEMANDS -> V5DemandsScreen(c, tick)
+                                V5Section.SOURCES -> V5SourcesScreen(c, tick)
+                                V5Section.HISTORY -> V5HistoryScreen(c, tick)
+                                V5Section.TERMS -> V5TermsScreen(c, tick)
+                                V5Section.STOP -> V5StopScreen(c, tick)
+                                V5Section.SETTINGS -> V5SettingsScreen(c, tick)
+                                else -> Unit
+                            }
                         }
                     }
                 }
             }
+            V5Footer(c, tick)
         }
-        V5Footer(c, tick)
     }
 }
 
@@ -1824,5 +1827,6 @@ private suspend fun V5FetchWeather(): V5Weather? = withContext(Dispatchers.IO) {
         )
     }.getOrNull()
 }
+
 
 

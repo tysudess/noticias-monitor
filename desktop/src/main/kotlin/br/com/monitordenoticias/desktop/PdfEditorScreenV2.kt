@@ -62,9 +62,9 @@ private data class PdfV2Page(val uid: String = UUID.randomUUID().toString(), val
 private data class PdfV2Snapshot(val pages: List<PdfV2Page>, val selected: Int)
 
 @Composable
-fun PdfEditorScreenV2() { SwingPanel(modifier = Modifier.fillMaxSize(), factory = { PdfEditorV2Panel() }) }
+fun PdfEditorScreenV2(onExit: () -> Unit = {}) { SwingPanel(modifier = Modifier.fillMaxSize(), factory = { PdfEditorV2Panel(onExit) }) }
 
-private class PdfEditorV2Panel : JPanel(BorderLayout()) {
+private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLayout()) {
     private val pages = mutableListOf<PdfV2Page>()
     private val undo = ArrayDeque<PdfV2Snapshot>()
     private val redo = ArrayDeque<PdfV2Snapshot>()
@@ -114,7 +114,7 @@ private class PdfEditorV2Panel : JPanel(BorderLayout()) {
         val right=JPanel(FlowLayout(FlowLayout.RIGHT,14,25)).apply{isOpaque=false;border=EmptyBorder(0,0,0,14)}
         right.add(statusPill("⬟  Proxy desativado",V2_YELLOW));right.add(statusPill("◷  Automação ativa",V2_GREEN))
         right.add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;border=EmptyBorder(0,22,0,0);clockDate.foreground=Color(190,207,228);clockDate.font=clockDate.font.deriveFont(13f);clockDate.alignmentX=RIGHT_ALIGNMENT;clockTime.foreground=V2_TEXT;clockTime.font=clockTime.font.deriveFont(Font.BOLD,20f);clockTime.alignmentX=RIGHT_ALIGNMENT;add(clockDate);add(clockTime)})
-        right.add(styledSquareButton("⚙") { JOptionPane.showMessageDialog(this,"Configurações do Monitor ficam na aba Configurações.","Editor de PDF",JOptionPane.INFORMATION_MESSAGE) })
+        right.add(styledSquareButton("⚙") { onExit() })
         header.add(right,BorderLayout.EAST);return header
     }
 
@@ -211,3 +211,4 @@ private fun rotateV2(src:BufferedImage,degrees:Int):BufferedImage{val n=((degree
 private fun flipHorizontalV2(src:BufferedImage):BufferedImage{val dst=BufferedImage(src.width,src.height,BufferedImage.TYPE_INT_RGB);val g=dst.createGraphics();g.color=Color.WHITE;g.fillRect(0,0,dst.width,dst.height);val tx=AffineTransform();tx.translate(src.width.toDouble(),0.0);tx.scale(-1.0,1.0);g.drawImage(src,tx,null);g.dispose();return dst}
 private fun copyV2(src:BufferedImage):BufferedImage{val dst=BufferedImage(src.width,src.height,BufferedImage.TYPE_INT_RGB);val g=dst.createGraphics();g.color=Color.WHITE;g.fillRect(0,0,dst.width,dst.height);g.drawImage(src,0,0,null);g.dispose();return dst}
 private fun ensureRgbV2(src:BufferedImage)=if(src.type==BufferedImage.TYPE_INT_RGB)src else copyV2(src)
+
