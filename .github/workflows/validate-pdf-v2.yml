@@ -1,0 +1,26 @@
+name: Validate PDF V2
+on:
+  push:
+    branches: [work/v8-next]
+    paths:
+      - '.github/workflows/validate-pdf-v2.yml'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v8-next
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Compile desktop
+        shell: pwsh
+        run: gradle :desktop:compileKotlin --stacktrace
