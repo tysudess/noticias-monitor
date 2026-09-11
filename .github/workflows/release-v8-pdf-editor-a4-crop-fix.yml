@@ -1,0 +1,268 @@
+name: Release V8 PDF Editor A4 Crop Fix Portable
+
+on:
+  push:
+    branches:
+      - work/v8-next-a4-crop-fix
+    paths:
+      - '.github/workflows/release-v8-pdf-editor-a4-crop-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v8-next-a4-crop-fix
+          fetch-depth: 0
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Apply A4 layout and exact crop fixes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = @'
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+          dash_path = root / 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt'
+          pdf_path = root / 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
+
+          dash = dash_path.read_text(encoding='utf-8')
+          old_dash = '''    if (section == V5Section.PDF_EDITOR) {
+                  PdfEditorScreenV2 { section = V5Section.HOME }
+              } else {
+          '''
+          new_dash = '''    if (section == V5Section.PDF_EDITOR) {
+                  Column(Modifier.fillMaxSize().background(V5Bg)) {
+                      Row(Modifier.weight(1f).fillMaxWidth()) {
+                          V5Sidebar(section, { section = it }, c, tick)
+                          Box(Modifier.weight(1f).fillMaxHeight()) {
+                              PdfEditorScreenV2 { section = V5Section.HOME }
+                          }
+                      }
+                      V5Footer(c, tick)
+                  }
+              } else {
+          '''
+          if old_dash not in dash:
+              raise SystemExit('Bloco PDF_EDITOR não encontrado no DashboardV5Main.kt')
+          dash = dash.replace(old_dash, new_dash, 1)
+          dash_path.write_text(dash, encoding='utf-8')
+
+          src = pdf_path.read_text(encoding='utf-8')
+
+          src = src.replace('preferredSize=Dimension(282,1)', 'preferredSize=Dimension(310,1)')
+          src = src.replace('preferredSize=Dimension(255,if(sub==null)54 else 72)', 'preferredSize=Dimension(285,if(sub==null)54 else 72)')
+          src = src.replace('maximumSize=Dimension(220,38)', 'maximumSize=Dimension(245,38)')
+          src = src.replace('focusReorder(){thumbList.requestFocusInWindow();JOptionPane.showMessageDialog(this,"Arraste as miniaturas na área \'Páginas do documento\' para mudar a ordem.","Reordenar",JOptionPane.INFORMATION_MESSAGE)}', 'focusReorder(){thumbList.requestFocusInWindow();JOptionPane.showMessageDialog(this,"Arraste as miniaturas na coluna lateral de páginas para mudar a ordem.","Reordenar",JOptionPane.INFORMATION_MESSAGE)}')
+          src = src.replace('val s=min(102.0/src.width,80.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))', 'val s=min(104.0/src.width,122.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))')
+
+          new_center = '''    private fun buildCenterPanel():JComponent {
+                  val p = RoundedPanel(16, V2_BG_2, V2_BORDER_SOFT).apply {
+                      layout = BorderLayout(0, 8)
+                      border = EmptyBorder(12, 13, 12, 13)
+                  }
+
+                  val titleBar = JPanel(BorderLayout()).apply { isOpaque = false }
+                  titleBar.add(
+                      JPanel().apply {
+                          layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                          isOpaque = false
+                          add(label("▣  Visualização do documento", 16f, Font.BOLD, V2_TEXT))
+                          add(label("Adicione uma imagem ou PDF para começar a editar", 13f, Font.PLAIN, V2_MUTED))
+                      },
+                      BorderLayout.WEST
+                  )
+                  val modes = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply { isOpaque = false }
+                  styleModeToggle(viewThumb, true)
+                  styleModeToggle(viewList, false)
+                  ButtonGroup().apply { add(viewThumb); add(viewList) }
+                  viewThumb.addActionListener { setThumbMode(true) }
+                  viewList.addActionListener { setThumbMode(false) }
+                  modes.add(viewThumb)
+                  modes.add(viewList)
+                  titleBar.add(modes, BorderLayout.EAST)
+                  p.add(titleBar, BorderLayout.NORTH)
+
+                  val body = JPanel(BorderLayout(10, 0)).apply { isOpaque = false }
+
+                  val thumbs = RoundedPanel(12, Color(8, 28, 48), V2_BORDER_SOFT).apply {
+                      layout = BorderLayout(0, 8)
+                      border = EmptyBorder(8, 8, 8, 8)
+                      preferredSize = Dimension(172, 1)
+                      minimumSize = Dimension(158, 320)
+                  }
+                  val th = JPanel(BorderLayout()).apply { isOpaque = false }
+                  th.add(label("▦  Páginas", 14f, Font.BOLD, V2_TEXT), BorderLayout.WEST)
+                  pageCount.foreground = Color(199, 218, 239)
+                  pageCount.font = pageCount.font.deriveFont(12f)
+                  th.add(pageCount, BorderLayout.SOUTH)
+                  thumbs.add(th, BorderLayout.NORTH)
+                  configureThumbList()
+                  thumbs.add(
+                      JScrollPane(thumbList).apply {
+                          border = null
+                          viewport.background = Color(8, 28, 48)
+                          horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+                          verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+                      },
+                      BorderLayout.CENTER
+                  )
+                  body.add(thumbs, BorderLayout.WEST)
+
+                  val previewStack = JPanel(BorderLayout(0, 8)).apply { isOpaque = false }
+                  preview.background = Color(8, 26, 45)
+                  preview.border = BorderFactory.createDashedBorder(Color(86, 124, 165), 2f, 6f, 4f, false)
+                  preview.minimumSize = Dimension(430, 620)
+                  preview.onCrop = { c ->
+                      val idx = thumbList.selectedIndex
+                      if (idx in pages.indices) {
+                          pushUndo()
+                          pages[idx].crop = c
+                          redo.clear()
+                          refreshAll(selectIndex = idx)
+                      }
+                  }
+                  installFileDrop(preview)
+                  previewStack.add(preview, BorderLayout.CENTER)
+
+                  val controls = JPanel(FlowLayout(FlowLayout.CENTER, 10, 8)).apply { isOpaque = false }
+                  controls.add(squareControl("−") { setZoom(zoom - .15) })
+                  zoomLabel.foreground = V2_TEXT
+                  zoomLabel.font = zoomLabel.font.deriveFont(15f)
+                  zoomLabel.preferredSize = Dimension(58, 36)
+                  zoomLabel.horizontalAlignment = SwingConstants.CENTER
+                  controls.add(zoomLabel)
+                  controls.add(squareControl("+") { setZoom(zoom + .15) })
+                  controls.add(controlButton("⛶  Ajustar") { setZoom(1.0) })
+                  controls.add(Box.createHorizontalStrut(90))
+                  controls.add(squareControl("↶") { undo() })
+                  controls.add(squareControl("↷") { redo() })
+                  controls.add(controlButton("▱  Limpar") { clearAll() })
+                  previewStack.add(controls, BorderLayout.SOUTH)
+                  body.add(previewStack, BorderLayout.CENTER)
+
+                  p.add(body, BorderLayout.CENTER)
+                  return p
+              }'''
+          src, n = re.subn(r'    private fun buildCenterPanel\(\):JComponent \{.*?\n    private fun buildRightPanel\(\):JComponent \{', lambda m: new_center + '\n\n    private fun buildRightPanel():JComponent {', src, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('buildCenterPanel não encontrado para substituição')
+
+          old_conf = '    private fun configureThumbList(){thumbList.layoutOrientation=JList.HORIZONTAL_WRAP;thumbList.visibleRowCount=1;thumbList.fixedCellWidth=126;thumbList.fixedCellHeight=118;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}'
+          new_conf = '    private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=132;thumbList.fixedCellHeight=150;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}'
+          src = src.replace(old_conf, new_conf, 1)
+
+          old_mode = '    private fun setThumbMode(t:Boolean){if(t){thumbList.layoutOrientation=JList.HORIZONTAL_WRAP;thumbList.visibleRowCount=1;thumbList.fixedCellWidth=126;thumbList.fixedCellHeight=118}else{thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=62};thumbList.revalidate();thumbList.repaint()}'
+          new_mode = '    private fun setThumbMode(t:Boolean){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;if(t){thumbList.fixedCellWidth=132;thumbList.fixedCellHeight=150}else{thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=68};thumbList.revalidate();thumbList.repaint()}'
+          src = src.replace(old_mode, new_mode, 1)
+
+          old_start = '    private fun startCrop(){val idx=thumbList.selectedIndex;if(idx !in pages.indices){showError("Selecione uma página para recortar.");return};preview.cropMode=true;preview.cursor=Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);preview.requestFocusInWindow()}'
+          new_start = '''    private fun startCrop(){
+                  val idx = thumbList.selectedIndex
+                  if(idx !in pages.indices){showError("Selecione uma página para recortar.");return}
+                  val p = pages[idx]
+                  preview.setPage(runCatching{renderTransformedSource(p,120)}.getOrNull(),zoom,p.crop)
+                  preview.cropMode=true
+                  preview.cursor=Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR)
+                  preview.requestFocusInWindow()
+                  preview.repaint()
+              }'''
+          if old_start not in src:
+              raise SystemExit('startCrop original não encontrado')
+          src = src.replace(old_start, new_start, 1)
+
+          old_refresh = '    private fun refreshPreview(){val idx=thumbList.selectedIndex;if(idx !in pages.indices){preview.setPage(null,zoom,null);return};val p=pages[idx];preview.setPage(runCatching{renderTransformedSource(p,120)}.getOrNull(),zoom,p.crop)}'
+          new_refresh = '''    private fun refreshPreview(){
+                  val idx=thumbList.selectedIndex
+                  if(idx !in pages.indices){preview.setPage(null,zoom,null);return}
+                  val p=pages[idx]
+                  val img=runCatching{if(p.crop!=null)renderFinalPage(p,120) else renderTransformedSource(p,120)}.getOrNull()
+                  preview.setPage(img,zoom,null)
+              }'''
+          if old_refresh not in src:
+              raise SystemExit('refreshPreview original não encontrado')
+          src = src.replace(old_refresh, new_refresh, 1)
+
+          old_final = '    private fun renderFinalPage(page:PdfV2Page,dpi:Int):BufferedImage {var out=renderTransformedSource(page,dpi);page.crop?.let{c->val x1=(c.x*out.width).roundToInt().coerceIn(0,out.width-1);val y1=(c.y*out.height).roundToInt().coerceIn(0,out.height-1);val x2=((c.x+c.w)*out.width).roundToInt().coerceIn(x1+1,out.width);val y2=((c.y+c.h)*out.height).roundToInt().coerceIn(y1+1,out.height);out=copyV2(out.getSubimage(x1,y1,x2-x1,y2-y1))};return out}'
+          new_final = '''    private fun renderFinalPage(page:PdfV2Page,dpi:Int):BufferedImage {
+                  var out=renderTransformedSource(page,dpi)
+                  page.crop?.let{c->
+                      val nx=c.x.coerceIn(0.0,1.0)
+                      val ny=c.y.coerceIn(0.0,1.0)
+                      val nw=c.w.coerceIn(0.0,1.0-nx)
+                      val nh=c.h.coerceIn(0.0,1.0-ny)
+                      val x1=Math.floor(nx*out.width).toInt().coerceIn(0,out.width-1)
+                      val y1=Math.floor(ny*out.height).toInt().coerceIn(0,out.height-1)
+                      val x2=Math.ceil((nx+nw)*out.width).toInt().coerceIn(x1+1,out.width)
+                      val y2=Math.ceil((ny+nh)*out.height).toInt().coerceIn(y1+1,out.height)
+                      out=copyV2(out.getSubimage(x1,y1,x2-x1,y2-y1))
+                  }
+                  return out
+              }'''
+          if old_final not in src:
+              raise SystemExit('renderFinalPage original não encontrado')
+          src = src.replace(old_final, new_final, 1)
+
+          pdf_path.write_text(src, encoding='utf-8')
+          '@
+          $script | python -
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt
+          git diff --cached --check
+          git commit -m 'fix: PDF editor A4 preview thumbnails and exact crop'
+          git push origin HEAD:work/v8-next-a4-crop-fix
+
+      - name: Build Windows portable
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Package ZIP and checksum
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if (-not (Test-Path $root)) { throw 'Portable não foi gerado.' }
+          $exe = Join-Path $root 'MonitorDeNoticias.exe'
+          if (-not (Test-Path $exe)) { throw 'MonitorDeNoticias.exe ausente.' }
+          New-Item -ItemType Directory -Force -Path (Join-Path $root 'data') | Out-Null
+          $zipName = 'Monitor-de-Noticias-V8-Editor-PDF-V2-A4-Corte-Windows-Portable.zip'
+          if (Test-Path $zipName) { Remove-Item $zipName -Force }
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zipName -CompressionLevel Optimal
+          $hash = (Get-FileHash $zipName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zipName" | Set-Content "$zipName.sha256"
+          Write-Host "SHA256=$hash"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'v8-pdf-editor-a4-crop-fix-20260911'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) {
+            gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag
+          }
+          gh release create $tag `
+            'Monitor-de-Noticias-V8-Editor-PDF-V2-A4-Corte-Windows-Portable.zip' `
+            'Monitor-de-Noticias-V8-Editor-PDF-V2-A4-Corte-Windows-Portable.zip.sha256' `
+            --repo tysudess/noticias-monitor `
+            --target work/v8-next-a4-crop-fix `
+            --title 'Monitor de Notícias V8 + Editor de PDF V2 A4/Corte — Windows Portable' `
+            --notes 'Baseada no commit aprovado 4c2aede. Ajusta miniaturas verticais, visualização maior para A4, mantém abas laterais do Monitor visíveis, melhora botões laterais e aplica corte real exatamente na área selecionada.'
