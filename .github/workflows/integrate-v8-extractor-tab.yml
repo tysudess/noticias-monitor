@@ -8,6 +8,8 @@ on:
     paths:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
       - 'tools/integrate-v8-extractor-tab.py'
       - '.github/workflows/integrate-v8-extractor-tab.yml'
 
@@ -36,7 +38,7 @@ jobs:
           "PDF_HASH=$hash" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "PDF aprovado: $hash"
 
-      - name: Integrar aba Extrator
+      - name: Integrar aba Extrator e motor v3.0.1
         run: python tools/integrate-v8-extractor-tab.py
 
       - name: Garantir que Editor PDF não mudou
@@ -67,6 +69,8 @@ jobs:
           $dash = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
           $ext = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
           $engine = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
+          $session = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt' -Raw
+          $html = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt' -Raw
           if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Item Extrator ausente da sidebar.' }
           if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota da aba Extrator ausente.' }
           foreach ($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) {
@@ -74,10 +78,14 @@ jobs:
           }
           if ($ext -match 'ANALISAR') { throw 'Fluxo final não pode exibir ANALISAR.' }
           if ($ext -notmatch 'Formato de saída: MP4') { throw 'Texto de formato ausente.' }
-          foreach ($required in @('--live-from-start','ffprobe','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime')) {
+          foreach ($required in @('--live-from-start','ffprobe','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','--hls-use-mpegts','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates')) {
             if ($engine -notmatch [regex]::Escape($required)) { throw "Motor v3.0.1 incompleto: $required" }
           }
-          Write-Host 'Estrutura inicial e motor YouTube/H264 validados.'
+          foreach ($required in @('ProtectedData','CurrentUser','globoplay.session.dpapi','createRuntimeCookieFile')) {
+            if ($session -notmatch [regex]::Escape($required)) { throw "Sessão Globoplay incompleta: $required" }
+          }
+          if ($html -notmatch 'take\(15\)') { throw 'Fallback Globoplay não limita a 15 m3u8.' }
+          Write-Host 'Estrutura, YouTube/H264 e Globoplay v3.0.1 validados.'
 
       - name: Commitar integração gerada
         shell: powershell
@@ -88,6 +96,11 @@ jobs:
           }
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
-          git commit -m 'Integrate extractor video tab into monitor'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt `
+                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt `
+                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt `
+                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt `
+                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt
+          git diff --cached --check
+          git commit -m 'Integrate extractor video tab and Globoplay v3.0.1 engine'
           git push origin HEAD:work/v8-extrator-v301-tab
