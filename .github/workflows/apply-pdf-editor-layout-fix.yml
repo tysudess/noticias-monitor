@@ -35,8 +35,8 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin 2c07b4bf9200b365501668b2b40c9782787b23c6
-          git cherry-pick 2c07b4bf9200b365501668b2b40c9782787b23c6
+          git fetch origin 5304708003a825bd42a77064a807f439f3f0d47d
+          git cherry-pick 5304708003a825bd42a77064a807f439f3f0d47d
 
       - name: Validate compile
         shell: pwsh
