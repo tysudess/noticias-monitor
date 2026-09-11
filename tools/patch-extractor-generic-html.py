@@ -49,3 +49,9 @@ compat_patch = ROOT / 'tools/patch-extractor-compat-retry.py'
 if not compat_patch.exists():
     raise SystemExit('patch-extractor-compat-retry.py ausente.')
 runpy.run_path(str(compat_patch), run_name='__main__')
+
+# Diretórios portáteis sempre relativos ao launcher real do jpackage.
+paths_patch = ROOT / 'tools/patch-extractor-portable-paths.py'
+if not paths_patch.exists():
+    raise SystemExit('patch-extractor-portable-paths.py ausente.')
+runpy.run_path(str(paths_patch), run_name='__main__')
