@@ -13,8 +13,10 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'tools/integrate-v8-extractor-tab.py'
+      - 'tools/patch-extractor-hidden-process.py'
       - '.github/workflows/integrate-v8-extractor-tab.yml'
 
 permissions:
@@ -44,6 +46,9 @@ jobs:
 
       - name: Integrar aba Extrator e motor v3.0.1
         run: python tools/integrate-v8-extractor-tab.py
+
+      - name: Ativar subprocessos ocultos
+        run: python tools/patch-extractor-hidden-process.py
 
       - name: Garantir que Editor PDF não mudou
         shell: powershell
@@ -77,6 +82,7 @@ jobs:
           $html = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt' -Raw
           $login = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
           $r7 = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt' -Raw
+          $hidden = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt' -Raw
           $updater = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt' -Raw
           $gradle = Get-Content 'desktop/build.gradle.kts' -Raw
           if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Item Extrator ausente da sidebar.' }
@@ -86,7 +92,7 @@ jobs:
           }
           if ($ext -match 'ANALISAR') { throw 'Fluxo final não pode exibir ANALISAR.' }
           if ($ext -notmatch 'Formato de saída: MP4') { throw 'Texto de formato ausente.' }
-          foreach ($required in @('--live-from-start','ffprobe','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','--hls-use-mpegts','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','downloadR7(cleanUrl')) {
+          foreach ($required in @('--live-from-start','ffprobe','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','--hls-use-mpegts','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','downloadR7(cleanUrl','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree')) {
             if ($engine -notmatch [regex]::Escape($required)) { throw "Motor v3.0.1 incompleto: $required" }
           }
           foreach ($required in @('ProtectedData','CurrentUser','globoplay.session.dpapi','createRuntimeCookieFile')) {
@@ -96,6 +102,9 @@ jobs:
           if ($r7 -notmatch 'take\(15\)') { throw 'Fallback R7/Record não limita a 15 mídias.' }
           foreach ($required in @('.m3u8','.mp4','contentUrl','Proxy-Authorization')) {
             if ($r7 -notmatch [regex]::Escape($required)) { throw "Fallback R7/Record incompleto: $required" }
+          }
+          foreach ($required in @('-WindowStyle','Hidden','Stop-Process','ParentProcessId')) {
+            if ($hidden -notmatch [regex]::Escape($required)) { throw "Launcher oculto incompleto: $required" }
           }
           foreach ($required in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext','saveNetscapeCookies')) {
             if ($login -notmatch [regex]::Escape($required)) { throw "Login interno Globoplay incompleto: $required" }
@@ -109,7 +118,7 @@ jobs:
           foreach ($required in @('LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO')) {
             if ($ext -notmatch [regex]::Escape($required)) { throw "Controle da tela ausente: $required" }
           }
-          Write-Host 'Estrutura, YouTube/H264, R7/Record, Globoplay, login interno e atualização yt-dlp validados.'
+          Write-Host 'Estrutura, subprocessos ocultos, YouTube/H264, R7/Record, Globoplay, login interno e atualização yt-dlp validados.'
 
       - name: Commitar integração gerada
         shell: powershell
@@ -127,6 +136,7 @@ jobs:
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt `
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt `
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt `
+                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt `
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt `
                   desktop/build.gradle.kts
           git diff --cached --check
