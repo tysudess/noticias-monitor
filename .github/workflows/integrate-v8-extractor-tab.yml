@@ -7,6 +7,7 @@ on:
       - work/v8-extrator-v301-tab
     paths:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'
       - 'tools/integrate-v8-extractor-tab.py'
       - '.github/workflows/integrate-v8-extractor-tab.yml'
 
@@ -38,6 +39,11 @@ jobs:
       - name: Integrar aba Extrator
         run: python tools/integrate-v8-extractor-tab.py
 
+      - name: Normalizar módulo do motor
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; p=Path(r'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'); s=p.read_text(encoding='utf-8'); s=s.replace(chr(34)+'$1://***:***@'+chr(34), chr(34)+'\\$1://***:***@'+chr(34)); p.write_text(s, encoding='utf-8')"
+
       - name: Garantir que Editor PDF não mudou
         shell: powershell
         run: |
@@ -65,16 +71,18 @@ jobs:
         run: |
           $dash = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
           $ext = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
+          $engine = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
           if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Item Extrator ausente da sidebar.' }
           if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota da aba Extrator ausente.' }
           foreach ($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) {
-            if ($ext -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" }
+            if (($ext + $engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" }
           }
           if ($ext -match 'ANALISAR') { throw 'Fluxo final não pode exibir ANALISAR.' }
           if ($ext -notmatch 'Formato de saída: MP4') { throw 'Texto de formato ausente.' }
-          if ($ext -notmatch '--trim-filenames') { throw 'trim-filenames ausente.' }
-          if ($ext -notmatch '--fragment-retries') { throw 'fragment-retries ausente.' }
-          Write-Host 'Estrutura inicial do Extrator validada.'
+          foreach ($required in @('--live-from-start','ffprobe','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime')) {
+            if ($engine -notmatch [regex]::Escape($required)) { throw "Motor v3.0.1 incompleto: $required" }
+          }
+          Write-Host 'Estrutura inicial e motor YouTube/H264 validados.'
 
       - name: Commitar integração gerada
         shell: powershell
@@ -85,6 +93,6 @@ jobs:
           }
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
-          git commit -m 'Integrate extractor video tab into monitor'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt
+          git commit -m 'Integrate extractor video tab and validate v3.0.1 engine'
           git push origin HEAD:work/v8-extrator-v301-tab
