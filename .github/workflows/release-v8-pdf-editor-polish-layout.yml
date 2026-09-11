@@ -1,0 +1,182 @@
+name: Release V8 PDF Editor Polished Layout Portable
+
+on:
+  push:
+    branches:
+      - work/v8-next-a4-crop-fix
+    paths:
+      - '.github/workflows/release-v8-pdf-editor-polish-layout.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v8-next-a4-crop-fix
+          fetch-depth: 0
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Apply polished editor layout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = @'
+          from pathlib import Path
+          import re
+
+          pdf_path = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt')
+          src = pdf_path.read_text(encoding='utf-8')
+
+          def repl(old, new, label):
+              global src
+              if old not in src:
+                  raise SystemExit(f'Bloco não encontrado: {label}')
+              src = src.replace(old, new, 1)
+
+          # Mantem a qualidade/corte da versão anterior e refina a distribuição visual.
+          repl('header.isOpaque=false; header.preferredSize=Dimension(1,112); header.border=BorderFactory.createMatteBorder(0,0,1,0,V2_BORDER_SOFT)',
+               'header.isOpaque=false; header.preferredSize=Dimension(1,88); header.border=BorderFactory.createMatteBorder(0,0,1,0,V2_BORDER_SOFT)',
+               'altura do header')
+          repl('val left=JPanel(FlowLayout(FlowLayout.LEFT,18,14)).apply{isOpaque=false}',
+               'val left=JPanel(FlowLayout(FlowLayout.LEFT,12,8)).apply{isOpaque=false}',
+               'margem header esquerda')
+          repl('preferredSize=Dimension(72,78)', 'preferredSize=Dimension(58,68)', 'tamanho icone pdf')
+          repl('g2.fillRoundRect(8,3,48,68,8,8);g2.color=Color(31,132,255);g2.stroke=BasicStroke(3f);g2.drawRoundRect(8,3,48,68,8,8);g2.color=Color(238,57,61);g2.fillRoundRect(28,39,40,27,6,6);g2.color=Color.WHITE;g2.font=Font("SansSerif",Font.BOLD,14);g2.drawString("PDF",34,58)',
+               'g2.fillRoundRect(6,4,42,58,8,8);g2.color=Color(31,132,255);g2.stroke=BasicStroke(2.4f);g2.drawRoundRect(6,4,42,58,8,8);g2.color=Color(238,57,61);g2.fillRoundRect(23,35,34,23,6,6);g2.color=Color.WHITE;g2.font=Font("SansSerif",Font.BOLD,12);g2.drawString("PDF",28,51)',
+               'desenho icone pdf')
+          repl('add(label("CENTRAL DE INTELIGÊNCIA DE MÍDIA",14f,Font.BOLD,Color(65,157,255)));add(label("Editor de PDF",30f,Font.BOLD,V2_TEXT));add(label("Monte, reorganize, recorte e exporte PDFs e imagens",15f,Font.PLAIN,V2_MUTED))',
+               'add(label("CENTRAL DE INTELIGÊNCIA DE MÍDIA",13f,Font.BOLD,Color(65,157,255)));add(label("Editor de PDF",27f,Font.BOLD,V2_TEXT));add(label("Monte, reorganize, recorte e exporte PDFs e imagens",13f,Font.PLAIN,V2_MUTED))',
+               'fontes header')
+          repl('val right=JPanel(FlowLayout(FlowLayout.RIGHT,14,25)).apply{isOpaque=false;border=EmptyBorder(0,0,0,14)}',
+               'val right=JPanel(FlowLayout(FlowLayout.RIGHT,10,18)).apply{isOpaque=false;border=EmptyBorder(0,0,0,10)}',
+               'margem header direita')
+          repl('preferredSize=Dimension(180,52)', 'preferredSize=Dimension(154,44)', 'pills header')
+          repl('preferredSize=Dimension(52,52);font=font.deriveFont(Font.BOLD,20f)', 'preferredSize=Dimension(44,44);font=font.deriveFont(Font.BOLD,18f)', 'botao config header')
+          repl('clockTime.font=clockTime.font.deriveFont(Font.BOLD,20f)', 'clockTime.font=clockTime.font.deriveFont(Font.BOLD,18f)', 'relogio header')
+
+          repl('private fun buildWorkspace():JComponent=JPanel(BorderLayout(8,0)).apply{background=V2_BG;border=EmptyBorder(10,10,8,10);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}',
+               'private fun buildWorkspace():JComponent=JPanel(BorderLayout(6,0)).apply{background=V2_BG;border=EmptyBorder(8,8,6,8);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}',
+               'workspace compacto')
+
+          repl('val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(10,7,10,7);preferredSize=Dimension(236,1);minimumSize=Dimension(226,1)}',
+               'val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(9,6,9,6);preferredSize=Dimension(190,1);minimumSize=Dimension(184,1)}',
+               'largura lateral editor')
+          repl('p.add(navButton("⇧","Adicionar arquivos","Imagens ou PDF",V2_BLUE,true){chooseAll()});p.add(gap(8));p.add(navButton("PDF","Adicionar PDF",null,Color(232,74,78)){choosePdfs()});p.add(gap(8));p.add(navButton("✂","Selecionar corte",null,V2_PURPLE){startCrop()});p.add(gap(8));p.add(navButton("▣","Remover páginas",null,V2_RED){deleteSelected()});p.add(gap(8));p.add(navButton("⟳","Girar e espelhar",null,Color(61,157,255)){showTransformMenu()});p.add(gap(8));p.add(navButton("▤","Criar páginas",null,Color(84,153,230)){createBlankPage()});p.add(gap(8));p.add(navButton("▥","Excluir página",null,V2_RED){deleteSelected()});p.add(gap(8));p.add(navButton("▧","Definir capa",null,Color(25,201,142)){changeCover()});p.add(gap(8));p.add(navButton("↕","Reordenar",null,V2_CYAN){focusReorder()});p.add(gap(26))',
+               'p.add(navButton("⇧","Arquivos","Img/PDF",V2_BLUE,true){chooseAll()});p.add(gap(6));p.add(navButton("PDF","PDF",null,Color(232,74,78)){choosePdfs()});p.add(gap(6));p.add(navButton("✂","Corte",null,V2_PURPLE){startCrop()});p.add(gap(6));p.add(navButton("▣","Remover",null,V2_RED){deleteSelected()});p.add(gap(6));p.add(navButton("⟳","Girar",null,Color(61,157,255)){showTransformMenu()});p.add(gap(6));p.add(navButton("▤","Criar",null,Color(84,153,230)){createBlankPage()});p.add(gap(6));p.add(navButton("▥","Excluir",null,V2_RED){deleteSelected()});p.add(gap(6));p.add(navButton("▧","Capa",null,Color(25,201,142)){changeCover()});p.add(gap(6));p.add(navButton("↕","Ordem",null,V2_CYAN){focusReorder()});p.add(gap(12))',
+               'labels laterais curtos')
+          repl('val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,138);preferredSize=Dimension(214,138);border=EmptyBorder(10,8,10,8)}',
+               'val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,118);preferredSize=Dimension(176,118);border=EmptyBorder(8,6,8,6)}',
+               'drop lateral menor')
+          repl('label("☁",28f,Font.BOLD,Color(153,195,239)),label("Arraste imagens",12f,Font.PLAIN,Color(202,219,238)),label("ou PDFs aqui",12f,Font.PLAIN,Color(202,219,238)),label("ou clique para selecionar",10f,Font.PLAIN,V2_MUTED)',
+               'label("☁",24f,Font.BOLD,Color(153,195,239)),label("Arraste",11f,Font.PLAIN,Color(202,219,238)),label("PDF/imagem",11f,Font.PLAIN,Color(202,219,238)),label("ou selecione",9.5f,Font.PLAIN,V2_MUTED)',
+               'texto drop menor')
+          repl('maximumSize=Dimension(202,34)', 'maximumSize=Dimension(164,32)', 'botao drop menor')
+          repl('blueButton("Selecionar arquivos")', 'blueButton("Selecionar")', 'texto botao drop')
+
+          repl('border = EmptyBorder(12, 13, 12, 13)', 'border = EmptyBorder(9, 9, 9, 9)', 'padding painel central')
+          repl('val body = JPanel(BorderLayout(6, 0)).apply { isOpaque = false }', 'val body = JPanel(BorderLayout(5, 0)).apply { isOpaque = false }', 'gap central')
+          repl('preferredSize = Dimension(112, 1)\n            minimumSize = Dimension(104, 320)', 'preferredSize = Dimension(96, 1)\n            minimumSize = Dimension(90, 320)', 'coluna paginas mais fina')
+          repl('th.add(label("▦  Páginas", 14f, Font.BOLD, V2_TEXT), BorderLayout.WEST)', 'th.add(label("▦", 14f, Font.BOLD, V2_TEXT), BorderLayout.WEST)', 'titulo paginas curto')
+          repl('preview.minimumSize = Dimension(620, 640)', 'preview.minimumSize = Dimension(720, 660)', 'preview maior')
+          repl('controls.add(Box.createHorizontalStrut(28))', 'controls.add(Box.createHorizontalStrut(12))', 'controles mais juntos')
+          repl('zoomLabel.preferredSize = Dimension(58, 36)', 'zoomLabel.preferredSize = Dimension(50, 34)', 'zoom menor')
+
+          repl('val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(12,10,12,10);preferredSize=Dimension(260,1);minimumSize=Dimension(250,1)}',
+               'val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(10,8,10,8);preferredSize=Dimension(244,1);minimumSize=Dimension(236,1)}',
+               'painel direito refinado')
+          repl('maximumSize=Dimension(Int.MAX_VALUE,178);preferredSize=Dimension(235,178)', 'maximumSize=Dimension(Int.MAX_VALUE,168);preferredSize=Dimension(222,168)', 'preview capa mais contido')
+          repl('val s=min(218.0/img.width,164.0/img.height);coverPreview.icon=ImageIcon(img.getScaledInstance(max(1,(img.width*s).roundToInt()),max(1,(img.height*s).roundToInt()),Image.SCALE_SMOOTH))',
+               'val s=min(205.0/img.width,154.0/img.height);coverPreview.icon=ImageIcon(img.getScaledInstance(max(1,(img.width*s).roundToInt()),max(1,(img.height*s).roundToInt()),Image.SCALE_SMOOTH))',
+               'preview capa escala')
+          repl('private fun buildFooter():JComponent=JPanel(BorderLayout()).apply{background=Color(4,19,35);preferredSize=Dimension(1,42);border=BorderFactory.createMatteBorder(1,0,0,0,V2_BORDER_SOFT);add(label("Central de Inteligência de Mídia   |   Editor de PDF",11f,Font.PLAIN,Color(161,185,211)).apply{border=EmptyBorder(0,28,0,0)},BorderLayout.WEST);add(label("ϟ  Mais produtividade para o seu conteúdo",11f,Font.PLAIN,Color(170,196,224)).apply{border=EmptyBorder(0,0,0,28)},BorderLayout.EAST)}',
+               'private fun buildFooter():JComponent=JPanel(BorderLayout()).apply{background=Color(4,19,35);preferredSize=Dimension(1,30);border=BorderFactory.createMatteBorder(1,0,0,0,V2_BORDER_SOFT);add(label("Central de Inteligência de Mídia   |   Editor de PDF",10.5f,Font.PLAIN,Color(161,185,211)).apply{border=EmptyBorder(0,18,0,0)},BorderLayout.WEST);add(label("ϟ  Mais produtividade",10.5f,Font.PLAIN,Color(170,196,224)).apply{border=EmptyBorder(0,0,0,18)},BorderLayout.EAST)}',
+               'footer menor')
+
+          repl('private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=88;thumbList.fixedCellHeight=126;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}',
+               'private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=72;thumbList.fixedCellHeight=112;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}',
+               'lista miniaturas refinada')
+          repl('private fun setThumbMode(t:Boolean){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;if(t){thumbList.fixedCellWidth=88;thumbList.fixedCellHeight=126}else{thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=58};thumbList.revalidate();thumbList.repaint()}',
+               'private fun setThumbMode(t:Boolean){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;if(t){thumbList.fixedCellWidth=72;thumbList.fixedCellHeight=112}else{thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=52};thumbList.revalidate();thumbList.repaint()}',
+               'modo miniatura refinado')
+          repl('private fun createThumbnail(page:PdfV2Page):ImageIcon{val src=renderFinalPage(page,58);val s=min(70.0/src.width,98.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))}',
+               'private fun createThumbnail(page:PdfV2Page):ImageIcon{val src=renderFinalPage(page,58);val s=min(56.0/src.width,84.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))}',
+               'thumbnail refinada')
+          repl('l.text="Página ${index+1}";', 'l.text="${index+1}";', 'texto thumbnail curto')
+
+          repl('private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(7,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)46 else 58);preferredSize=Dimension(214,if(sub==null)46 else 58);add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(34,34);layout=BorderLayout();add(label(i,if(i=="PDF")10f else 17f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,13f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,10f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}',
+               'private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(6,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)42 else 52);preferredSize=Dimension(176,if(sub==null)42 else 52);toolTipText=if(sub==null)t else "$t - $sub";add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(30,30);layout=BorderLayout();add(label(i,if(i=="PDF")9.5f else 15.5f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,12.5f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,9.5f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}',
+               'navButton compacto sem cortar')
+          repl('private fun controlButton(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(108,40);font=font.deriveFont(Font.BOLD,12f);addActionListener{a()}}',
+               'private fun controlButton(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(96,36);font=font.deriveFont(Font.BOLD,11.5f);addActionListener{a()}}',
+               'controlButton menor')
+          repl('private fun squareControl(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(46,40);font=font.deriveFont(Font.BOLD,18f);addActionListener{a()}}',
+               'private fun squareControl(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(42,36);font=font.deriveFont(Font.BOLD,16f);addActionListener{a()}}',
+               'squareControl menor')
+          repl('private fun greenButton(a:String,b:String,act:()->Unit):JComponent=StyledButton("",V2_GREEN,Color.WHITE,Color(29,229,123)).apply{layout=BorderLayout();maximumSize=Dimension(Int.MAX_VALUE,68);preferredSize=Dimension(268,68);alignmentX=LEFT_ALIGNMENT;add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(a,16f,Font.BOLD,Color.WHITE).apply{alignmentX=CENTER_ALIGNMENT});add(label(b,11f,Font.PLAIN,Color(225,255,238)).apply{alignmentX=CENTER_ALIGNMENT})},BorderLayout.CENTER);addActionListener{act()}}',
+               'private fun greenButton(a:String,b:String,act:()->Unit):JComponent=StyledButton("",V2_GREEN,Color.WHITE,Color(29,229,123)).apply{layout=BorderLayout();maximumSize=Dimension(Int.MAX_VALUE,62);preferredSize=Dimension(226,62);alignmentX=LEFT_ALIGNMENT;add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(a,15f,Font.BOLD,Color.WHITE).apply{alignmentX=CENTER_ALIGNMENT});add(label(b,10.5f,Font.PLAIN,Color(225,255,238)).apply{alignmentX=CENTER_ALIGNMENT})},BorderLayout.CENTER);addActionListener{act()}}',
+               'botao gerar menor')
+
+          # Remove import antigo não usado depois da exportação sem perda.
+          src = src.replace('import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory\n', '')
+
+          pdf_path.write_text(src, encoding='utf-8')
+          '@
+          $script | python -
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt
+          git diff --cached --check
+          git commit -m 'fix: polish PDF editor layout spacing'
+          git push origin HEAD:work/v8-next-a4-crop-fix
+
+      - name: Build Windows portable
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Package ZIP and checksum
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if (-not (Test-Path $root)) { throw 'Portable não foi gerado.' }
+          $exe = Join-Path $root 'MonitorDeNoticias.exe'
+          if (-not (Test-Path $exe)) { throw 'MonitorDeNoticias.exe ausente.' }
+          New-Item -ItemType Directory -Force -Path (Join-Path $root 'data') | Out-Null
+          $zipName = 'Monitor-de-Noticias-V8-Editor-PDF-V2-Layout-Refinado-Windows-Portable.zip'
+          if (Test-Path $zipName) { Remove-Item $zipName -Force }
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zipName -CompressionLevel Optimal
+          $hash = (Get-FileHash $zipName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zipName" | Set-Content "$zipName.sha256"
+          Write-Host "SHA256=$hash"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'v8-pdf-editor-polished-layout-20260911'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) {
+            gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag
+          }
+          gh release create $tag `
+            'Monitor-de-Noticias-V8-Editor-PDF-V2-Layout-Refinado-Windows-Portable.zip' `
+            'Monitor-de-Noticias-V8-Editor-PDF-V2-Layout-Refinado-Windows-Portable.zip.sha256' `
+            --repo tysudess/noticias-monitor `
+            --target work/v8-next-a4-crop-fix `
+            --title 'Monitor de Notícias V8 + Editor PDF V2 Layout Refinado — Windows Portable' `
+            --notes 'Refino minucioso do layout do Editor de PDF: lateral interna compacta e sem textos cortados, header/footer menores, coluna de páginas mais fina, painel direito mais contido e mais espaço para visualização/edição A4. Mantém as correções anteriores de corte real e exportação sem perda para capa/imagens.'
