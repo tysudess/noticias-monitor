@@ -181,7 +181,7 @@ internal class GloboplayLoginWindow(
             }
         }
 
-        cookieStore.uris.forEach { uri ->
+        cookieStore.getURIs().forEach { uri ->
             val originHost = uri.host.orEmpty().lowercase().trim('.')
             if (!isAllowedGloboHost(originHost)) return@forEach
             cookieStore.get(uri)
