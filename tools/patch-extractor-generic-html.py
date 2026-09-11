@@ -1,4 +1,5 @@
 from pathlib import Path
+import runpy
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop'
@@ -28,3 +29,10 @@ assert 'downloadGenericWithHtmlFallback(cleanUrl' in updated
 assert 'DirectMediaHtmlFallback.extractCandidates' in updated
 assert 'DirectMediaHtmlFallback.isDirectMediaUrl' in updated
 print('Fallback genérico HTML/mídia direta integrado ao Extrator.')
+
+# O patch de Live reproduz o fallback da referência: congela o ponto final
+# calculando a duração no instante do clique e usa --download-sections.
+live_patch = ROOT / 'tools/patch-extractor-live-current-point.py'
+if not live_patch.exists():
+    raise SystemExit('patch-extractor-live-current-point.py ausente.')
+runpy.run_path(str(live_patch), run_name='__main__')
