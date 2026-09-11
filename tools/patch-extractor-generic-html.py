@@ -5,9 +5,10 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop'
 ENGINE = BASE / 'ExtractorVideoEngine.kt'
 FALLBACK = BASE / 'DirectMediaHtmlFallback.kt'
+LIVE_SNAPSHOT = BASE / 'YouTubeLiveSnapshot.kt'
 
-if not ENGINE.exists() or not FALLBACK.exists():
-    raise SystemExit('ExtractorVideoEngine.kt ou DirectMediaHtmlFallback.kt ausente.')
+if not ENGINE.exists() or not FALLBACK.exists() or not LIVE_SNAPSHOT.exists():
+    raise SystemExit('Motor, fallback HTML ou YouTubeLiveSnapshot.kt ausente.')
 
 src = ENGINE.read_text(encoding='utf-8')
 
@@ -30,8 +31,7 @@ assert 'DirectMediaHtmlFallback.extractCandidates' in updated
 assert 'DirectMediaHtmlFallback.isDirectMediaUrl' in updated
 print('Fallback genérico HTML/mídia direta integrado ao Extrator.')
 
-# O patch de Live reproduz o fallback da referência: congela o ponto final
-# calculando a duração no instante do clique e usa --download-sections.
+# Live principal: congela a playlist HLS/DVR; fallback: --download-sections até o ponto do clique.
 live_patch = ROOT / 'tools/patch-extractor-live-current-point.py'
 if not live_patch.exists():
     raise SystemExit('patch-extractor-live-current-point.py ausente.')
