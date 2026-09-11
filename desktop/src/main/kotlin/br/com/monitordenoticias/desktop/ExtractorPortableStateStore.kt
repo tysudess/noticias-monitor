@@ -91,12 +91,12 @@ internal class ExtractorPortableStateStore(baseDir: File) {
             ),
             dataDir
         )
-        val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText()
         val finished = process.waitFor(30, TimeUnit.SECONDS)
         if (!finished) {
             HiddenWindowsProcess.destroyTree(process)
             error("Tempo excedido ao acessar o armazenamento seguro do Windows.")
         }
+        val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText()
         if (process.exitValue() != 0) error(output.takeLast(1000))
         return output
     }
