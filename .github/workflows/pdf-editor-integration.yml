@@ -6,6 +6,7 @@ on:
       - integration/v8-news-pdf-editor
     paths:
       - '.github/workflows/pdf-editor-integration.yml'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/EmbeddedPdfEditor.kt'
       - 'tools/apply-pdf-editor-tab.py'
       - 'tools/fix-pdf-host.py'
@@ -32,10 +33,13 @@ jobs:
         run: |
           python tools/apply-pdf-editor-tab.py
           python tools/fix-pdf-host.py
+          $dashboard = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt'
+          if (-not (Select-String -Path $dashboard -SimpleMatch 'PDF_EDITOR("Editor de PDF"' -Quiet)) { throw 'Entrada Editor de PDF ausente do menu V8.' }
+          if (-not (Select-String -Path $dashboard -SimpleMatch 'V5Section.PDF_EDITOR -> EmbeddedPdfEditorScreen()' -Quiet)) { throw 'Rota Editor de PDF ausente do dashboard V8.' }
           if (git status --porcelain) {
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/EmbeddedPdfEditor.kt
+            git add $dashboard desktop/src/main/kotlin/br/com/monitordenoticias/desktop/EmbeddedPdfEditor.kt
             git commit -m 'feat(desktop): wire original PDF editor v0.3.1 tab'
             git push origin HEAD:integration/v8-news-pdf-editor
           }
@@ -93,7 +97,7 @@ jobs:
       - name: Install untouched original PDF Editor into Monitor package
         shell: pwsh
         run: |
-          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $root = (Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias').Path
           $dest = Join-Path $root 'tools/EditorPDF'
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           $exe = Get-ChildItem '_pdf-original' -Recurse -Filter 'Editor-de-PDF.exe' | Select-Object -First 1
@@ -104,8 +108,9 @@ jobs:
       - name: Verify original PDF Editor launches
         shell: pwsh
         run: |
-          $exe = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/EditorPDF/Editor-de-PDF.exe'
-          $p = Start-Process -FilePath $exe -WorkingDirectory $exe.DirectoryName -PassThru
+          $exePath = (Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/tools/EditorPDF/Editor-de-PDF.exe').Path
+          $workingDirectory = Split-Path $exePath -Parent
+          $p = Start-Process -FilePath $exePath -WorkingDirectory $workingDirectory -PassThru
           try {
             Start-Sleep -Seconds 8
             $p.Refresh()
@@ -118,7 +123,7 @@ jobs:
       - name: Verify Monitor launcher initializes
         shell: pwsh
         run: |
-          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $root = (Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias').Path
           $exe = Join-Path $root 'MonitorDeNoticias.exe'
           $p = Start-Process -FilePath $exe -WorkingDirectory $root -PassThru
           try {
@@ -133,7 +138,7 @@ jobs:
       - name: Create integrated V8 ZIP and SHA256
         shell: pwsh
         run: |
-          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $root = (Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias').Path
           $zip = Join-Path $PWD 'Monitor-de-Noticias-V8-EXTRATOR-NOTICIAS-EDITOR-PDF.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
