@@ -46,14 +46,19 @@ jobs:
           if (git diff --name-only | Select-String -SimpleMatch 'PdfEditorScreenV2.kt') { throw 'Editor PDF apareceu no diff. Build bloqueado.' }
 
       - name: Configurar Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
+      - name: Configurar Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
       - name: Compilar Desktop
         shell: powershell
-        run: .\gradlew.bat :desktop:compileKotlin --stacktrace
+        run: gradle :desktop:compileKotlin --stacktrace
 
       - name: Testes estruturais da aba
         shell: powershell
