@@ -148,6 +148,7 @@ jobs:
           }
           New-Item -ItemType Directory -Force (Join-Path $root 'Videos') | Out-Null
           New-Item -ItemType Directory -Force (Join-Path $root 'data/extractor') | Out-Null
+          '${{ github.sha }}' | Set-Content (Join-Path $root 'BUILD-SHA.txt') -Encoding ascii
 
       - name: Validar contrato do Extrator
         shell: pwsh
@@ -185,6 +186,8 @@ jobs:
         shell: pwsh
         run: |
           $root=Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $buildSha=(Get-Content (Join-Path $root 'BUILD-SHA.txt') -Raw).Trim()
+          if($buildSha -ne '${{ github.sha }}'){throw 'BUILD-SHA.txt não corresponde ao SHA compilado.'}
           $zipName='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip'
           if(Test-Path $zipName){Remove-Item $zipName -Force}
           Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zipName -CompressionLevel Optimal
@@ -201,7 +204,8 @@ jobs:
           $tag='v8-extrator-videos-v301-preview'
           $zip='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip'
           $sha='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip.sha256'
-          $notes='Preview completa: Extrator como workspace interna do Monitor, cinco binários portáteis, subprocessos ocultos, YouTube Live com snapshot HLS congelado e fallback até o ponto do clique, H.264, seletores compatíveis, R7/Record com IPv4/no-mtime e fallback de candidatos, histórico/configurações portáteis, proxy e sessão Globoplay protegidos por DPAPI via stdin, login oficial interno, HLS/m3u8 e atualizador seguro do yt-dlp com preservação de backup. Editor de PDF protegido e inalterado.'
+          $buildSha='${{ github.sha }}'
+          $notes="Preview completa: Extrator como workspace interna do Monitor, cinco binários portáteis, subprocessos ocultos, YouTube Live com snapshot HLS congelado e fallback até o ponto do clique, H.264, seletores compatíveis, R7/Record com IPv4/no-mtime e fallback de candidatos, histórico/configurações portáteis, proxy e sessão Globoplay protegidos por DPAPI via stdin, login oficial interno, HLS/m3u8 e atualizador seguro do yt-dlp com preservação de backup. Editor de PDF protegido e inalterado. Build SHA: $buildSha."
           if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){
             gh release upload $tag $zip $sha --repo tysudess/noticias-monitor --clobber
             if($LASTEXITCODE -ne 0){throw 'Falha ao substituir assets da preview; release anterior foi preservada.'}
