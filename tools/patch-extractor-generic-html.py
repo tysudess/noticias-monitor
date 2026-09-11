@@ -6,9 +6,10 @@ BASE = ROOT / 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop'
 ENGINE = BASE / 'ExtractorVideoEngine.kt'
 FALLBACK = BASE / 'DirectMediaHtmlFallback.kt'
 LIVE_SNAPSHOT = BASE / 'YouTubeLiveSnapshot.kt'
+PORTABLE_STATE = BASE / 'ExtractorPortableStateStore.kt'
 
-if not ENGINE.exists() or not FALLBACK.exists() or not LIVE_SNAPSHOT.exists():
-    raise SystemExit('Motor, fallback HTML ou YouTubeLiveSnapshot.kt ausente.')
+if not ENGINE.exists() or not FALLBACK.exists() or not LIVE_SNAPSHOT.exists() or not PORTABLE_STATE.exists():
+    raise SystemExit('Motor, fallback HTML, YouTubeLiveSnapshot.kt ou ExtractorPortableStateStore.kt ausente.')
 
 src = ENGINE.read_text(encoding='utf-8')
 
@@ -36,3 +37,9 @@ live_patch = ROOT / 'tools/patch-extractor-live-current-point.py'
 if not live_patch.exists():
     raise SystemExit('patch-extractor-live-current-point.py ausente.')
 runpy.run_path(str(live_patch), run_name='__main__')
+
+# Persistência portable: histórico/qualidade em data/extractor e proxy protegido via DPAPI.
+state_patch = ROOT / 'tools/patch-extractor-portable-state.py'
+if not state_patch.exists():
+    raise SystemExit('patch-extractor-portable-state.py ausente.')
+runpy.run_path(str(state_patch), run_name='__main__')
