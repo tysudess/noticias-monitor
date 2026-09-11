@@ -6,10 +6,12 @@ on:
     branches:
       - work/v8-extrator-v301-tab
     paths:
+      - 'desktop/build.gradle.kts'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'tools/integrate-v8-extractor-tab.py'
       - '.github/workflows/integrate-v8-extractor-tab.yml'
@@ -72,7 +74,9 @@ jobs:
           $engine = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
           $session = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt' -Raw
           $html = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt' -Raw
+          $login = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
           $updater = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt' -Raw
+          $gradle = Get-Content 'desktop/build.gradle.kts' -Raw
           if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Item Extrator ausente da sidebar.' }
           if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota da aba Extrator ausente.' }
           foreach ($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) {
@@ -87,12 +91,19 @@ jobs:
             if ($session -notmatch [regex]::Escape($required)) { throw "Sessão Globoplay incompleta: $required" }
           }
           if ($html -notmatch 'take\(15\)') { throw 'Fallback Globoplay não limita a 15 m3u8.' }
+          foreach ($required in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext','saveNetscapeCookies')) {
+            if ($login -notmatch [regex]::Escape($required)) { throw "Login interno Globoplay incompleto: $required" }
+          }
+          foreach ($required in @('javafx-web','javafx-swing')) {
+            if ($gradle -notmatch [regex]::Escape($required)) { throw "Dependência do navegador ausente: $required" }
+          }
           foreach ($required in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','executável anterior foi preservado')) {
             if ($updater -notmatch [regex]::Escape($required)) { throw "Atualizador yt-dlp incompleto: $required" }
           }
-          if ($ext -notmatch 'ATUALIZAR YT-DLP') { throw 'Botão de atualização yt-dlp ausente.' }
-          if ($ext -notmatch 'APAGAR SESSÃO') { throw 'Controle de sessão Globoplay ausente.' }
-          Write-Host 'Estrutura, YouTube/H264, Globoplay e atualização yt-dlp validados.'
+          foreach ($required in @('LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO')) {
+            if ($ext -notmatch [regex]::Escape($required)) { throw "Controle da tela ausente: $required" }
+          }
+          Write-Host 'Estrutura, YouTube/H264, Globoplay, login interno e atualização yt-dlp validados.'
 
       - name: Commitar integração gerada
         shell: powershell
@@ -108,7 +119,9 @@ jobs:
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt `
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt `
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt
+                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt `
+                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt `
+                  desktop/build.gradle.kts
           git diff --cached --check
           git commit -m 'Integrate extractor video tab and complete v3.0.1 engine services'
           git push origin HEAD:work/v8-extrator-v301-tab
