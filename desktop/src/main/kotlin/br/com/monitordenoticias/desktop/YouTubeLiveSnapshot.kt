@@ -11,6 +11,7 @@ import java.nio.file.Files
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Base64
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -311,7 +312,12 @@ internal object YouTubeLiveSnapshot {
         val host = uri.host ?: return URL(url).openConnection() as HttpURLConnection
         val port = if (uri.port > 0) uri.port else 8080
         val type = if (uri.scheme.equals("socks5", true) || uri.scheme.equals("socks", true)) Proxy.Type.SOCKS else Proxy.Type.HTTP
-        return URL(url).openConnection(Proxy(type, InetSocketAddress(host, port))) as HttpURLConnection
+        val connection = URL(url).openConnection(Proxy(type, InetSocketAddress(host, port))) as HttpURLConnection
+        if (type == Proxy.Type.HTTP && !uri.userInfo.isNullOrBlank()) {
+            val token = Base64.getEncoder().encodeToString(uri.userInfo.toByteArray(Charsets.UTF_8))
+            connection.setRequestProperty("Proxy-Authorization", "Basic $token")
+        }
+        return connection
     }
 
     private fun jsonHeaders(json: JSONObject?): Map<String, String> {
