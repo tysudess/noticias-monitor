@@ -9,6 +9,12 @@ if not SCREEN.exists() or not STORE.exists():
 
 src = SCREEN.read_text(encoding='utf-8')
 
+# Garante imports para operações DPAPI fora da thread de UI.
+if 'import kotlinx.coroutines.Dispatchers\n' not in src:
+    src = src.replace('import kotlinx.coroutines.launch\n', 'import kotlinx.coroutines.Dispatchers\nimport kotlinx.coroutines.launch\nimport kotlinx.coroutines.withContext\n', 1)
+elif 'import kotlinx.coroutines.withContext\n' not in src:
+    src = src.replace('import kotlinx.coroutines.Dispatchers\n', 'import kotlinx.coroutines.Dispatchers\nimport kotlinx.coroutines.withContext\n', 1)
+
 src = src.replace(
     '    val updater = remember { YtDlpUpdater(engine) }\n',
     '    val updater = remember { YtDlpUpdater(engine) }\n    val portableState = remember { ExtractorPortableStateStore(engine.appDir.toFile()) }\n',
@@ -45,17 +51,11 @@ src = src.replace(
     1,
 )
 
-# O campo continua responsivo; DPAPI só é acionado quando o usuário pede para salvar.
-src = src.replace(
-    '                        onValueChange = { proxy = it },\n',
-    '                        onValueChange = { proxy = it },\n',
-    1,
-)
 proxy_info = '                    Text("O mesmo proxy é aplicado ao navegador interno, yt-dlp e fallbacks HTML/HLS.", color = ExMuted)\n'
 if 'Text("SALVAR PROXY"' not in src and proxy_info in src:
     src = src.replace(
         proxy_info,
-        '''                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n                        Button(\n                            enabled = !busy,\n                            onClick = {\n                                val result = portableState.saveProxy(proxy)\n                                settingsStatus = result.fold(\n                                    onSuccess = { if (proxy.isBlank()) "Proxy removido." else "Proxy salvo com proteção DPAPI." },\n                                    onFailure = { "Falha ao salvar proxy: ${it.message.orEmpty()}" }\n                                )\n                            },\n                            colors = ButtonDefaults.buttonColors(containerColor = ExBlue)\n                        ) { Text("SALVAR PROXY", fontWeight = FontWeight.Bold) }\n                        OutlinedButton(\n                            enabled = proxy.isNotBlank(),\n                            onClick = {\n                                proxy = ""\n                                portableState.deleteProxy()\n                                settingsStatus = "Proxy removido."\n                            }\n                        ) { Text("REMOVER PROXY") }\n                    }\n                    Text("O mesmo proxy é aplicado ao navegador interno, yt-dlp e fallbacks HTML/HLS. Credenciais são armazenadas com DPAPI do Windows.", color = ExMuted)\n''',
+        '''                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n                        Button(\n                            enabled = !busy,\n                            onClick = {\n                                val valueToSave = proxy\n                                scope.launch {\n                                    settingsStatus = "Salvando proxy com proteção do Windows..."\n                                    val result = withContext(Dispatchers.IO) { portableState.saveProxy(valueToSave) }\n                                    settingsStatus = result.fold(\n                                        onSuccess = { if (valueToSave.isBlank()) "Proxy removido." else "Proxy salvo com proteção DPAPI." },\n                                        onFailure = { "Falha ao salvar proxy: ${it.message.orEmpty()}" }\n                                    )\n                                }\n                            },\n                            colors = ButtonDefaults.buttonColors(containerColor = ExBlue)\n                        ) { Text("SALVAR PROXY", fontWeight = FontWeight.Bold) }\n                        OutlinedButton(\n                            enabled = proxy.isNotBlank(),\n                            onClick = {\n                                proxy = ""\n                                portableState.deleteProxy()\n                                settingsStatus = "Proxy removido."\n                            }\n                        ) { Text("REMOVER PROXY") }\n                    }\n                    Text("O mesmo proxy é aplicado ao navegador interno, yt-dlp e fallbacks HTML/HLS. Credenciais são armazenadas com DPAPI do Windows.", color = ExMuted)\n''',
         1,
     )
 
@@ -64,7 +64,7 @@ updated = SCREEN.read_text(encoding='utf-8')
 for required in (
     'ExtractorPortableStateStore', 'loadQualityIndex', 'loadHistory', 'loadProxy',
     'addHistory', 'saveQualityIndex', 'saveProxy', 'LIMPAR HISTÓRICO',
-    'SALVAR PROXY', 'REMOVER PROXY'
+    'SALVAR PROXY', 'REMOVER PROXY', 'withContext(Dispatchers.IO)'
 ):
     assert required in updated, required
-print('Histórico, qualidade e proxy persistentes integrados em data/extractor/ sem DPAPI a cada tecla.')
+print('Persistência portable integrada; DPAPI de salvamento roda fora da thread de UI.')
