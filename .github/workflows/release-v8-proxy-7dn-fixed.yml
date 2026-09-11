@@ -1,0 +1,111 @@
+name: Release Monitor V8 Proxy 7DN Fixed
+
+on:
+  push:
+    branches:
+      - rebuild/v8-clean
+    paths:
+      - '.github/workflows/release-v8-proxy-7dn-fixed.yml'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DesktopController.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DesktopControllerV5.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout corrected V8 branch
+        uses: actions/checkout@v4
+        with:
+          ref: rebuild/v8-clean
+          fetch-depth: 0
+
+      - name: Verify proxy correction
+        shell: pwsh
+        run: |
+          $controller = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DesktopControllerV5.kt' -Raw
+          if ($controller -notmatch 'proxy-7dn\.mb') { throw 'Proxy corrigido proxy-7dn.mb não encontrado no DesktopControllerV5.' }
+          if ($controller -match 'proxy-7db\.mb"\)\.orEmpty\(\)\.ifBlank') { throw 'Fallback antigo proxy-7db.mb ainda está ativo.' }
+          Write-Host 'PASS: proxy corrigido para proxy-7dn.mb:6060.'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile V8 proxy fixed
+        shell: pwsh
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Create Windows Portable distributable
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Verify portable package
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if (-not (Test-Path $root)) { throw 'Distribuição Windows não foi gerada.' }
+          $exe = Join-Path $root 'MonitorDeNoticias.exe'
+          if (-not (Test-Path $exe)) { throw 'MonitorDeNoticias.exe ausente.' }
+          $forbidden = @(
+            (Join-Path $root 'tools/ExtratorNoticiasCore'),
+            (Join-Path $root 'tools/ExtratorVideosCore'),
+            (Join-Path $root 'tools/VideoCoreBridge.exe')
+          )
+          foreach ($path in $forbidden) {
+            if (Test-Path $path) { throw "Componente de extrator encontrado no pacote: $path" }
+          }
+          Write-Host 'PASS: Portable gerado sem núcleos de extrator integrados.'
+
+      - name: Create ZIP and SHA256
+        shell: pwsh
+        run: |
+          $root = Resolve-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $zipName = 'Monitor-de-Noticias-V8-PROXY-7DN-CORRIGIDO-WINDOWS.zip'
+          $zip = Join-Path $PWD $zipName
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
+          if ((Get-Item $zip).Length -lt 1000000) { throw 'ZIP final parece incompleto.' }
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zipName" | Set-Content "$zipName.sha256"
+          Write-Host "SHA256: $hash"
+
+      - name: Publish V8 proxy fixed release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'v8-proxy-7dn-fixed'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) {
+            throw "O release/tag $tag já existe. Nenhum release existente será sobrescrito."
+          }
+          gh release create $tag `
+            'Monitor-de-Noticias-V8-PROXY-7DN-CORRIGIDO-WINDOWS.zip' `
+            'Monitor-de-Noticias-V8-PROXY-7DN-CORRIGIDO-WINDOWS.zip.sha256' `
+            --repo tysudess/noticias-monitor `
+            --target rebuild/v8-clean `
+            --title 'Monitor de Notícias — V8 Proxy 7DN Corrigido' `
+            --notes 'V8 Dashboard estável reconstruída a partir da branch rebuild/v8-clean com correção do proxy padrão para proxy-7dn.mb:6060. Mantém a base limpa sem núcleos de extrator integrados.'
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Monitor-de-Noticias-V8-PROXY-7DN-CORRIGIDO-WINDOWS
+          path: |
+            Monitor-de-Noticias-V8-PROXY-7DN-CORRIGIDO-WINDOWS.zip
+            Monitor-de-Noticias-V8-PROXY-7DN-CORRIGIDO-WINDOWS.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
