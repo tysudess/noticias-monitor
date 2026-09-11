@@ -9,6 +9,7 @@ import java.io.InputStreamReader
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 internal data class ExtractorQuality(
@@ -56,8 +57,8 @@ internal class ExtractorVideoEngine {
             when {
                 isYouTube(cleanUrl) -> downloadYouTube(cleanUrl, quality, proxy, update)
                 isGloboplay(cleanUrl) -> downloadGloboplay(cleanUrl, quality, proxy, update)
-                isR7(cleanUrl) -> downloadGeneric(cleanUrl, quality, proxy, update, "R7/Record")
-                else -> downloadGeneric(cleanUrl, quality, proxy, update, "vídeo")
+                isR7(cleanUrl) -> downloadGeneric(cleanUrl, quality, proxy, "R7/Record", update)
+                else -> downloadGeneric(cleanUrl, quality, proxy, "vídeo", update)
             }
         }
     }
@@ -73,7 +74,7 @@ internal class ExtractorVideoEngine {
             update(0, "🔴 Live detectada. Baixando do início até o ponto atual...")
             downloadYoutubeLive(url, quality, proxy, update)
         } else {
-            downloadGeneric(url, quality, proxy, update, "YouTube")
+            downloadGeneric(url, quality, proxy, "YouTube", update)
         }
         return ensureH264(file, update)
     }
@@ -90,15 +91,16 @@ internal class ExtractorVideoEngine {
         val result = runProcessCapture(cmd, 90)
         if (result.exitCode != 0 || result.output.isBlank()) return YoutubeProbe(false, null)
         return runCatching {
-            val json = JSONObject(result.output.trim().lineSequence().last { it.trim().startsWith("{") })
+            val jsonLine = result.output.lineSequence().map { it.trim() }.lastOrNull { it.startsWith("{") } ?: return@runCatching YoutubeProbe(false, null)
+            val json = JSONObject(jsonLine)
             val liveStatus = json.optString("live_status", "").lowercase(Locale.ROOT)
-            val isLive = json.optBoolean("is_live", false) || liveStatus == "is_live" || liveStatus == "post_live"
-            val ts = when {
+            val live = json.optBoolean("is_live", false) || liveStatus == "is_live" || liveStatus == "post_live"
+            val timestamp = when {
                 json.has("release_timestamp") -> json.optLong("release_timestamp")
                 json.has("timestamp") -> json.optLong("timestamp")
                 else -> 0L
             }.takeIf { it > 0L }
-            YoutubeProbe(isLive, ts)
+            YoutubeProbe(live, timestamp)
         }.getOrDefault(YoutubeProbe(false, null))
     }
 
@@ -111,8 +113,7 @@ internal class ExtractorVideoEngine {
         val selector = quality.maxHeight?.let {
             "bv*[height<=$it][ext=mp4]+ba[ext=m4a]/b[height<=$it]/best[height<=$it]"
         } ?: quality.selector
-        val extra = listOf("--live-from-start", "--hls-use-mpegts")
-        return runYtDlp(url, selector, proxy, extra, update)
+        return runYtDlp(url, selector, proxy, listOf("--live-from-start", "--hls-use-mpegts"), update)
     }
 
     private fun downloadGloboplay(
@@ -126,15 +127,22 @@ internal class ExtractorVideoEngine {
             .find(url)?.groupValues?.getOrNull(1)
             ?: Regex("([0-9]{6,})").find(url)?.groupValues?.getOrNull(1)
 
-        val attempts = buildList {
+        val targets = buildList {
             add(url)
             if (!id.isNullOrBlank()) add("globo:$id")
         }
         var lastError = "Falha ao baixar conteúdo do Globoplay."
-        for ((index, target) in attempts.withIndex()) {
-            update(0, "Globoplay: tentativa ${index + 1}/${attempts.size}...")
+        targets.forEachIndexed { index, target ->
+            update(0, "Globoplay: tentativa ${index + 1}/${targets.size}...")
             val result = runCatching {
-                runYtDlp(target, quality.selector, proxy, listOf("--force-ipv4", "--ignore-config", "--no-mtime"), update, exe)
+                runYtDlp(
+                    target,
+                    quality.selector,
+                    proxy,
+                    listOf("--force-ipv4", "--ignore-config", "--no-mtime"),
+                    update,
+                    exe
+                )
             }
             if (result.isSuccess) return result.getOrThrow()
             lastError = friendlyError(result.exceptionOrNull()?.message.orEmpty())
@@ -223,12 +231,12 @@ internal class ExtractorVideoEngine {
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out.absolutePath
         )
-        val result = runProcessCapture(cmd, 60 * 60)
+        val result = runProcessCapture(cmd, 3600)
         if (result.exitCode != 0 || !out.exists() || out.length() <= 1024) {
             runCatching { out.delete() }
             return file
         }
-        val backup = File(file.parentFile, file.nameWithoutExtension + ".original" + "." + file.extension)
+        val backup = File(file.parentFile, file.nameWithoutExtension + ".original." + file.extension)
         runCatching { file.renameTo(backup) }
         if (!out.renameTo(file)) return out
         runCatching { backup.delete() }
@@ -240,28 +248,31 @@ internal class ExtractorVideoEngine {
             ffprobe.absolutePath, "-v", "error", "-select_streams", "v:0",
             "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1", file.absolutePath
         )
-        val r = runProcessCapture(cmd, 60)
-        return r.output.trim().lineSequence().firstOrNull().orEmpty().lowercase(Locale.ROOT)
+        val result = runProcessCapture(cmd, 60)
+        return result.output.trim().lineSequence().firstOrNull().orEmpty().lowercase(Locale.ROOT)
     }
 
     private data class ProcessResult(val exitCode: Int, val output: String)
 
     private fun runProcessCapture(cmd: List<String>, timeoutSeconds: Long): ProcessResult {
-        val p = ProcessBuilder(cmd).directory(appDir.toFile()).redirectErrorStream(true).start()
-        activeProcess.set(p)
-        val reader = Thread {
-            // leitura é feita sincronicamente abaixo para evitar deadlock de buffer
-        }
-        @Suppress("UNUSED_VARIABLE") val ignored = reader
-        val output = p.inputStream.bufferedReader(Charsets.UTF_8).readText()
-        val finished = p.waitFor(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
+        val process = ProcessBuilder(cmd).directory(appDir.toFile()).redirectErrorStream(true).start()
+        activeProcess.set(process)
+        val output = StringBuilder()
+        val readerThread = Thread {
+            process.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                lines.forEach { output.appendLine(it) }
+            }
+        }.apply { isDaemon = true; start() }
+        val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
         if (!finished) {
-            p.destroyForcibly()
-            activeProcess.compareAndSet(p, null)
-            return ProcessResult(-1, output + "\nTimeout")
+            process.destroyForcibly()
+            readerThread.join(1000)
+            activeProcess.compareAndSet(process, null)
+            return ProcessResult(-1, output.toString() + "\nTimeout")
         }
-        activeProcess.compareAndSet(p, null)
-        return ProcessResult(p.exitValue(), output)
+        readerThread.join(1000)
+        activeProcess.compareAndSet(process, null)
+        return ProcessResult(process.exitValue(), output.toString())
     }
 
     private fun friendlyError(raw: String): String {
@@ -281,7 +292,7 @@ internal class ExtractorVideoEngine {
 
     private fun redactProxy(text: String): String = text.replace(
         Regex("(?i)(https?|socks5?)://[^\\s:@/]+:[^\\s@/]+@"),
-        "$1://***:***@"
+        "\$1://***:***@"
     )
 
     private fun isYouTube(url: String) = url.contains("youtube.com", true) || url.contains("youtu.be", true)
@@ -290,8 +301,8 @@ internal class ExtractorVideoEngine {
 
     private fun normalizeR7Url(value: String): String {
         var url = value.trim()
-        val duplicated = Regex("(https?://.+?)(https?://)", RegexOption.IGNORE_CASE).find(url)
-        if (duplicated != null) url = url.substring(0, duplicated.range.last - duplicated.groupValues[2].length + 1)
+        val secondHttp = Regex("https?://", RegexOption.IGNORE_CASE).findAll(url).drop(1).firstOrNull()
+        if (secondHttp != null) url = url.substring(0, secondHttp.range.first)
         return url.replace(" ", "%20")
     }
 
