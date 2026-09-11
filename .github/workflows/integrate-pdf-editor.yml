@@ -6,7 +6,8 @@ on:
       - work/v8-next
     paths:
       - '.github/workflows/integrate-pdf-editor.yml'
-      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreen.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
+      - 'desktop/src/main/resources/pdf-default-cover.b64'
 
 permissions:
   contents: write
@@ -31,52 +32,25 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Patch Dashboard V5 and dependencies
+      - name: Activate PDF editor V2
         shell: pwsh
         run: |
           $dashboard = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt'
           $text = Get-Content $dashboard -Raw
-
-          if ($text -notmatch 'PDF_EDITOR\(') {
-            $old = '    SETTINGS("Configurações", "Automação, proxy, inicialização e operação do aplicativo", Icons.Default.Settings)'
-            $new = '    SETTINGS("Configurações", "Automação, proxy, inicialização e operação do aplicativo", Icons.Default.Settings),' + "`r`n" + '    PDF_EDITOR("Editor de PDF", "Monte, reorganize, recorte e exporte PDFs e imagens", Icons.Default.PictureAsPdf)'
-            if (-not $text.Contains($old)) { throw 'Ponto de inserção V5Section não encontrado.' }
-            $text = $text.Replace($old, $new)
-          }
-
-          if ($text -notmatch 'V5Section\.PDF_EDITOR -> PdfEditorScreen\(\)') {
-            $old = '                            V5Section.SETTINGS -> V5SettingsScreen(c, tick)'
-            $new = $old + "`r`n" + '                            V5Section.PDF_EDITOR -> PdfEditorScreen()'
-            if (-not $text.Contains($old)) { throw 'Ponto de inserção da tela PDF não encontrado.' }
-            $text = $text.Replace($old, $new)
-          }
-
+          $text = $text.Replace('V5Section.PDF_EDITOR -> PdfEditorScreen()', 'V5Section.PDF_EDITOR -> PdfEditorScreenV2()')
           Set-Content $dashboard $text -Encoding UTF8
-
-          $gradle = 'desktop/build.gradle.kts'
-          $g = Get-Content $gradle -Raw
-          if ($g -notmatch 'org\.apache\.pdfbox:pdfbox') {
-            $anchor = '    implementation("org.xerial:sqlite-jdbc:3.46.1.3")'
-            $deps = $anchor + "`r`n" +
-                    '    implementation("org.apache.pdfbox:pdfbox:3.0.3")' + "`r`n" +
-                    '    implementation("com.twelvemonkeys.imageio:imageio-webp:3.12.0")' + "`r`n" +
-                    '    implementation("com.twelvemonkeys.imageio:imageio-tiff:3.12.0")'
-            if (-not $g.Contains($anchor)) { throw 'Âncora de dependências não encontrada.' }
-            $g = $g.Replace($anchor, $deps)
-            Set-Content $gradle $g -Encoding UTF8
-          }
 
       - name: Compile desktop
         shell: pwsh
         run: gradle :desktop:compileKotlin --stacktrace
 
-      - name: Commit integration
+      - name: Commit validated V2 activation
         shell: pwsh
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add desktop/build.gradle.kts desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
           if (-not (git diff --cached --quiet)) {
-            git commit -m 'feat: add PDF editor tab to V8 dashboard'
+            git commit -m 'feat: activate PDF editor V2 layout and precise crop'
             git push origin HEAD:work/v8-next
           }
