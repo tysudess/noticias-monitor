@@ -72,7 +72,7 @@ internal object HiddenWindowsProcess {
                     "-NoProfile",
                     "-NonInteractive",
                     "-WindowStyle", "Hidden",
-                    "-Command", "& taskkill.exe /PID $pid /T /F 2>`$null; exit 0"
+                    "-Command", "& taskkill.exe /PID $pid /T /F 2>`${'$'}null; exit 0"
                 )
                     .redirectErrorStream(true)
                     .start()
