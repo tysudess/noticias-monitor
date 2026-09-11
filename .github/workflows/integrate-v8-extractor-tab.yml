@@ -10,6 +10,7 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'tools/integrate-v8-extractor-tab.py'
       - '.github/workflows/integrate-v8-extractor-tab.yml'
 
@@ -71,6 +72,7 @@ jobs:
           $engine = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
           $session = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt' -Raw
           $html = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt' -Raw
+          $updater = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt' -Raw
           if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Item Extrator ausente da sidebar.' }
           if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota da aba Extrator ausente.' }
           foreach ($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) {
@@ -85,7 +87,12 @@ jobs:
             if ($session -notmatch [regex]::Escape($required)) { throw "Sessão Globoplay incompleta: $required" }
           }
           if ($html -notmatch 'take\(15\)') { throw 'Fallback Globoplay não limita a 15 m3u8.' }
-          Write-Host 'Estrutura, YouTube/H264 e Globoplay v3.0.1 validados.'
+          foreach ($required in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','executável anterior foi preservado')) {
+            if ($updater -notmatch [regex]::Escape($required)) { throw "Atualizador yt-dlp incompleto: $required" }
+          }
+          if ($ext -notmatch 'ATUALIZAR YT-DLP') { throw 'Botão de atualização yt-dlp ausente.' }
+          if ($ext -notmatch 'APAGAR SESSÃO') { throw 'Controle de sessão Globoplay ausente.' }
+          Write-Host 'Estrutura, YouTube/H264, Globoplay e atualização yt-dlp validados.'
 
       - name: Commitar integração gerada
         shell: powershell
@@ -100,7 +107,8 @@ jobs:
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt `
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt `
                   desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt `
-                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt
+                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt `
+                  desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt
           git diff --cached --check
-          git commit -m 'Integrate extractor video tab and Globoplay v3.0.1 engine'
+          git commit -m 'Integrate extractor video tab and complete v3.0.1 engine services'
           git push origin HEAD:work/v8-extrator-v301-tab
