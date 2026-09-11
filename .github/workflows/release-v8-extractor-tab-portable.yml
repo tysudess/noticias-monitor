@@ -6,6 +6,14 @@ on:
     branches:
       - work/v8-extrator-v301-tab
     paths:
+      - 'desktop/build.gradle.kts'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
+      - 'tools/integrate-v8-extractor-tab.py'
       - '.github/workflows/release-v8-extractor-tab-portable.yml'
 
 permissions:
@@ -135,6 +143,7 @@ jobs:
           $dash = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
           $ext = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
           $engine = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
+          $login = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
           if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Aba Extrator ausente.' }
           if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota Extrator ausente.' }
           if ($ext -match 'ANALISAR') { throw 'Fluxo final não pode exibir ANALISAR.' }
@@ -144,6 +153,10 @@ jobs:
           foreach ($required in @('--live-from-start','libx264','m3u8:native','GloboplayHtmlFallback.extractM3u8Candidates','createRuntimeCookieFile')) {
             if ($engine -notmatch [regex]::Escape($required)) { throw "Motor incompleto: $required" }
           }
+          foreach ($required in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView')) {
+            if ($login -notmatch [regex]::Escape($required)) { throw "Login interno incompleto: $required" }
+          }
+          if ($ext -notmatch 'LOGIN GLOBOPLAY') { throw 'Botão LOGIN GLOBOPLAY ausente.' }
 
       - name: Criar ZIP e SHA256
         shell: pwsh
@@ -174,7 +187,7 @@ jobs:
             --target work/v8-extrator-v301-tab `
             --prerelease `
             --title 'Monitor V8 + Extrator de Vídeos v3.0.1 — Preview Portable' `
-            --notes 'Preview da integração do Extrator de Vídeos como aba interna do Monitor. Inclui yt-dlp nightly, yt-dlp stable, FFmpeg, FFprobe e Deno em bin/, pasta Videos relativa, rotas YouTube/Live/H.264, R7/Record e Globoplay com sessão DPAPI/HLS/m3u8. Editor de PDF permanece protegido e inalterado. Login interno embutido do Globoplay ainda está em implementação nesta preview.'
+            --notes 'Preview da integração do Extrator de Vídeos como aba interna do Monitor. Inclui yt-dlp nightly, yt-dlp stable, FFmpeg, FFprobe e Deno em bin/, pasta Videos relativa, rotas YouTube/Live/H.264, R7/Record e Globoplay com login interno oficial, sessão DPAPI, HLS e fallback m3u8. Editor de PDF permanece protegido e inalterado.'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
