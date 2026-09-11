@@ -43,3 +43,9 @@ state_patch = ROOT / 'tools/patch-extractor-portable-state.py'
 if not state_patch.exists():
     raise SystemExit('patch-extractor-portable-state.py ausente.')
 runpy.run_path(str(state_patch), run_name='__main__')
+
+# Seletores de compatibilidade: segunda tentativa exata da referência em todas as qualidades.
+compat_patch = ROOT / 'tools/patch-extractor-compat-retry.py'
+if not compat_patch.exists():
+    raise SystemExit('patch-extractor-compat-retry.py ausente.')
+runpy.run_path(str(compat_patch), run_name='__main__')
