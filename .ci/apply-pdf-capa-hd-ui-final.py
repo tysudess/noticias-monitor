@@ -1,0 +1,85 @@
+from pathlib import Path
+
+pdf_path = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt')
+src = pdf_path.read_text(encoding='utf-8')
+
+
+def repl(old: str, new: str, label: str) -> None:
+    global src
+    if old not in src:
+        raise SystemExit(f'Bloco nao encontrado: {label}')
+    src = src.replace(old, new, 1)
+
+
+# 1) Lateral mais justa, sem area vazia antes dos botoes/icones.
+repl(
+    'val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(9,6,9,6);preferredSize=Dimension(190,1);minimumSize=Dimension(184,1)}',
+    'val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(8,4,8,4);preferredSize=Dimension(166,1);minimumSize=Dimension(160,1)}',
+    'largura final da lateral',
+)
+repl(
+    'val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,118);preferredSize=Dimension(176,118);border=EmptyBorder(8,6,8,6)}',
+    'val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,106);preferredSize=Dimension(154,106);border=EmptyBorder(6,5,6,5)}',
+    'drop lateral final',
+)
+repl('maximumSize=Dimension(164,32)', 'maximumSize=Dimension(146,31)', 'botao selecionar lateral')
+repl(
+    'private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(6,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)42 else 52);preferredSize=Dimension(176,if(sub==null)42 else 52);toolTipText=if(sub==null)t else "$t - $sub";add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(30,30);layout=BorderLayout();add(label(i,if(i=="PDF")9.5f else 15.5f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,12.5f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,9.5f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}',
+    'private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(6,0);alignmentX=LEFT_ALIGNMENT;maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)40 else 48);preferredSize=Dimension(158,if(sub==null)40 else 48);toolTipText=if(sub==null)t else "$t - $sub";add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(28,28);layout=BorderLayout();add(label(i,if(i=="PDF")9f else 15f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,12f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,9f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}',
+    'navButton alinhado e compacto',
+)
+repl(
+    'private fun buildWorkspace():JComponent=JPanel(BorderLayout(6,0)).apply{background=V2_BG;border=EmptyBorder(8,8,6,8);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}',
+    'private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(6,4,5,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}',
+    'workspace com menos margem externa',
+)
+repl(
+    'preferredSize = Dimension(96, 1)\n            minimumSize = Dimension(90, 320)',
+    'preferredSize = Dimension(88, 1)\n            minimumSize = Dimension(84, 320)',
+    'coluna de paginas ainda mais fina',
+)
+repl('preview.minimumSize = Dimension(720, 660)', 'preview.minimumSize = Dimension(780, 680)', 'preview maior para A4')
+
+# 2) Capa padrao em alta resolucao visual. Se o recurso embutido for pequeno/antigo,
+#    o programa reconstrói a capa em 1245x2048 com texto nitido e exportacao sem perda.
+old_cover = 'private fun embeddedDefaultCover():BufferedImage{return runCatching{val s=javaClass.getResourceAsStream("/pdf-default-cover.b64")?:error("Recurso da capa não encontrado");val encoded=s.bufferedReader(Charsets.UTF_8).use{it.readText()};val bytes=Base64.getDecoder().decode(encoded.trim());ImageIO.read(ByteArrayInputStream(bytes))?:error("Capa padrão inválida")}.getOrElse{BufferedImage(1245,2048,BufferedImage.TYPE_INT_RGB).also{img->val g=img.createGraphics();g.color=Color(28,28,28);g.fillRect(0,0,img.width,img.height);g.color=Color.WHITE;g.font=Font("SansSerif",Font.BOLD,90);g.drawString("RADAR DE NOTÍCIAS",120,700);g.drawString("MÍDIA IMPRESSA",190,1180);g.dispose()}}}'
+new_cover = '''private fun embeddedDefaultCover():BufferedImage{
+        val loaded=runCatching{val s=javaClass.getResourceAsStream("/pdf-default-cover.b64")?:error("Recurso da capa não encontrado");val encoded=s.bufferedReader(Charsets.UTF_8).use{it.readText()};val bytes=Base64.getDecoder().decode(encoded.trim());ImageIO.read(ByteArrayInputStream(bytes))?:error("Capa padrão inválida")}.getOrNull()
+        if(loaded!=null&&loaded.width>=1100&&loaded.height>=1700)return ensureRgbV2(loaded)
+        val base=loaded?:BufferedImage(768,1024,BufferedImage.TYPE_INT_RGB).also{img->val g=img.createGraphics();g.color=Color(25,25,25);g.fillRect(0,0,img.width,img.height);g.dispose()}
+        val img=BufferedImage(1245,2048,BufferedImage.TYPE_INT_RGB)
+        val g=img.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+        g.setRenderingHint(RenderingHints.KEY_RENDERING,RenderingHints.VALUE_RENDER_QUALITY)
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON)
+        g.drawImage(base,0,0,img.width,img.height,null)
+        g.color=Color(0,0,0,45);g.fillRect(0,0,img.width,img.height)
+        fun drawOutlined(text:String,size:Int,y:Int){
+            g.font=Font("SansSerif",Font.BOLD,size)
+            val fm=g.fontMetrics
+            val x=(img.width-fm.stringWidth(text))/2
+            g.color=Color.BLACK
+            for(dx in -5..5)for(dy in -5..5)if(dx*dx+dy*dy<=30)g.drawString(text,x+dx,y+dy)
+            g.color=Color.WHITE
+            g.drawString(text,x,y)
+        }
+        drawOutlined("RADAR DE",170,625)
+        drawOutlined("NOTÍCIAS",170,825)
+        drawOutlined("MÍDIA",165,1250)
+        drawOutlined("IMPRESSA",170,1495)
+        g.dispose()
+        return img
+    }'''
+repl(old_cover, new_cover, 'capa padrao HD')
+repl(
+    'private fun currentCoverImage():BufferedImage{val f=customCover;return if(f!=null&&f.exists())ImageIO.read(f)?:embeddedDefaultCover() else embeddedDefaultCover()}',
+    'private fun currentCoverImage():BufferedImage{val f=customCover;if(f!=null&&f.exists()){val img=ImageIO.read(f);if(img!=null&&img.width>=900&&img.height>=1300)return img};return embeddedDefaultCover()}',
+    'ignorar capa custom antiga em baixa resolucao',
+)
+
+# 3) Garante que a exportacao continua sem JPEG/compressao destrutiva.
+if 'LosslessFactory.createFromImage(out,ensureRgbV2(image))' not in src:
+    raise SystemExit('Exportacao sem perda nao encontrada')
+
+pdf_path.write_text(src, encoding='utf-8')
+print('OK: patch de capa HD e layout final aplicado.')
