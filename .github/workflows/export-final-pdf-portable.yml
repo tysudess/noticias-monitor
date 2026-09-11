@@ -1,0 +1,47 @@
+name: Export Final PDF Portable Artifact
+
+on:
+  push:
+    branches: ["work/v8-next-a4-crop-fix"]
+    paths:
+      - ".github/workflows/export-final-pdf-portable.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v8-next-a4-crop-fix
+          fetch-depth: 0
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Windows portable
+        shell: pwsh
+        run: |
+          gradle.bat :desktop:compileKotlin --no-daemon
+          gradle.bat :desktop:createDistributable --no-daemon
+          if (-not (Test-Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/MonitorDeNoticias.exe')) { throw 'MonitorDeNoticias.exe nao encontrado' }
+
+      - name: Package portable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifact | Out-Null
+          Compress-Archive -Path 'desktop/build/compose/binaries/main/app/MonitorDeNoticias/*' -DestinationPath 'artifact/Monitor-de-Noticias-V8-Editor-PDF-Final-Base.zip' -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-editor-final-base
+          path: artifact/Monitor-de-Noticias-V8-Editor-PDF-Final-Base.zip
+          if-no-files-found: error
