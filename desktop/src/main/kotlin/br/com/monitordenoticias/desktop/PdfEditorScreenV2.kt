@@ -119,7 +119,7 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         header.add(right,BorderLayout.EAST);return header
     }
 
-    private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER)}
+    private fun buildWorkspace():JComponent=JPanel(BorderLayout(4,0)).apply{background=V2_BG;border=EmptyBorder(4,4,4,4);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}
 
     private fun buildLeftPanel():JComponent {
         val p = RoundedPanel(16, V2_BG_2, V2_BORDER_SOFT).apply {
@@ -139,7 +139,7 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         addNav(navButton("PDF", "PDF", null, Color(232, 74, 78)) { choosePdfs() })
         addNav(navButton("✂", "Cortar", null, V2_PURPLE) { startCrop() })
         addNav(navButton("▣", "Redimensionar", null, V2_RED) { showResizeInfo() })
-        addNav(navButton("⟳", "Girar", null, Color(61, 157, 255)) { showTransformMenu() })
+
         addNav(navButton("▤", "Criar", null, Color(84, 153, 230)) { createBlankPage() })
         addNav(navButton("▥", "Excluir", null, V2_RED) { deleteSelected() })
         addNav(navButton("▧", "Capa", null, Color(25, 201, 142)) { changeCover() })
@@ -279,12 +279,6 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         controls.add(squareControl("↶") { undo() })
         controls.add(squareControl("↷") { redo() })
         controls.add(controlButton("▱  Limpar") { clearAll() })
-        controls.add(Box.createHorizontalStrut(8))
-        controls.add(StyledButton("GERAR PDF", V2_GREEN, Color.WHITE, Color(29,229,123)).apply {
-            preferredSize = Dimension(112,36)
-            font = font.deriveFont(Font.BOLD,12.5f)
-            addActionListener { exportPdf() }
-        })
         previewStack.add(controls, BorderLayout.NORTH)
         body.add(previewStack, BorderLayout.CENTER)
 
@@ -293,11 +287,45 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
     }
 
     private fun buildRightPanel():JComponent {
-        val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(10,8,10,8);preferredSize=Dimension(220,1);minimumSize=Dimension(214,1)};p.add(label("▣  Capa e Exportação",16f,Font.BOLD,V2_TEXT));p.add(gap(10));includeCover.foreground=Color(207,223,240);includeCover.background=V2_BG_2;includeCover.isBorderPainted=false;includeCover.isFocusPainted=false;includeCover.horizontalAlignment=SwingConstants.LEFT;includeCover.alignmentX=LEFT_ALIGNMENT;includeCover.maximumSize=Dimension(Int.MAX_VALUE,32);includeCover.addActionListener{styleCoverToggle()};styleCoverToggle();p.add(includeCover);p.add(gap(8))
-        p.add(RoundedPanel(12,Color(26,48,72),V2_BORDER_SOFT).apply{layout=BorderLayout();maximumSize=Dimension(Int.MAX_VALUE,152);preferredSize=Dimension(198,152);border=EmptyBorder(7,7,7,7);coverPreview.horizontalAlignment=SwingConstants.CENTER;coverPreview.verticalAlignment=SwingConstants.CENTER;add(coverPreview,BorderLayout.CENTER)});p.add(gap(7));p.add(controlButton("▧  Trocar capa"){changeCover()}.apply{maximumSize=Dimension(Int.MAX_VALUE,40);alignmentX=LEFT_ALIGNMENT});p.add(gap(9));p.add(fieldLabel("✎","Título da capa"));styleTextField(titleField);p.add(titleField);p.add(gap(8));p.add(fieldLabel("●","Autor (opcional)"));styleTextField(authorField);p.add(authorField);p.add(gap(12));p.add(label("◉  Qualidade de exportação",13f,Font.PLAIN,V2_TEXT));quality.maximumSize=Dimension(Int.MAX_VALUE,40);quality.alignmentX=LEFT_ALIGNMENT;quality.background=Color(11,35,58);quality.foreground=V2_TEXT;p.add(quality);p.add(gap(10))
-        p.add(RoundedPanel(10,Color(9,47,89),Color(14,104,199)).apply{layout=BorderLayout();maximumSize=Dimension(Int.MAX_VALUE,74);border=EmptyBorder(9,10,9,10);add(label("ⓘ",18f,Font.BOLD,Color(113,177,246)),BorderLayout.WEST);add(label("<html>PDF sem giro/recorte é mantido vetorial.<br>Páginas editadas são rasterizadas<br>conforme a qualidade escolhida.</html>",11f,Font.PLAIN,Color(194,216,240)),BorderLayout.CENTER)});p.add(Box.createVerticalGlue());p.add(greenButton("▣  GERAR PDF","Exportar documento final"){exportPdf()});return p
-    }
+        val p = RoundedPanel(16, V2_BG_2, V2_BORDER_SOFT).apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            border = EmptyBorder(10, 8, 10, 8)
+            preferredSize = Dimension(220, 1)
+            minimumSize = Dimension(214, 1)
+        }
 
+        p.add(label("▣  Capa e Exportação", 16f, Font.BOLD, V2_TEXT))
+        p.add(gap(10))
+        includeCover.foreground = Color(207,223,240)
+        includeCover.background = V2_BG_2
+        includeCover.isBorderPainted = false
+        includeCover.isFocusPainted = false
+        includeCover.horizontalAlignment = SwingConstants.LEFT
+        includeCover.alignmentX = LEFT_ALIGNMENT
+        includeCover.maximumSize = Dimension(Int.MAX_VALUE, 32)
+        includeCover.addActionListener { styleCoverToggle() }
+        styleCoverToggle()
+        p.add(includeCover)
+        p.add(gap(8))
+
+        p.add(RoundedPanel(12, Color(26,48,72), V2_BORDER_SOFT).apply {
+            layout = BorderLayout()
+            maximumSize = Dimension(Int.MAX_VALUE, 220)
+            preferredSize = Dimension(198, 220)
+            border = EmptyBorder(7,7,7,7)
+            coverPreview.horizontalAlignment = SwingConstants.CENTER
+            coverPreview.verticalAlignment = SwingConstants.CENTER
+            add(coverPreview, BorderLayout.CENTER)
+        })
+        p.add(gap(8))
+        p.add(controlButton("▧  Trocar capa") { changeCover() }.apply {
+            maximumSize = Dimension(Int.MAX_VALUE, 40)
+            alignmentX = LEFT_ALIGNMENT
+        })
+        p.add(Box.createVerticalGlue())
+        p.add(greenButton("▣  GERAR PDF", "Exportar documento final") { exportPdf() })
+        return p
+    }
     private fun buildFooter():JComponent=JPanel(BorderLayout()).apply{background=Color(4,19,35);preferredSize=Dimension(1,30);border=BorderFactory.createMatteBorder(1,0,0,0,V2_BORDER_SOFT);add(label("Central de Inteligência de Mídia   |   Editor de PDF",10.5f,Font.PLAIN,Color(161,185,211)).apply{border=EmptyBorder(0,18,0,0)},BorderLayout.WEST);add(label("ϟ  Mais produtividade",10.5f,Font.PLAIN,Color(170,196,224)).apply{border=EmptyBorder(0,0,0,18)},BorderLayout.EAST)}
 
     private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=72;thumbList.fixedCellHeight=112;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}
@@ -422,6 +450,7 @@ private fun rotateV2(src:BufferedImage,degrees:Int):BufferedImage{val n=((degree
 private fun flipHorizontalV2(src:BufferedImage):BufferedImage{val dst=BufferedImage(src.width,src.height,BufferedImage.TYPE_INT_RGB);val g=dst.createGraphics();g.color=Color.WHITE;g.fillRect(0,0,dst.width,dst.height);val tx=AffineTransform();tx.translate(src.width.toDouble(),0.0);tx.scale(-1.0,1.0);g.drawImage(src,tx,null);g.dispose();return dst}
 private fun copyV2(src:BufferedImage):BufferedImage{val dst=BufferedImage(src.width,src.height,BufferedImage.TYPE_INT_RGB);val g=dst.createGraphics();g.color=Color.WHITE;g.fillRect(0,0,dst.width,dst.height);g.drawImage(src,0,0,null);g.dispose();return dst}
 private fun ensureRgbV2(src:BufferedImage)=if(src.type==BufferedImage.TYPE_INT_RGB)src else copyV2(src)
+
 
 
 
