@@ -27,9 +27,19 @@ src = src.replace(
 )
 src = src.replace(
     '    var history by remember { mutableStateOf(listOf<String>()) }\n    var proxy by remember { mutableStateOf("") }\n',
-    '    var history by remember { mutableStateOf(portableState.loadHistory()) }\n    var proxy by remember { mutableStateOf(portableState.loadProxy()) }\n',
+    '    var history by remember { mutableStateOf(portableState.loadHistory()) }\n    var proxy by remember { mutableStateOf("") }\n',
     1,
 )
+
+# Lê DPAPI fora da thread de UI ao abrir a aba.
+load_anchor = '    var updatingYtDlp by remember { mutableStateOf(false) }\n\n'
+if 'portableState.loadProxy()' not in src and load_anchor in src:
+    src = src.replace(
+        load_anchor,
+        load_anchor + '''    LaunchedEffect(portableState) {\n        proxy = withContext(Dispatchers.IO) { portableState.loadProxy() }\n    }\n\n''',
+        1,
+    )
+
 src = src.replace(
     '                    history = listOf(file.absolutePath) + history.take(49)\n',
     '                    history = portableState.addHistory(file.absolutePath)\n',
@@ -64,7 +74,7 @@ updated = SCREEN.read_text(encoding='utf-8')
 for required in (
     'ExtractorPortableStateStore', 'loadQualityIndex', 'loadHistory', 'loadProxy',
     'addHistory', 'saveQualityIndex', 'saveProxy', 'LIMPAR HISTÓRICO',
-    'SALVAR PROXY', 'REMOVER PROXY', 'withContext(Dispatchers.IO)'
+    'SALVAR PROXY', 'REMOVER PROXY', 'withContext(Dispatchers.IO)', 'LaunchedEffect(portableState)'
 ):
     assert required in updated, required
-print('Persistência portable integrada; DPAPI de salvamento roda fora da thread de UI.')
+print('Persistência portable integrada; leitura e gravação DPAPI rodam fora da thread de UI.')
