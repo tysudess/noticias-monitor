@@ -1,0 +1,110 @@
+name: Validar Extrator de Vídeos Completo no Monitor
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - work/v8-extrator-v301-tab
+    paths:
+      - 'desktop/build.gradle.kts'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DirectMediaHtmlFallback.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
+      - 'tools/integrate-v8-extractor-tab.py'
+      - 'tools/patch-extractor-generic-html.py'
+      - 'tools/patch-extractor-hidden-process.py'
+      - '.github/workflows/validate-v8-extractor-complete.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v8-extrator-v301-tab
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Registrar hash do PDF aprovado
+        shell: pwsh
+        run: |
+          $hash=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
+          "PDF_HASH=$hash" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Aplicar integração completa
+        shell: pwsh
+        run: |
+          python tools/integrate-v8-extractor-tab.py
+          python tools/patch-extractor-generic-html.py
+          python tools/patch-extractor-hidden-process.py
+
+      - name: Confirmar PDF intacto
+        shell: pwsh
+        run: |
+          $after=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
+          if ($after -ne $env:PDF_HASH) { throw 'Editor PDF foi alterado.' }
+          if (git diff --name-only | Select-String -SimpleMatch 'PdfEditorScreenV2.kt') { throw 'Editor PDF apareceu no diff.' }
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compilar Desktop
+        shell: pwsh
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Validar contrato funcional
+        shell: pwsh
+        run: |
+          $dash=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
+          $screen=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
+          $engine=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
+          $login=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
+          $session=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt' -Raw
+          $r7=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt' -Raw
+          $generic=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DirectMediaHtmlFallback.kt' -Raw
+          $hidden=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt' -Raw
+          $updater=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt' -Raw
+
+          if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Aba Extrator ausente.' }
+          if ($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen') { throw 'Rota Extrator ausente.' }
+          if ($screen -match 'ANALISAR') { throw 'ANALISAR não pode ficar visível.' }
+          foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')) { if (($screen+$engine) -notmatch [regex]::Escape($q)) { throw "Qualidade ausente: $q" } }
+          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO')) { if ($screen -notmatch [regex]::Escape($x)) { throw "UI ausente: $x" } }
+          foreach($x in @('--live-from-start','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','--cookies','--referer','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree')) { if ($engine -notmatch [regex]::Escape($x)) { throw "Motor incompleto: $x" } }
+          foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView','CookieManager','restoreNetworkContext')) { if ($login -notmatch [regex]::Escape($x)) { throw "Login incompleto: $x" } }
+          foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi')) { if ($session -notmatch [regex]::Escape($x)) { throw "Sessão incompleta: $x" } }
+          if ($r7 -notmatch 'take\(15\)') { throw 'R7 sem limite de 15.' }
+          if ($generic -notmatch 'take\(15\)') { throw 'HTML genérico sem limite de 15.' }
+          foreach($x in @('-WindowStyle','Hidden','Stop-Process')) { if ($hidden -notmatch [regex]::Escape($x)) { throw "Subprocesso oculto incompleto: $x" } }
+          foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version')) { if ($updater -notmatch [regex]::Escape($x)) { throw "Updater incompleto: $x" } }
+          Write-Host 'Contrato funcional completo validado.'
+
+      - name: Persistir patches validados
+        shell: pwsh
+        run: |
+          if ((git status --porcelain).Length -eq 0) { exit 0 }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt
+          git diff --cached --check
+          git commit -m 'Apply validated complete extractor engine integration'
+          git push origin HEAD:work/v8-extrator-v301-tab
