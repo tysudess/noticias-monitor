@@ -70,7 +70,8 @@ private enum class V5Section(val label: String, val subtitle: String, val icon: 
     HISTORY("Histórico", "Histórico local das buscas e resultados", Icons.Default.History),
     TERMS("Termos", "Termos independentes para notícias e vídeos", Icons.Default.Search),
     STOP("Parar buscas", "Interrompa buscas manuais em andamento", Icons.Default.StopCircle),
-    SETTINGS("Configurações", "Automação, proxy, inicialização e operação do aplicativo", Icons.Default.Settings)
+    SETTINGS("Configurações", "Automação, proxy, inicialização e operação do aplicativo", Icons.Default.Settings),
+    PDF_EDITOR("Editor de PDF", "Monte, reorganize, recorte e exporte PDFs e imagens", Icons.Default.PictureAsPdf)
 }
 
 private enum class V5SourceTab { NEWS, VIDEOS, SPECIAL }
@@ -161,6 +162,7 @@ private fun V5App(c: DesktopControllerV5) {
                             V5Section.TERMS -> V5TermsScreen(c, tick)
                             V5Section.STOP -> V5StopScreen(c, tick)
                             V5Section.SETTINGS -> V5SettingsScreen(c, tick)
+                            V5Section.PDF_EDITOR -> PdfEditorScreen()
                             else -> Unit
                         }
                     }
@@ -1822,3 +1824,4 @@ private suspend fun V5FetchWeather(): V5Weather? = withContext(Dispatchers.IO) {
         )
     }.getOrNull()
 }
+
