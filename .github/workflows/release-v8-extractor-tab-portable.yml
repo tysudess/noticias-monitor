@@ -9,6 +9,8 @@ on:
       - 'desktop/build.gradle.kts'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorPortableStateStore.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YouTubeLiveSnapshot.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt'
@@ -18,6 +20,9 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'tools/integrate-v8-extractor-tab.py'
       - 'tools/patch-extractor-generic-html.py'
+      - 'tools/patch-extractor-live-current-point.py'
+      - 'tools/patch-extractor-portable-state.py'
+      - 'tools/patch-extractor-compat-retry.py'
       - 'tools/patch-extractor-hidden-process.py'
       - '.github/workflows/release-v8-extractor-tab-portable.yml'
 
@@ -145,20 +150,29 @@ jobs:
           $dash=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
           $screen=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt' -Raw
           $engine=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoEngine.kt' -Raw
+          $live=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YouTubeLiveSnapshot.kt' -Raw
+          $state=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorPortableStateStore.kt' -Raw
           $login=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplayLoginWindow.kt' -Raw
+          $session=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/GloboplaySessionStore.kt' -Raw
           $r7=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/R7HtmlFallback.kt' -Raw
           $generic=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DirectMediaHtmlFallback.kt' -Raw
           $hidden=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt' -Raw
+          $updater=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt' -Raw
+
           if($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"'){throw 'Aba Extrator ausente.'}
           if($dash -notmatch 'V5Section.EXTRACTOR -> ExtractorVideoScreen'){throw 'Rota Extrator ausente.'}
           if($screen -match 'ANALISAR'){throw 'ANALISAR não pode ficar visível.'}
           foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')){if(($screen+$engine) -notmatch [regex]::Escape($q)){throw "Qualidade ausente: $q"}}
-          foreach($x in @('--live-from-start','libx264','m3u8:native','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','createRuntimeCookieFile','HiddenWindowsProcess.start')){if($engine -notmatch [regex]::Escape($x)){throw "Motor incompleto: $x"}}
+          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO','LIMPAR HISTÓRICO','ExtractorPortableStateStore')){if($screen -notmatch [regex]::Escape($x)){throw "UI/estado ausente: $x"}}
+          foreach($x in @('YouTubeLiveSnapshot.download','--download-sections','runYtDlpQuality','quality.compat','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','createRuntimeCookieFile','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree')){if($engine -notmatch [regex]::Escape($x)){throw "Motor incompleto: $x"}}
+          foreach($x in @('#EXT-X-ENDLIST','protocol_whitelist','playlistDuration','libx264','160k')){if($live -notmatch [regex]::Escape($x)){throw "Snapshot HLS incompleto: $x"}}
+          foreach($x in @('history.txt','settings.properties','proxy.dpapi','ProtectedData','CurrentUser','loadHistory','saveQualityIndex','saveProxy')){if($state -notmatch [regex]::Escape($x)){throw "Persistência portable incompleta: $x"}}
           if($r7 -notmatch 'take\(15\)'){throw 'R7 sem limite 15.'}
           if($generic -notmatch 'take\(15\)'){throw 'Fallback genérico sem limite 15.'}
           foreach($x in @('-WindowStyle','Hidden','taskkill.exe','/T','/F')){if($hidden -notmatch [regex]::Escape($x)){throw "Launcher oculto incompleto: $x"}}
           foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView')){if($login -notmatch [regex]::Escape($x)){throw "Login interno incompleto: $x"}}
-          if($screen -notmatch 'LOGIN GLOBOPLAY'){throw 'LOGIN GLOBOPLAY ausente.'}
+          foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi','HiddenWindowsProcess.start')){if($session -notmatch [regex]::Escape($x)){throw "Sessão segura incompleta: $x"}}
+          foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','HiddenWindowsProcess.start')){if($updater -notmatch [regex]::Escape($x)){throw "Updater incompleto: $x"}}
 
       - name: Criar ZIP e SHA256
         shell: pwsh
@@ -186,7 +200,7 @@ jobs:
             --target work/v8-extrator-v301-tab `
             --prerelease `
             --title 'Monitor V8 + Extrator de Vídeos v3.0.1 — Preview Portable' `
-            --notes 'Preview completa: Extrator como aba interna do Monitor, cinco binários portáteis, subprocessos ocultos, YouTube/Live/H.264, R7/Record, fallback HTML/mídia direta, Globoplay com login interno oficial, sessão DPAPI, HLS/m3u8 e atualizador seguro do yt-dlp. Editor de PDF protegido e inalterado.'
+            --notes 'Preview completa: Extrator como aba interna do Monitor, cinco binários portáteis, subprocessos ocultos, YouTube Live com snapshot HLS congelado e fallback até o ponto do clique, H.264, seletores compatíveis, histórico/configurações portáteis, proxy protegido via DPAPI, R7/Record, fallback HTML/mídia direta, Globoplay com login interno oficial, sessão DPAPI, HLS/m3u8 e atualizador seguro do yt-dlp. Editor de PDF protegido e inalterado.'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
