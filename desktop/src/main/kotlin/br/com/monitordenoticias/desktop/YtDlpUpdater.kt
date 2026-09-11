@@ -65,12 +65,12 @@ internal class YtDlpUpdater(private val engine: ExtractorVideoEngine) {
             listOf(executable.absolutePath, "--version"),
             engine.appDir.toFile()
         )
-        val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText().trim()
         val finished = process.waitFor(30, TimeUnit.SECONDS)
         if (!finished) {
             HiddenWindowsProcess.destroyTree(process)
             return ""
         }
+        val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText().trim()
         return if (process.exitValue() == 0) output.lineSequence().firstOrNull().orEmpty() else ""
     }
 }
