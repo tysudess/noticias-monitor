@@ -11,6 +11,7 @@ import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
 import org.apache.pdfbox.pdmodel.common.PDRectangle
 import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory
 import org.apache.pdfbox.rendering.PDFRenderer
 import org.apache.pdfbox.util.Matrix
 import org.json.JSONObject
@@ -54,7 +55,7 @@ private val V2_PURPLE = Color(130, 82, 255)
 
 private enum class PdfV2ItemKind { IMAGE, PDF, BLANK }
 private enum class PdfV2ExportQuality(val label: String, val dpi: Int) {
-    HIGH("Alta (recomendado)", 300), MEDIUM("Média", 220), COMPACT("Compacta", 160);
+    HIGH("Alta (recomendado)", 450), MEDIUM("Média", 300), COMPACT("Compacta", 220);
     override fun toString(): String = label
 }
 private data class PdfV2Crop(val x: Double, val y: Double, val w: Double, val h: Double)
@@ -118,14 +119,14 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         header.add(right,BorderLayout.EAST);return header
     }
 
-    private fun buildWorkspace():JComponent=JPanel(BorderLayout(12,0)).apply{background=V2_BG;border=EmptyBorder(12,16,10,16);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}
+    private fun buildWorkspace():JComponent=JPanel(BorderLayout(8,0)).apply{background=V2_BG;border=EmptyBorder(10,10,8,10);add(buildLeftPanel(),BorderLayout.WEST);add(buildCenterPanel(),BorderLayout.CENTER);add(buildRightPanel(),BorderLayout.EAST)}
 
     private fun buildLeftPanel():JComponent {
-        val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(12,10,12,10);preferredSize=Dimension(310,1)}
+        val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(10,7,10,7);preferredSize=Dimension(236,1);minimumSize=Dimension(226,1)}
         p.add(navButton("⇧","Adicionar arquivos","Imagens ou PDF",V2_BLUE,true){chooseAll()});p.add(gap(8));p.add(navButton("PDF","Adicionar PDF",null,Color(232,74,78)){choosePdfs()});p.add(gap(8));p.add(navButton("✂","Selecionar corte",null,V2_PURPLE){startCrop()});p.add(gap(8));p.add(navButton("▣","Remover páginas",null,V2_RED){deleteSelected()});p.add(gap(8));p.add(navButton("⟳","Girar e espelhar",null,Color(61,157,255)){showTransformMenu()});p.add(gap(8));p.add(navButton("▤","Criar páginas",null,Color(84,153,230)){createBlankPage()});p.add(gap(8));p.add(navButton("▥","Excluir página",null,V2_RED){deleteSelected()});p.add(gap(8));p.add(navButton("▧","Definir capa",null,Color(25,201,142)){changeCover()});p.add(gap(8));p.add(navButton("↕","Reordenar",null,V2_CYAN){focusReorder()});p.add(gap(26))
-        val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,182);preferredSize=Dimension(250,182);border=EmptyBorder(17,12,14,12)}
-        listOf(label("☁",36f,Font.BOLD,Color(153,195,239)),label("Arraste imagens",14f,Font.PLAIN,Color(202,219,238)),label("ou PDFs aqui",14f,Font.PLAIN,Color(202,219,238)),label("ou clique para selecionar",11f,Font.PLAIN,V2_MUTED)).forEach{it.alignmentX=CENTER_ALIGNMENT;drop.add(it)}
-        drop.add(gap(8));drop.add(blueButton("Selecionar arquivos"){chooseAll()}.apply{alignmentX=CENTER_ALIGNMENT;maximumSize=Dimension(245,38)});installFileDrop(drop);p.add(drop);p.add(Box.createVerticalGlue());return p
+        val drop=RoundedPanel(14,Color(7,27,47),Color(84,126,169)).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);maximumSize=Dimension(Int.MAX_VALUE,138);preferredSize=Dimension(214,138);border=EmptyBorder(10,8,10,8)}
+        listOf(label("☁",28f,Font.BOLD,Color(153,195,239)),label("Arraste imagens",12f,Font.PLAIN,Color(202,219,238)),label("ou PDFs aqui",12f,Font.PLAIN,Color(202,219,238)),label("ou clique para selecionar",10f,Font.PLAIN,V2_MUTED)).forEach{it.alignmentX=CENTER_ALIGNMENT;drop.add(it)}
+        drop.add(gap(8));drop.add(blueButton("Selecionar arquivos"){chooseAll()}.apply{alignmentX=CENTER_ALIGNMENT;maximumSize=Dimension(202,34)});installFileDrop(drop);p.add(drop);p.add(Box.createVerticalGlue());return p
     }
 
     private fun buildCenterPanel():JComponent {
@@ -155,13 +156,13 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         titleBar.add(modes, BorderLayout.EAST)
         p.add(titleBar, BorderLayout.NORTH)
 
-        val body = JPanel(BorderLayout(10, 0)).apply { isOpaque = false }
+        val body = JPanel(BorderLayout(6, 0)).apply { isOpaque = false }
 
         val thumbs = RoundedPanel(12, Color(8, 28, 48), V2_BORDER_SOFT).apply {
             layout = BorderLayout(0, 8)
             border = EmptyBorder(8, 8, 8, 8)
-            preferredSize = Dimension(172, 1)
-            minimumSize = Dimension(158, 320)
+            preferredSize = Dimension(112, 1)
+            minimumSize = Dimension(104, 320)
         }
         val th = JPanel(BorderLayout()).apply { isOpaque = false }
         th.add(label("▦  Páginas", 14f, Font.BOLD, V2_TEXT), BorderLayout.WEST)
@@ -184,7 +185,7 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         val previewStack = JPanel(BorderLayout(0, 8)).apply { isOpaque = false }
         preview.background = Color(8, 26, 45)
         preview.border = BorderFactory.createDashedBorder(Color(86, 124, 165), 2f, 6f, 4f, false)
-        preview.minimumSize = Dimension(430, 620)
+        preview.minimumSize = Dimension(620, 640)
         preview.onCrop = { c ->
             val idx = thumbList.selectedIndex
             if (idx in pages.indices) {
@@ -206,7 +207,7 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         controls.add(zoomLabel)
         controls.add(squareControl("+") { setZoom(zoom + .15) })
         controls.add(controlButton("⛶  Ajustar") { setZoom(1.0) })
-        controls.add(Box.createHorizontalStrut(90))
+        controls.add(Box.createHorizontalStrut(28))
         controls.add(squareControl("↶") { undo() })
         controls.add(squareControl("↷") { redo() })
         controls.add(controlButton("▱  Limpar") { clearAll() })
@@ -218,15 +219,15 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
     }
 
     private fun buildRightPanel():JComponent {
-        val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(13,12,13,12);preferredSize=Dimension(294,1)};p.add(label("▣  Capa e Exportação",16f,Font.BOLD,V2_TEXT));p.add(gap(10));includeCover.foreground=Color(207,223,240);includeCover.background=V2_BG_2;includeCover.isBorderPainted=false;includeCover.isFocusPainted=false;includeCover.horizontalAlignment=SwingConstants.LEFT;includeCover.alignmentX=LEFT_ALIGNMENT;includeCover.maximumSize=Dimension(Int.MAX_VALUE,32);includeCover.addActionListener{styleCoverToggle()};styleCoverToggle();p.add(includeCover);p.add(gap(8))
-        p.add(RoundedPanel(12,Color(26,48,72),V2_BORDER_SOFT).apply{layout=BorderLayout();maximumSize=Dimension(Int.MAX_VALUE,210);preferredSize=Dimension(265,210);border=EmptyBorder(7,7,7,7);coverPreview.horizontalAlignment=SwingConstants.CENTER;coverPreview.verticalAlignment=SwingConstants.CENTER;add(coverPreview,BorderLayout.CENTER)});p.add(gap(7));p.add(controlButton("▧  Trocar capa"){changeCover()}.apply{maximumSize=Dimension(Int.MAX_VALUE,40);alignmentX=LEFT_ALIGNMENT});p.add(gap(9));p.add(fieldLabel("✎","Título da capa"));styleTextField(titleField);p.add(titleField);p.add(gap(8));p.add(fieldLabel("●","Autor (opcional)"));styleTextField(authorField);p.add(authorField);p.add(gap(12));p.add(label("◉  Qualidade de exportação",13f,Font.PLAIN,V2_TEXT));quality.maximumSize=Dimension(Int.MAX_VALUE,40);quality.alignmentX=LEFT_ALIGNMENT;quality.background=Color(11,35,58);quality.foreground=V2_TEXT;p.add(quality);p.add(gap(10))
+        val p=RoundedPanel(16,V2_BG_2,V2_BORDER_SOFT).apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);border=EmptyBorder(12,10,12,10);preferredSize=Dimension(260,1);minimumSize=Dimension(250,1)};p.add(label("▣  Capa e Exportação",16f,Font.BOLD,V2_TEXT));p.add(gap(10));includeCover.foreground=Color(207,223,240);includeCover.background=V2_BG_2;includeCover.isBorderPainted=false;includeCover.isFocusPainted=false;includeCover.horizontalAlignment=SwingConstants.LEFT;includeCover.alignmentX=LEFT_ALIGNMENT;includeCover.maximumSize=Dimension(Int.MAX_VALUE,32);includeCover.addActionListener{styleCoverToggle()};styleCoverToggle();p.add(includeCover);p.add(gap(8))
+        p.add(RoundedPanel(12,Color(26,48,72),V2_BORDER_SOFT).apply{layout=BorderLayout();maximumSize=Dimension(Int.MAX_VALUE,178);preferredSize=Dimension(235,178);border=EmptyBorder(7,7,7,7);coverPreview.horizontalAlignment=SwingConstants.CENTER;coverPreview.verticalAlignment=SwingConstants.CENTER;add(coverPreview,BorderLayout.CENTER)});p.add(gap(7));p.add(controlButton("▧  Trocar capa"){changeCover()}.apply{maximumSize=Dimension(Int.MAX_VALUE,40);alignmentX=LEFT_ALIGNMENT});p.add(gap(9));p.add(fieldLabel("✎","Título da capa"));styleTextField(titleField);p.add(titleField);p.add(gap(8));p.add(fieldLabel("●","Autor (opcional)"));styleTextField(authorField);p.add(authorField);p.add(gap(12));p.add(label("◉  Qualidade de exportação",13f,Font.PLAIN,V2_TEXT));quality.maximumSize=Dimension(Int.MAX_VALUE,40);quality.alignmentX=LEFT_ALIGNMENT;quality.background=Color(11,35,58);quality.foreground=V2_TEXT;p.add(quality);p.add(gap(10))
         p.add(RoundedPanel(10,Color(9,47,89),Color(14,104,199)).apply{layout=BorderLayout();maximumSize=Dimension(Int.MAX_VALUE,74);border=EmptyBorder(9,10,9,10);add(label("ⓘ",18f,Font.BOLD,Color(113,177,246)),BorderLayout.WEST);add(label("<html>PDF sem giro/recorte é mantido vetorial.<br>Páginas editadas são rasterizadas<br>conforme a qualidade escolhida.</html>",11f,Font.PLAIN,Color(194,216,240)),BorderLayout.CENTER)});p.add(Box.createVerticalGlue());p.add(greenButton("▣  GERAR PDF","Exportar documento final"){exportPdf()});return p
     }
 
     private fun buildFooter():JComponent=JPanel(BorderLayout()).apply{background=Color(4,19,35);preferredSize=Dimension(1,42);border=BorderFactory.createMatteBorder(1,0,0,0,V2_BORDER_SOFT);add(label("Central de Inteligência de Mídia   |   Editor de PDF",11f,Font.PLAIN,Color(161,185,211)).apply{border=EmptyBorder(0,28,0,0)},BorderLayout.WEST);add(label("ϟ  Mais produtividade para o seu conteúdo",11f,Font.PLAIN,Color(170,196,224)).apply{border=EmptyBorder(0,0,0,28)},BorderLayout.EAST)}
 
-    private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=132;thumbList.fixedCellHeight=150;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}
-    private fun setThumbMode(t:Boolean){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;if(t){thumbList.fixedCellWidth=132;thumbList.fixedCellHeight=150}else{thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=68};thumbList.revalidate();thumbList.repaint()}
+    private fun configureThumbList(){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;thumbList.fixedCellWidth=88;thumbList.fixedCellHeight=126;thumbList.background=Color(8,28,48);thumbList.selectionMode=ListSelectionModel.SINGLE_SELECTION;thumbList.cellRenderer=PdfV2ThumbnailRenderer();thumbList.dragEnabled=true;thumbList.dropMode=DropMode.INSERT;thumbList.transferHandler=PdfV2ReorderTransferHandler();thumbList.addListSelectionListener{if(!it.valueIsAdjusting)refreshPreview()}}
+    private fun setThumbMode(t:Boolean){thumbList.layoutOrientation=JList.VERTICAL;thumbList.visibleRowCount=-1;if(t){thumbList.fixedCellWidth=88;thumbList.fixedCellHeight=126}else{thumbList.fixedCellWidth=-1;thumbList.fixedCellHeight=58};thumbList.revalidate();thumbList.repaint()}
     private fun chooseAll(){val fc=JFileChooser().apply{isMultiSelectionEnabled=true;fileFilter=FileNameExtensionFilter("PDF e imagens","pdf","jpg","jpeg","png","webp","bmp","tiff","tif")};if(fc.showOpenDialog(this)==JFileChooser.APPROVE_OPTION)importFiles(fc.selectedFiles.toList())}
     private fun choosePdfs(){val fc=JFileChooser().apply{isMultiSelectionEnabled=true;fileFilter=FileNameExtensionFilter("Arquivos PDF","pdf")};if(fc.showOpenDialog(this)==JFileChooser.APPROVE_OPTION)importFiles(fc.selectedFiles.toList())}
     private fun importFiles(files:List<File>){val valid=files.filter{it.exists()&&it.isFile};if(valid.isEmpty())return;pushUndo();var added=0;valid.forEach{f->try{when(f.extension.lowercase()){ "pdf"->Loader.loadPDF(f).use{doc->if(doc.numberOfPages==0)error("PDF sem páginas");repeat(doc.numberOfPages){i->pages+=PdfV2Page(kind=PdfV2ItemKind.PDF,path=f.absolutePath,pageNo=i);added++}};"jpg","jpeg","png","webp","bmp","tiff","tif"->{val img=ImageIO.read(f)?:error("Imagem inválida");img.flush();pages+=PdfV2Page(kind=PdfV2ItemKind.IMAGE,path=f.absolutePath);added++}}}catch(e:Exception){showError("Não foi possível importar ${f.name}: ${e.message}")}};if(added==0&&undo.isNotEmpty())undo.removeLast()else redo.clear();refreshAll(selectLast=true)}
@@ -277,14 +278,14 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
         }
         return out
     }
-    private fun createThumbnail(page:PdfV2Page):ImageIcon{val src=renderFinalPage(page,58);val s=min(104.0/src.width,122.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))}
+    private fun createThumbnail(page:PdfV2Page):ImageIcon{val src=renderFinalPage(page,58);val s=min(70.0/src.width,98.0/src.height).coerceAtMost(1.0);return ImageIcon(src.getScaledInstance(max(1,(src.width*s).roundToInt()),max(1,(src.height*s).roundToInt()),Image.SCALE_SMOOTH))}
     private fun changeCover(){val fc=JFileChooser().apply{fileFilter=FileNameExtensionFilter("Imagem","jpg","jpeg","png","webp","bmp","tiff","tif")};if(fc.showOpenDialog(this)!=JFileChooser.APPROVE_OPTION)return;runCatching{val img=ImageIO.read(fc.selectedFile)?:error("Imagem inválida");ImageIO.write(img,"png",customCoverFile);customCover=customCoverFile;saveConfig();refreshCoverPreview()}.onFailure{showError("Não foi possível trocar a capa: ${it.message}")}}
     private fun embeddedDefaultCover():BufferedImage{return runCatching{val s=javaClass.getResourceAsStream("/pdf-default-cover.b64")?:error("Recurso da capa não encontrado");val encoded=s.bufferedReader(Charsets.UTF_8).use{it.readText()};val bytes=Base64.getDecoder().decode(encoded.trim());ImageIO.read(ByteArrayInputStream(bytes))?:error("Capa padrão inválida")}.getOrElse{BufferedImage(1245,2048,BufferedImage.TYPE_INT_RGB).also{img->val g=img.createGraphics();g.color=Color(28,28,28);g.fillRect(0,0,img.width,img.height);g.color=Color.WHITE;g.font=Font("SansSerif",Font.BOLD,90);g.drawString("RADAR DE NOTÍCIAS",120,700);g.drawString("MÍDIA IMPRESSA",190,1180);g.dispose()}}}
     private fun currentCoverImage():BufferedImage{val f=customCover;return if(f!=null&&f.exists())ImageIO.read(f)?:embeddedDefaultCover() else embeddedDefaultCover()}
-    private fun refreshCoverPreview(){val img=runCatching{currentCoverImage()}.getOrElse{embeddedDefaultCover()};val s=min(240.0/img.width,190.0/img.height);coverPreview.icon=ImageIcon(img.getScaledInstance(max(1,(img.width*s).roundToInt()),max(1,(img.height*s).roundToInt()),Image.SCALE_SMOOTH))}
+    private fun refreshCoverPreview(){val img=runCatching{currentCoverImage()}.getOrElse{embeddedDefaultCover()};val s=min(218.0/img.width,164.0/img.height);coverPreview.icon=ImageIcon(img.getScaledInstance(max(1,(img.width*s).roundToInt()),max(1,(img.height*s).roundToInt()),Image.SCALE_SMOOTH))}
     private fun exportPdf(){if(pages.isEmpty()&&!includeCover.isSelected){showError("Adicione ao menos uma página ou mantenha a capa ativada.");return};val fc=JFileChooser().apply{dialogTitle="Salvar PDF";selectedFile=File(if(includeCover.isSelected)"RADAR DE NOTICIAS - MIDIA IMPRESSA.pdf" else "documento.pdf");fileFilter=FileNameExtensionFilter("PDF","pdf")};if(fc.showSaveDialog(this)!=JFileChooser.APPROVE_OPTION)return;var outFile=fc.selectedFile;if(!outFile.name.lowercase().endsWith(".pdf"))outFile=File(outFile.parentFile,outFile.name+".pdf");val q=quality.selectedItem as? PdfV2ExportQuality?:PdfV2ExportQuality.HIGH;try{cursor=Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR);PDDocument().use{out->if(titleField.text.isNotBlank())out.documentInformation.title=titleField.text.trim();if(authorField.text.isNotBlank())out.documentInformation.author=authorField.text.trim();if(includeCover.isSelected)appendRaster(out,currentCoverImage(),q);pages.forEach{p->if(p.kind==PdfV2ItemKind.PDF&&p.rotation==0&&!p.flipX&&p.crop==null)appendVector(out,p)else appendRaster(out,renderFinalPage(p,q.dpi),q)};out.save(outFile)};val o=arrayOf("OK","Abrir pasta");val c=JOptionPane.showOptionDialog(this,"PDF gerado com sucesso!\n${outFile.absolutePath}","Exportação concluída",JOptionPane.DEFAULT_OPTION,JOptionPane.INFORMATION_MESSAGE,null,o,o[0]);if(c==1&&Desktop.isDesktopSupported())Desktop.getDesktop().open(outFile.parentFile)}catch(e:Exception){showError("Erro ao gerar PDF: ${e.message}")}finally{cursor=Cursor.getDefaultCursor()}}
     private fun appendVector(out:PDDocument,data:PdfV2Page){Loader.loadPDF(File(data.path)).use{src->val sp=src.getPage(data.pageNo?:0);val box=sp.cropBox?:sp.mediaBox;val pw=595.276f;val ph=pw*box.height/box.width;val target=PDPage(PDRectangle(pw,ph));out.addPage(target);val form=LayerUtility(out).importPageAsForm(src,data.pageNo?:0);val scale=min(pw/box.width,ph/box.height);val x=(pw-box.width*scale)/2f;val y=(ph-box.height*scale)/2f;PDPageContentStream(out,target).use{cs->cs.transform(Matrix.getTranslateInstance(x,y));cs.transform(Matrix.getScaleInstance(scale,scale));cs.drawForm(form)}}}
-    private fun appendRaster(out:PDDocument,image:BufferedImage,q:PdfV2ExportQuality){val pw=595.276f;val ph=pw*image.height.toFloat()/image.width.toFloat();val page=PDPage(PDRectangle(pw,ph));out.addPage(page);val pd=JPEGFactory.createFromImage(out,ensureRgbV2(image),.97f,q.dpi);PDPageContentStream(out,page).use{cs->cs.drawImage(pd,0f,0f,pw,ph)}}
+    private fun appendRaster(out:PDDocument,image:BufferedImage,q:PdfV2ExportQuality){val pw=595.276f;val ph=pw*image.height.toFloat()/image.width.toFloat();val page=PDPage(PDRectangle(pw,ph));out.addPage(page);val pd=LosslessFactory.createFromImage(out,ensureRgbV2(image));PDPageContentStream(out,page).use{cs->cs.drawImage(pd,0f,0f,pw,ph)}}
     private fun createPortableDirs(){runCatching{if(!dataDir.exists())dataDir.mkdirs()}}
     private fun loadConfig(){runCatching{if(!configFile.exists())return@runCatching;val o=JSONObject(configFile.readText(Charsets.UTF_8));val rel=o.optString("custom_cover","");if(rel.isNotBlank())File(portableDir,rel.replace('/',File.separatorChar)).takeIf{it.exists()}?.let{customCover=it}}}
     private fun saveConfig(){runCatching{val o=JSONObject();if(customCover!=null)o.put("custom_cover","data/capa_padrao_usuario.png");configFile.writeText(o.toString(2),Charsets.UTF_8)}}
@@ -298,7 +299,7 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
     private fun gap(h:Int)=Box.createVerticalStrut(h)
     private fun statusPill(t:String,a:Color):JComponent=RoundedPanel(12,Color(6,32,49),a).apply{layout=BorderLayout();preferredSize=Dimension(180,52);border=EmptyBorder(0,15,0,15);add(label(t,13f,Font.BOLD,a),BorderLayout.CENTER)}
     private fun styledSquareButton(t:String,a:()->Unit)=StyledButton(t,Color(17,42,68),V2_TEXT,V2_BORDER).apply{preferredSize=Dimension(52,52);font=font.deriveFont(Font.BOLD,20f);addActionListener{a()}}
-    private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(11,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)54 else 72);preferredSize=Dimension(285,if(sub==null)54 else 72);add(RoundedPanel(9,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(42,42);layout=BorderLayout();add(label(i,if(i=="PDF")12f else 20f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,14f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,11f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}
+    private fun navButton(i:String,t:String,sub:String?,a:Color,active:Boolean=false,act:()->Unit)=StyledButton("",if(active)Color(17,73,139)else Color(14,36,59),V2_TEXT,if(active)V2_BLUE else V2_BORDER_SOFT).apply{layout=BorderLayout(7,0);maximumSize=Dimension(Int.MAX_VALUE,if(sub==null)46 else 58);preferredSize=Dimension(214,if(sub==null)46 else 58);add(RoundedPanel(8,Color(a.red,a.green,a.blue,35),a).apply{preferredSize=Dimension(34,34);layout=BorderLayout();add(label(i,if(i=="PDF")10f else 17f,Font.BOLD,a).apply{horizontalAlignment=SwingConstants.CENTER},BorderLayout.CENTER)},BorderLayout.WEST);add(JPanel().apply{layout=BoxLayout(this,BoxLayout.Y_AXIS);isOpaque=false;add(label(t,13f,Font.BOLD,V2_TEXT));if(sub!=null)add(label(sub,10f,Font.PLAIN,Color(156,190,224)))},BorderLayout.CENTER);addActionListener{act()}}
     private fun blueButton(t:String,a:()->Unit)=StyledButton(t,V2_BLUE_2,Color.WHITE,V2_BLUE).apply{font=font.deriveFont(Font.BOLD,13f);addActionListener{a()}}
     private fun controlButton(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(108,40);font=font.deriveFont(Font.BOLD,12f);addActionListener{a()}}
     private fun squareControl(t:String,a:()->Unit)=StyledButton(t,Color(16,40,65),V2_TEXT,V2_BORDER_SOFT).apply{preferredSize=Dimension(46,40);font=font.deriveFont(Font.BOLD,18f);addActionListener{a()}}
