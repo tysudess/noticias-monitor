@@ -87,7 +87,8 @@ private class PdfEditorV2Panel(private val onExit: () -> Unit) : JPanel(BorderLa
     private val portableDir = resolvePortableDir()
     private val dataDir = File(portableDir, "data")
     private val configFile = File(dataDir, "config.json")
-    private val customCoverFile = File(dataDir, "capa_padrao_usuario.png")`n    private val hdDefaultCoverFile = File(dataDir, "capa_padrao.png")
+    private val customCoverFile = File(dataDir, "capa_padrao_usuario.png")
+    private val hdDefaultCoverFile = File(dataDir, "capa_padrao.png")
 
     init {
         background = V2_BG; border = EmptyBorder(0,0,0,0); isFocusable = true
@@ -319,5 +320,6 @@ private fun rotateV2(src:BufferedImage,degrees:Int):BufferedImage{val n=((degree
 private fun flipHorizontalV2(src:BufferedImage):BufferedImage{val dst=BufferedImage(src.width,src.height,BufferedImage.TYPE_INT_RGB);val g=dst.createGraphics();g.color=Color.WHITE;g.fillRect(0,0,dst.width,dst.height);val tx=AffineTransform();tx.translate(src.width.toDouble(),0.0);tx.scale(-1.0,1.0);g.drawImage(src,tx,null);g.dispose();return dst}
 private fun copyV2(src:BufferedImage):BufferedImage{val dst=BufferedImage(src.width,src.height,BufferedImage.TYPE_INT_RGB);val g=dst.createGraphics();g.color=Color.WHITE;g.fillRect(0,0,dst.width,dst.height);g.drawImage(src,0,0,null);g.dispose();return dst}
 private fun ensureRgbV2(src:BufferedImage)=if(src.type==BufferedImage.TYPE_INT_RGB)src else copyV2(src)
+
 
 
