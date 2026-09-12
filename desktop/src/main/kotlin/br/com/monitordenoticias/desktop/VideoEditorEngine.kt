@@ -26,6 +26,23 @@ internal data class VideoEditorMediaInfo(
     val hasAudio: Boolean = audioCodec != null
 )
 
+internal data class VideoEditorFrameSequence(
+    val source: File,
+    val frames: List<File>,
+    val frameStepMs: Long,
+    val durationMs: Long,
+    val fps: Int
+) {
+    fun frameFor(positionMs: Long): File? {
+        if (frames.isEmpty()) return null
+        val safeStep = frameStepMs.coerceAtLeast(1L)
+        val index = (positionMs.coerceAtLeast(0L) / safeStep)
+            .toInt()
+            .coerceIn(0, frames.lastIndex)
+        return frames[index]
+    }
+}
+
 /** Motor independente do Editor de Vídeo. Não importa nem chama ExtractorVideoEngine. */
 internal class VideoEditorEngine {
     val appDir: Path = discoverAppDir()
@@ -35,6 +52,7 @@ internal class VideoEditorEngine {
     val exportsDir: File = appDir.resolve("VideoEditorExports").toFile().apply { mkdirs() }
     private val previewDir: File = appDir.resolve("data/video-editor/preview").toFile().apply { mkdirs() }
     private val thumbnailDir: File = appDir.resolve("data/video-editor/thumbs").toFile().apply { mkdirs() }
+    private val frameSequenceDir: File = appDir.resolve("data/video-editor/frame-sequences").toFile().apply { mkdirs() }
 
     private val activeProcess = AtomicReference<Process?>(null)
     private val cancelRequested = AtomicBoolean(false)
@@ -123,11 +141,6 @@ internal class VideoEditorEngine {
             require(ffmpeg.exists()) { "ffmpeg.exe não encontrado em ${binDir.absolutePath}." }
             cancelRequested.set(false)
 
-            if (canPlayDirectly(input, info)) {
-                update(100, "Preview pronto.")
-                return@runCatching input
-            }
-
             previewDir.mkdirs()
             val proxy = File(previewDir, "${previewKey(input)}.mp4")
             if (proxy.exists() && proxy.length() > 64 * 1024L && proxy.lastModified() >= input.lastModified()) {
@@ -136,20 +149,20 @@ internal class VideoEditorEngine {
             }
 
             runCatching { proxy.delete() }
-            update(0, "Preparando preview compatível para reprodução interna...")
+            update(0, "Preparando arquivo interno de preview...")
             val command = listOf(
                 ffmpeg.absolutePath,
                 "-y",
                 "-i", input.absolutePath,
                 "-map", "0:v:0",
                 "-map", "0:a?",
-                "-vf", "scale=w='min(1280,iw)':h=-2",
+                "-vf", "scale=w='min(960,iw)':h=-2",
                 "-c:v", "libx264",
                 "-preset", "ultrafast",
-                "-crf", "28",
+                "-crf", "30",
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
-                "-b:a", "128k",
+                "-b:a", "96k",
                 "-movflags", "+faststart",
                 "-progress", "pipe:1",
                 "-nostats",
@@ -162,8 +175,58 @@ internal class VideoEditorEngine {
                 error("Falha ao preparar preview. ${result.output.takeLast(600)}")
             }
             proxy.setLastModified(System.currentTimeMillis())
-            update(100, "Preview pronto.")
+            update(100, "Arquivo interno de preview pronto.")
             proxy
+        }
+    }
+
+    suspend fun preparePreviewFrames(
+        input: File,
+        durationMs: Long,
+        update: (Int, String) -> Unit
+    ): Result<VideoEditorFrameSequence> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(ffmpeg.exists()) { "ffmpeg.exe não encontrado em ${binDir.absolutePath}." }
+            require(input.exists()) { "Arquivo de preview não encontrado." }
+            require(durationMs > 0L) { "Duração inválida para gerar preview." }
+            cancelRequested.set(false)
+
+            val fps = previewFpsFor(durationMs)
+            val stepMs = (1000L / fps).coerceAtLeast(1L)
+            val key = previewKey(input)
+            val dir = File(frameSequenceDir, "${key}_${fps}fps")
+            val done = File(dir, ".complete")
+            val cached = sortedFrames(dir)
+            val minimumExpected = ((durationMs / stepMs).toInt() - 2).coerceAtLeast(1)
+            if (done.exists() && cached.size >= minimumExpected && cached.all { it.length() > 512L }) {
+                update(100, "Sequência de preview reutilizada (${cached.size} frames).")
+                return@runCatching VideoEditorFrameSequence(input, cached, stepMs, durationMs, fps)
+            }
+
+            resetDirectory(dir)
+            update(0, "Gerando sequência de preview estável (${fps} fps)...")
+            val pattern = File(dir, "frame_%06d.jpg").absolutePath
+            val command = listOf(
+                ffmpeg.absolutePath,
+                "-y",
+                "-i", input.absolutePath,
+                "-an",
+                "-vf", "fps=$fps,scale=w='min(960,iw)':h=-2",
+                "-q:v", "7",
+                "-start_number", "0",
+                "-progress", "pipe:1",
+                "-nostats",
+                pattern
+            )
+            val result = runFfmpegWithProgress(command, durationMs, update)
+            val frames = sortedFrames(dir).filter { it.length() > 512L }
+            if (result.exitCode != 0 || frames.isEmpty()) {
+                if (cancelRequested.get()) error("Geração da sequência de preview cancelada.")
+                error("Falha ao gerar sequência de preview. ${result.output.takeLast(700)}")
+            }
+            done.writeText("fps=$fps\nframes=${frames.size}\ndurationMs=$durationMs\n", Charsets.UTF_8)
+            update(100, "Sequência de preview pronta (${frames.size} frames).")
+            VideoEditorFrameSequence(input, frames, stepMs, durationMs, fps)
         }
     }
 
@@ -266,14 +329,6 @@ internal class VideoEditorEngine {
         Desktop.getDesktop().open(exportsDir)
     }
 
-    private fun canPlayDirectly(file: File, info: VideoEditorMediaInfo): Boolean {
-        val ext = file.extension.lowercase(Locale.ROOT)
-        val compatibleContainer = ext in setOf("mp4", "mov", "m4v")
-        val compatibleVideo = info.videoCodec == "h264" || info.videoCodec == "avc1"
-        val compatibleAudio = info.audioCodec == null || info.audioCodec in setOf("aac", "mp3")
-        return compatibleContainer && compatibleVideo && compatibleAudio
-    }
-
     private fun runFfmpegWithProgress(
         command: List<String>,
         expectedDurationMs: Long,
@@ -323,6 +378,29 @@ internal class VideoEditorEngine {
     }
 
     private data class ProcessResult(val exitCode: Int, val output: String)
+
+    private fun previewFpsFor(durationMs: Long): Int = when {
+        durationMs > 30L * 60L * 1000L -> 4
+        durationMs > 10L * 60L * 1000L -> 6
+        else -> 10
+    }
+
+    private fun sortedFrames(dir: File): List<File> =
+        dir.listFiles { file ->
+            file.isFile && file.name.startsWith("frame_") && file.extension.equals("jpg", ignoreCase = true)
+        }?.sortedBy { it.name }.orEmpty()
+
+    private fun resetDirectory(dir: File) {
+        if (dir.exists()) {
+            dir.listFiles()?.forEach { child ->
+                runCatching {
+                    if (child.isDirectory) child.deleteRecursively() else child.delete()
+                }
+            }
+        } else {
+            dir.mkdirs()
+        }
+    }
 
     private fun previewKey(file: File): String {
         val source = "${file.absolutePath.lowercase(Locale.ROOT)}|${file.length()}|${file.lastModified()}"
