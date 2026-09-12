@@ -1,0 +1,153 @@
+name: Release V11 Functional Video Editor
+
+on:
+  push:
+    branches:
+      - work/v11-video-editor-functional
+    paths:
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorEngine.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt'
+      - 'desktop/build.gradle.kts'
+      - '.github/workflows/release-v11-video-editor-functional.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v11-video-editor-functional
+          fetch-depth: 0
+
+      - name: Validate frozen Extractor and PDF
+        shell: pwsh
+        run: |
+          $extractor=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt').Trim()
+          $pdf=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt').Trim()
+          if($extractor -ne '72ef34a27058d61f001b7236c6b66c80310c0862'){throw "Extrator alterado: $extractor"}
+          if($pdf -ne '5610d1e75a40863864dd0320453c021197ee48c5'){throw "PDF alterado: $pdf"}
+
+      - name: Validate complete Video Editor contract
+        shell: pwsh
+        run: |
+          $screen=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
+          $engine=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorEngine.kt' -Raw
+          $preview=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt' -Raw
+          foreach($x in @('ABRIR VÍDEO','PRÉ-VISUALIZAÇÃO','MARCAÇÃO RÁPIDA','TIMELINE','EXPORTAÇÃO','RangeTrimBar','cutAtPlayhead','removeSelected','duplicateSelected','moveSelected','markStartHere','markEndHere','adjustCursor','undoStack','Zoom','APLICAR TEMPOS','H.265','Alvo','Abrir pasta')){if(($screen+$engine) -notmatch [regex]::Escape($x)){throw "Editor incompleto: $x"}}
+          foreach($x in @('ffprobe.exe','ffmpeg.exe','anullsrc','libx264','libx265','hvc1','aac_adtstoasc','faststart','aresample=async=1:first_pts=0','ExtratorVideos-timeline-','targetSizeMb','VideoResolution','VideoCodec')){if($engine -notmatch [regex]::Escape($x)){throw "Pipeline incompleto: $x"}}
+          foreach($x in @('JFXPanel','MediaPlayer','MediaView','seek','play','pause')){if($preview -notmatch [regex]::Escape($x)){throw "Preview incompleto: $x"}}
+          $dash=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
+          if($dash -notmatch 'VIDEO_EDITOR\("Editor de Vídeo"'){throw 'Aba Editor de Vídeo ausente.'}
+          if($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"'){throw 'Aba Extrator ausente.'}
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compile Desktop
+        shell: pwsh
+        run: gradle :desktop:compileKotlin --stacktrace
+
+      - name: Create Windows distribution
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Prepare complete portable binaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $ProgressPreference='SilentlyContinue'
+          New-Item -ItemType Directory -Force -Path 'portable-bin' | Out-Null
+          Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe' -OutFile 'portable-bin/yt-dlp.exe' -TimeoutSec 180
+          Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' -OutFile 'portable-bin/yt-dlp-stable.exe' -TimeoutSec 180
+          Invoke-WebRequest -Uri 'https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip' -OutFile 'deno.zip' -TimeoutSec 180
+          Expand-Archive 'deno.zip' 'deno-temp' -Force
+          Copy-Item 'deno-temp/deno.exe' 'portable-bin/deno.exe' -Force
+          $sources=@(
+            'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n9.0-latest-win64-gpl-9.0.zip',
+            'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+          )
+          $ok=$false
+          foreach($source in $sources){
+            try{
+              Invoke-WebRequest -Uri $source -OutFile 'ffmpeg.zip' -TimeoutSec 240
+              if((Get-Item 'ffmpeg.zip').Length -gt 1000000){$ok=$true;break}
+            }catch{Write-Warning $_.Exception.Message}
+          }
+          if(-not $ok){throw 'Não foi possível baixar FFmpeg.'}
+          Expand-Archive 'ffmpeg.zip' 'ffmpeg-temp' -Force
+          $ffmpeg=Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1
+          $ffprobe=Get-ChildItem 'ffmpeg-temp' -Recurse -Filter 'ffprobe.exe' | Select-Object -First 1
+          if(-not $ffmpeg -or -not $ffprobe){throw 'ffmpeg/ffprobe ausentes.'}
+          Copy-Item $ffmpeg.FullName 'portable-bin/ffmpeg.exe' -Force
+          Copy-Item $ffprobe.FullName 'portable-bin/ffprobe.exe' -Force
+          & 'portable-bin/ffmpeg.exe' -version | Select-Object -First 1
+          if($LASTEXITCODE -ne 0){throw 'FFmpeg inválido.'}
+          & 'portable-bin/ffprobe.exe' -version | Select-Object -First 1
+          if($LASTEXITCODE -ne 0){throw 'FFprobe inválido.'}
+
+      - name: Assemble complete Monitor Portable
+        shell: pwsh
+        run: |
+          $root='desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if(-not (Test-Path $root)){throw 'Distribuição Windows ausente.'}
+          if(-not (Test-Path (Join-Path $root 'MonitorDeNoticias.exe'))){throw 'EXE ausente.'}
+          $bin=Join-Path $root 'bin'
+          New-Item -ItemType Directory -Force $bin | Out-Null
+          foreach($name in @('yt-dlp.exe','yt-dlp-stable.exe','ffmpeg.exe','ffprobe.exe','deno.exe')){
+            Copy-Item (Join-Path 'portable-bin' $name) (Join-Path $bin $name) -Force
+            $path=Join-Path $bin $name
+            if(-not (Test-Path $path) -or (Get-Item $path).Length -lt 100000){throw "Binário inválido: $name"}
+          }
+          New-Item -ItemType Directory -Force (Join-Path $root 'Videos') | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $root 'data/extractor') | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $root 'data/video-editor') | Out-Null
+          '${{ github.sha }}' | Set-Content (Join-Path $root 'BUILD-SHA.txt') -Encoding ascii
+
+      - name: Validate complete portable
+        shell: pwsh
+        run: |
+          $root='desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          foreach($path in @(
+            'MonitorDeNoticias.exe','bin/ffmpeg.exe','bin/ffprobe.exe','bin/yt-dlp.exe','bin/yt-dlp-stable.exe','bin/deno.exe','Videos','data/extractor','data/video-editor'
+          )){if(-not (Test-Path (Join-Path $root $path))){throw "Portable incompleto: $path"}}
+          $lib=Join-Path $root 'lib'
+          if(-not (Get-ChildItem $lib -Filter '*javafx-media*' -ErrorAction SilentlyContinue)){throw 'JavaFX Media não foi empacotado.'}
+
+      - name: Package ZIP and SHA-256
+        shell: pwsh
+        run: |
+          $root='desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $zip='Monitor-de-Noticias-V11-Editor-de-Video-Funcional-Windows-Portable.zip'
+          if(Test-Path $zip){Remove-Item $zip -Force}
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          Write-Host "SHA256=$hash"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag='v11-video-editor-functional-20260912'
+          if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag}
+          gh release create $tag `
+            'Monitor-de-Noticias-V11-Editor-de-Video-Funcional-Windows-Portable.zip' `
+            'Monitor-de-Noticias-V11-Editor-de-Video-Funcional-Windows-Portable.zip.sha256' `
+            --repo tysudess/noticias-monitor `
+            --target work/v11-video-editor-functional `
+            --title 'Monitor V11 — Editor de Vídeo Funcional — Windows Portable' `
+            --notes 'Primeira versão funcional do Editor de Vídeo dentro do Monitor, baseada no editor avançado v3.0.1. Inclui preview embutido, múltiplos clipes, timeline, RangeSlider, cortes, exclusão, duplicação, reordenação, marcações, precisão, undo limitado e exportação MP4 H.264/H.265 com alvo de tamanho. Portable completo com FFmpeg/FFprobe/yt-dlp/Deno e preservação por hash do Extrator e Editor de PDF.'
