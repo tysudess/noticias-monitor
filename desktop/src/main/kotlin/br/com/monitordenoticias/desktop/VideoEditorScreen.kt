@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.swing.JFileChooser
@@ -55,6 +56,9 @@ fun VideoEditorScreen(onBack: () -> Unit) {
     val pageScroll = rememberScrollState()
 
     var input by remember { mutableStateOf<File?>(null) }
+    var previewSource by remember { mutableStateOf<File?>(null) }
+    var previewSequence by remember { mutableStateOf<VideoEditorFrameSequence?>(null) }
+    var playbackSeed by remember { mutableLongStateOf(0L) }
     var info by remember { mutableStateOf<VideoEditorMediaInfo?>(null) }
     var currentMs by remember { mutableLongStateOf(0L) }
     var inMs by remember { mutableLongStateOf(0L) }
@@ -91,15 +95,47 @@ fun VideoEditorScreen(onBack: () -> Unit) {
         }
     }
 
+    LaunchedEffect(playing, previewSequence, busy, outMs, inMs, playbackSeed) {
+        val sequence = previewSequence ?: return@LaunchedEffect
+        if (!playing || busy) return@LaunchedEffect
+
+        val duration = (info?.durationMs ?: sequence.durationMs).coerceAtLeast(1L)
+        val end = if (outMs > inMs) outMs.coerceAtMost(duration) else duration
+        if (end <= 0L) {
+            preview.pause()
+            return@LaunchedEffect
+        }
+
+        var startPosition = currentMs.coerceIn(0L, end)
+        if (startPosition >= end - 40L && inMs < end) startPosition = inMs
+        val startedAt = System.currentTimeMillis()
+        currentMs = startPosition
+        preview.showAt(startPosition)
+        status = "Reproduzindo preview estável em ${sequence.fps} fps."
+
+        while (true) {
+            val elapsed = System.currentTimeMillis() - startedAt
+            val next = (startPosition + elapsed).coerceAtMost(end)
+            currentMs = next
+            preview.showAt(next)
+            if (next >= end) {
+                preview.pause()
+                break
+            }
+            delay(33L)
+        }
+    }
+
     fun showNotImplemented(feature: String) {
         status = "Esta função ainda não existe no motor atual: $feature."
     }
 
     fun seekTo(targetMs: Long) {
-        val duration = max(1L, info?.durationMs ?: 0L)
+        val duration = max(1L, info?.durationMs ?: previewSequence?.durationMs ?: 0L)
         val target = targetMs.coerceIn(0L, duration)
         currentMs = target
         preview.seek(target)
+        playbackSeed++
     }
 
     fun seekBy(deltaMs: Long) {
@@ -110,12 +146,14 @@ fun VideoEditorScreen(onBack: () -> Unit) {
         val safeOut = if (outMs > 100L) outMs else max(100L, info?.durationMs ?: 100L)
         inMs = min(currentMs, safeOut - 100L).coerceAtLeast(0L)
         if (currentMs < inMs) seekTo(inMs)
+        playbackSeed++
         status = "Ponto inicial definido em ${formatTime(inMs)}"
     }
 
     fun markOut() {
         val duration = max(100L, info?.durationMs ?: 100L)
         outMs = max(inMs + 100L, min(currentMs, duration)).coerceAtMost(duration)
+        playbackSeed++
         status = "Ponto final definido em ${formatTime(outMs)}"
     }
 
@@ -123,10 +161,13 @@ fun VideoEditorScreen(onBack: () -> Unit) {
         if (busy) return
         val chosen = chooseVideoFile() ?: return
         if (!engine.isSupportedInput(chosen)) {
-            status = "Formato não suportado. Use MP4, MOV, MKV ou WEBM."
+            status = "Formato não suportado. Use MP4, MOV, MKV, WEBM, AVI ou M4V."
             return
         }
         preview.pause()
+        previewSource = null
+        previewSequence = null
+        preview.clearFrame()
         busy = true
         progress = 0f
         exported = null
@@ -144,18 +185,35 @@ fun VideoEditorScreen(onBack: () -> Unit) {
             currentMs = 0L
             inMs = 0L
             outMs = mediaInfo.durationMs
+
             val prepared = engine.preparePreview(chosen, mediaInfo) { pct, msg ->
-                progress = pct.coerceIn(0, 100) / 100f
+                progress = (pct.coerceIn(0, 100) * 0.45f) / 100f
+                if (msg.isNotBlank()) status = msg
+            }
+            val previewFile = prepared.getOrElse {
+                busy = false
+                status = it.message ?: "Falha ao preparar o preview."
+                return@launch
+            }
+            previewSource = previewFile
+            preview.load(previewFile)
+            status = "Gerando cache de frames para reprodução estável..."
+
+            val sequence = engine.preparePreviewFrames(previewFile, mediaInfo.durationMs) { pct, msg ->
+                progress = 0.45f + ((pct.coerceIn(0, 100) * 0.55f) / 100f)
                 if (msg.isNotBlank()) status = msg
             }
             busy = false
-            prepared.fold(
-                onSuccess = { file ->
+            sequence.fold(
+                onSuccess = { frames ->
+                    previewSequence = frames
+                    preview.loadSequence(previewFile, frames)
+                    preview.seek(0L)
+                    playbackSeed++
                     progress = 1f
-                    status = "Vídeo pronto para preview e timeline: ${chosen.name}"
-                    preview.load(file)
+                    status = "Vídeo pronto: preview estável por cache de frames (${frames.fps} fps) e timeline carregada."
                 },
-                onFailure = { status = it.message ?: "Falha ao preparar o preview." }
+                onFailure = { status = it.message ?: "Falha ao gerar sequência de preview." }
             )
         }
     }
@@ -230,6 +288,7 @@ fun VideoEditorScreen(onBack: () -> Unit) {
                             outMs = outMs,
                             playing = playing,
                             busy = busy,
+                            sequence = previewSequence,
                             onOpen = ::openVideo,
                             onPlayPause = {
                                 if (input != null && !busy) {
@@ -307,7 +366,7 @@ private fun VideoMasterTopBar(onOpen: () -> Unit, onBack: () -> Unit, onNotImple
         Spacer(Modifier.width(14.dp))
         Column(Modifier.width(480.dp)) {
             Text("VideoMaster PRO", color = VE_TEXT, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text("Editor de Vídeo em tela cheia • Preview • Timeline • Corte por IN/OUT", color = VE_MUTED, fontSize = 13.sp)
+            Text("Editor de Vídeo em tela cheia • Preview estável • Timeline • Corte por IN/OUT", color = VE_MUTED, fontSize = 13.sp)
         }
         Spacer(Modifier.weight(1f))
         TopToolbarButton("▭", "Abrir Vídeo", onClick = onOpen)
@@ -355,7 +414,7 @@ private fun LeftModuleRail(onOpen: () -> Unit, onCut: () -> Unit, onNotImplement
             Column(Modifier.fillMaxWidth().padding(10.dp)) {
                 Text("Funcional agora", color = VE_GREEN, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text("Abrir vídeo", color = VE_MUTED, fontSize = 11.sp)
-                Text("Preview interno", color = VE_MUTED, fontSize = 11.sp)
+                Text("Preview por cache", color = VE_MUTED, fontSize = 11.sp)
                 Text("Timeline + IN/OUT", color = VE_MUTED, fontSize = 11.sp)
                 Text("Exportar corte MP4", color = VE_MUTED, fontSize = 11.sp)
             }
@@ -411,8 +470,10 @@ private fun ProjectMediaPanel(
             Spacer(Modifier.height(12.dp))
             LabelValue("Duração", formatTime(info?.durationMs ?: 0L), VE_GREEN)
             LabelValue("Resolução", "${info?.width ?: 0}×${info?.height ?: 0}", VE_BLUE_2)
+            LabelValue("FPS", if ((info?.fps ?: 0.0) > 0.0) String.format("%.2f", info?.fps ?: 0.0) else "N/D", VE_CYAN)
+            LabelValue("Áudio", if (info?.hasAudio == true) "Sim" else "Não", VE_MUTED)
             LabelValue("Codec", info?.videoCodec?.uppercase() ?: "VIDEO", VE_CYAN)
-            LabelValue("Formato", info?.format ?: input.extension.uppercase(), VE_MUTED)
+            LabelValue("Formato", input.extension.uppercase(), VE_MUTED)
             Spacer(Modifier.height(12.dp))
             Text("Outras mídias, múltiplos vídeos, imagens, texto e áudio editável ainda não existem no motor atual.", color = VE_FADED, fontSize = 11.sp)
         } else {
@@ -486,6 +547,7 @@ private fun PreviewStudioPanel(
     outMs: Long,
     playing: Boolean,
     busy: Boolean,
+    sequence: VideoEditorFrameSequence?,
     onOpen: () -> Unit,
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
@@ -501,7 +563,7 @@ private fun PreviewStudioPanel(
             Text("${info?.width ?: 0}×${info?.height ?: 0}", color = VE_MUTED, fontSize = 12.sp)
             Spacer(Modifier.weight(1f))
             Surface(color = Color(0xFF09121F), shape = RoundedCornerShape(5.dp), border = BorderStroke(1.dp, VE_BORDER_SOFT)) {
-                Text("Preview interno", color = VE_MUTED, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
+                Text(if (sequence != null) "Cache ${sequence.fps} fps" else "Preview interno", color = VE_MUTED, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
             }
             Spacer(Modifier.width(12.dp))
             Text("⛶", color = VE_TEXT, fontSize = 18.sp, modifier = Modifier.clickable { onNotImplemented("Tela cheia") })
@@ -538,7 +600,7 @@ private fun PreviewStudioPanel(
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             PlayerButton("◀ 5s", enabled = input != null && !busy, onClick = onBackFive)
-            PlayerButton(if (playing) "Ⅱ" else "▶", enabled = input != null && !busy, onClick = onPlayPause, large = true)
+            PlayerButton(if (playing) "Ⅱ" else "▶", enabled = input != null && !busy && sequence != null, onClick = onPlayPause, large = true)
             PlayerButton("5s ▶", enabled = input != null && !busy, onClick = onForwardFive)
             Spacer(Modifier.width(22.dp))
             PlayerButton("🔊", enabled = false, onClick = { onNotImplemented("Controle de volume") })
@@ -725,7 +787,7 @@ private fun BottomStatusBar(status: String, busy: Boolean, progress: Float, info
             .border(1.dp, VE_BORDER_SOFT, RoundedCornerShape(8.dp)).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("VideoMaster PRO v1.1", color = VE_TEXT, fontSize = 12.sp)
+        Text("VideoMaster PRO v1.2", color = VE_TEXT, fontSize = 12.sp)
         Spacer(Modifier.width(18.dp))
         Text(if (busy) "● Processando" else "● Pronto", color = if (busy) VE_BLUE_2 else VE_GREEN, fontSize = 12.sp)
         Spacer(Modifier.width(14.dp))
@@ -785,7 +847,7 @@ private fun LabelValue(label: String, value: String, accent: Color) {
 private fun chooseVideoFile(): File? {
     val chooser = JFileChooser().apply {
         dialogTitle = "Abrir vídeo"
-        fileFilter = FileNameExtensionFilter("Vídeos (MP4, MOV, MKV, WEBM)", "mp4", "mov", "mkv", "webm")
+        fileFilter = FileNameExtensionFilter("Vídeos (MP4, MOV, MKV, WEBM, AVI, M4V)", "mp4", "mov", "mkv", "webm", "avi", "m4v")
         isAcceptAllFileFilterUsed = false
     }
     return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
