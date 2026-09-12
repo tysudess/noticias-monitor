@@ -38,7 +38,7 @@ if 'VIDEO_EDITOR("Editor de Vídeo"' not in src:
 
 if 'else if (section == V5Section.VIDEO_EDITOR)' not in src:
     extractor_workspace = '''    } else if (section == V5Section.EXTRACTOR) {\n        Column(Modifier.fillMaxSize().background(V5Bg)) {\n            Row(Modifier.weight(1f).fillMaxWidth()) {\n                V5Sidebar(section, { section = it }, c, tick)\n                Box(Modifier.weight(1f).fillMaxHeight()) {\n                    ExtractorVideoScreen { section = V5Section.HOME }\n                }\n            }\n            V5Footer(c, tick)\n        }\n    } else {'''
-    editor_workspace = '''    } else if (section == V5Section.EXTRACTOR) {\n        Column(Modifier.fillMaxSize().background(V5Bg)) {\n            Row(Modifier.weight(1f).fillMaxWidth()) {\n                V5Sidebar(section, { section = it }, c, tick)\n                Box(Modifier.weight(1f).fillMaxHeight()) {\n                    ExtractorVideoScreen { section = V5Section.HOME }\n                }\n            }\n            V5Footer(c, tick)\n        }\n    } else if (section == V5Section.VIDEO_EDITOR) {\n        Column(Modifier.fillMaxSize().background(V5Bg)) {\n            Row(Modifier.weight(1f).fillMaxWidth()) {\n                V5Sidebar(section, { section = it }, c, tick)\n                Box(Modifier.weight(1f).fillMaxHeight()) {\n                    VideoEditorScreen { section = V5Section.HOME }\n                }\n            }\n            V5Footer(c, tick)\n        }\n    } else {'''
+    editor_workspace = '''    } else if (section == V5Section.EXTRACTOR) {\n        Column(Modifier.fillMaxSize().background(V5Bg)) {\n            Row(Modifier.weight(1f).fillMaxWidth()) {\n                V5Sidebar(section, { section = it }, c, tick)\n                Box(Modifier.weight(1f).fillMaxHeight()) {\n                    ExtractorVideoScreen { section = V5Section.HOME }\n                }\n            }\n            V5Footer(c, tick)\n        }\n    } else if (section == V5Section.VIDEO_EDITOR) {\n        Box(Modifier.fillMaxSize().background(V5Bg)) {\n            VideoEditorScreen { section = V5Section.HOME }\n        }\n    } else {'''
     if extractor_workspace not in src:
         raise SystemExit('Workspace dedicada do Extrator não encontrada; integração do Editor foi bloqueada para não adivinhar a estrutura.')
     src = src.replace(extractor_workspace, editor_workspace, 1)
@@ -55,4 +55,4 @@ assert 'else if (section == V5Section.VIDEO_EDITOR)' in updated
 assert 'VideoEditorScreen { section = V5Section.HOME }' in updated
 assert 'EXTRACTOR("Extrator de Vídeos"' in updated
 assert 'PDF_EDITOR("Editor de PDF"' in updated
-print('Editor de Vídeo integrado apenas pela navegação; PDF e motor/tela do Extrator permaneceram byte a byte intactos.')
+print('Editor de Vídeo integrado em tela cheia; PDF e motor/tela do Extrator permaneceram byte a byte intactos.')
