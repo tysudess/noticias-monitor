@@ -1,4 +1,6 @@
 from pathlib import Path
+import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop'
@@ -27,3 +29,10 @@ updated = ENGINE.read_text(encoding='utf-8')
 assert 'HiddenWindowsProcess.destroyTree(activeProcess.getAndSet(null))' in updated
 assert 'HiddenWindowsProcess.start(cmd, appDir.toFile())' in updated
 print('Subprocessos do Extrator configurados para execução oculta no Windows.')
+
+# O login do Globoplay usa o mesmo Qt WebEngine/Chromium da versão portátil antiga.
+# Geramos um EXE windowed e o incluímos como recurso do app, sem exigir Python instalado no computador do usuário.
+builder = ROOT / 'tools/build-globoplay-login-helper.py'
+if not builder.exists():
+    raise SystemExit('Build do navegador interno Globoplay ausente.')
+subprocess.check_call([sys.executable, str(builder)], cwd=str(ROOT))
