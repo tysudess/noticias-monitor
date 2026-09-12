@@ -302,7 +302,7 @@ fun VideoEditorScreen(onBack: () -> Unit = {}) {
                     .onFailure { status = "Falha em ${file.name}: ${it.message}" }
             }
             if (selectedIndex < 0 && clips.isNotEmpty()) loadIndex(0, 0L, false)
-            status = if (clips.isNotEmpty()) "${clips.size} clipe(s) na timeline • ${formatVideoTime(totalDuration())}" else "Nenhum vídeo válido foi adicionado."
+            status = if (clips.isNotEmpty()) "${clips.size} clipe(s) na timeline • ${formatVideoTime(totalDuration())} • Preview: ${File(clips[selectedIndex.coerceAtLeast(0)].path).name}" else "Nenhum vídeo válido foi adicionado."
         }
     }
 
@@ -337,6 +337,10 @@ fun VideoEditorScreen(onBack: () -> Unit = {}) {
     LaunchedEffect(Unit) {
         while (true) {
             delay(55)
+            preview.consumeError()?.let { message ->
+                sequencePlaying = false
+                status = "Falha no preview: $message"
+            }
             val clip = selectedClip()
             if (clip != null && preview.currentPath == clip.path) {
                 val source = preview.currentPositionMs()

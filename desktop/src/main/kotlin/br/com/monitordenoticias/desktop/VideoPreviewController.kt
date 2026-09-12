@@ -10,6 +10,7 @@ import javafx.scene.media.MediaView
 import javafx.util.Duration
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 internal class VideoPreviewController {
     val panel = JFXPanel()
@@ -17,6 +18,7 @@ internal class VideoPreviewController {
     private var view: MediaView? = null
     private val currentMs = AtomicLong(0L)
     private val durationMs = AtomicLong(0L)
+    private val lastError = AtomicReference<String?>(null)
     @Volatile var currentPath: String = ""
         private set
     @Volatile var playing: Boolean = false
@@ -42,13 +44,26 @@ internal class VideoPreviewController {
 
     fun load(path: String, sourcePositionMs: Long, autoPlay: Boolean = false) {
         val file = File(path)
-        if (!file.exists()) return
+        if (!file.exists()) {
+            lastError.set("Arquivo não encontrado: ${file.absolutePath}")
+            return
+        }
         currentPath = file.absolutePath
         Platform.runLater {
             runCatching { player?.dispose() }
-            val p = MediaPlayer(Media(file.toURI().toString()))
+            val p = try {
+                MediaPlayer(Media(file.toURI().toString()))
+            } catch (t: Throwable) {
+                lastError.set(t.message ?: "Falha ao carregar mídia no preview.")
+                playing = false
+                return@runLater
+            }
             player = p
             view?.mediaPlayer = p
+            p.setOnError {
+                lastError.set(p.error?.message ?: "Falha de reprodução no preview.")
+                playing = false
+            }
             p.volume = .72
             p.currentTimeProperty().addListener { _, _, value -> currentMs.set(value.toMillis().toLong().coerceAtLeast(0L)) }
             p.totalDurationProperty().addListener { _, _, value -> if (!value.isUnknown) durationMs.set(value.toMillis().toLong().coerceAtLeast(0L)) }
@@ -92,6 +107,7 @@ internal class VideoPreviewController {
 
     fun currentPositionMs(): Long = currentMs.get()
     fun mediaDurationMs(): Long = durationMs.get()
+    fun consumeError(): String? = lastError.getAndSet(null)
 
     fun stopAndDispose() {
         Platform.runLater {
