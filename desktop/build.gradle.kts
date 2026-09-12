@@ -54,12 +54,13 @@ dependencies {
     implementation("com.twelvemonkeys.imageio:imageio-tiff:3.12.0")
     implementation("net.sf.kxml:kxml2:2.3.0")
 
-    // Navegador interno do login Globoplay. Mantido isolado do restante do Monitor.
+    // JavaFX é compartilhado pelo login Globoplay e pelo preview embutido do Editor de Vídeo.
     implementation("org.openjfx:javafx-base:21.0.10:win")
     implementation("org.openjfx:javafx-graphics:21.0.10:win")
     implementation("org.openjfx:javafx-controls:21.0.10:win")
     implementation("org.openjfx:javafx-swing:21.0.10:win")
     implementation("org.openjfx:javafx-web:21.0.10:win")
+    implementation("org.openjfx:javafx-media:21.0.10:win")
 }
 
 compose.desktop {
