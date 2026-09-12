@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QWindow
-from PySide6.QtWidgets import QApplication, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFrame, QScrollArea, QVBoxLayout, QWidget
 
 from advanced_editor_v300 import AdvancedVideoEditorWidget300
 from legacy_theme import FUTURE_STYLESHEET
@@ -50,7 +50,7 @@ class EditorHost(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
