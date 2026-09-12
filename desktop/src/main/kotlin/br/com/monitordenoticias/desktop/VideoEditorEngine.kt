@@ -21,7 +21,9 @@ internal data class VideoEditorMediaInfo(
     val height: Int,
     val videoCodec: String,
     val audioCodec: String?,
-    val formatName: String
+    val formatName: String,
+    val fps: Double = 0.0,
+    val hasAudio: Boolean = audioCodec != null
 )
 
 /** Motor independente do Editor de Vídeo. Não importa nem chama ExtractorVideoEngine. */
@@ -32,6 +34,7 @@ internal class VideoEditorEngine {
     val ffprobe: File = File(binDir, "ffprobe.exe")
     val exportsDir: File = appDir.resolve("VideoEditorExports").toFile().apply { mkdirs() }
     private val previewDir: File = appDir.resolve("data/video-editor/preview").toFile().apply { mkdirs() }
+    private val thumbnailDir: File = appDir.resolve("data/video-editor/thumbs").toFile().apply { mkdirs() }
 
     private val activeProcess = AtomicReference<Process?>(null)
     private val cancelRequested = AtomicBoolean(false)
@@ -46,7 +49,7 @@ internal class VideoEditorEngine {
 
     suspend fun probe(file: File): Result<VideoEditorMediaInfo> = withContext(Dispatchers.IO) {
         runCatching {
-            require(isSupportedInput(file)) { "Formato não suportado. Use MP4, MOV, MKV ou WEBM." }
+            require(isSupportedInput(file)) { "Formato não suportado. Use MP4, MKV, WEBM, MOV, AVI ou M4V." }
             require(ffprobe.exists()) { "ffprobe.exe não encontrado em ${binDir.absolutePath}." }
 
             val result = runProcessCapture(
@@ -70,6 +73,7 @@ internal class VideoEditorEngine {
             var audioCodec: String? = null
             var width = 0
             var height = 0
+            var fps = 0.0
             var streamDurationMs = 0L
 
             for (index in 0 until streams.length()) {
@@ -79,6 +83,8 @@ internal class VideoEditorEngine {
                         videoCodec = stream.optString("codec_name", "").lowercase(Locale.ROOT)
                         width = stream.optInt("width", 0)
                         height = stream.optInt("height", 0)
+                        fps = parseFps(stream.optString("avg_frame_rate", ""))
+                            .takeIf { it > 0.0 } ?: parseFps(stream.optString("r_frame_rate", ""))
                         streamDurationMs = parseDurationMs(stream.optString("duration", ""))
                     }
                     "audio" -> if (audioCodec == null) {
@@ -101,7 +107,9 @@ internal class VideoEditorEngine {
                 height = height,
                 videoCodec = videoCodec,
                 audioCodec = audioCodec,
-                formatName = format?.optString("format_name", "").orEmpty()
+                formatName = format?.optString("format_name", "").orEmpty(),
+                fps = fps,
+                hasAudio = audioCodec != null
             )
         }
     }
@@ -156,6 +164,45 @@ internal class VideoEditorEngine {
             proxy.setLastModified(System.currentTimeMillis())
             update(100, "Preview pronto.")
             proxy
+        }
+    }
+
+    suspend fun generateThumbnails(
+        input: File,
+        startMs: Long,
+        endMs: Long,
+        maxCount: Int = 6
+    ): Result<List<File>> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(ffmpeg.exists()) { "ffmpeg.exe não encontrado em ${binDir.absolutePath}." }
+            val duration = (endMs - startMs).coerceAtLeast(1L)
+            val count = maxCount.coerceIn(1, 6)
+            thumbnailDir.mkdirs()
+            val base = previewKey(input)
+            val files = mutableListOf<File>()
+            for (index in 0 until count) {
+                val at = startMs + ((duration * (index + 1)) / (count + 1))
+                val out = File(thumbnailDir, "${base}_${startMs}_${endMs}_$index.jpg")
+                if (!out.exists() || out.length() <= 256L || out.lastModified() < input.lastModified()) {
+                    runCatching { out.delete() }
+                    val result = runProcessCapture(
+                        listOf(
+                            ffmpeg.absolutePath,
+                            "-y",
+                            "-ss", secondsArg(at),
+                            "-i", input.absolutePath,
+                            "-frames:v", "1",
+                            "-q:v", "5",
+                            "-vf", "scale=160:-1",
+                            out.absolutePath
+                        ),
+                        45
+                    )
+                    if (result.exitCode != 0 || !out.exists()) continue
+                }
+                files += out
+            }
+            files
         }
     }
 
@@ -221,7 +268,7 @@ internal class VideoEditorEngine {
 
     private fun canPlayDirectly(file: File, info: VideoEditorMediaInfo): Boolean {
         val ext = file.extension.lowercase(Locale.ROOT)
-        val compatibleContainer = ext == "mp4" || ext == "mov"
+        val compatibleContainer = ext in setOf("mp4", "mov", "m4v")
         val compatibleVideo = info.videoCodec == "h264" || info.videoCodec == "avc1"
         val compatibleAudio = info.audioCodec == null || info.audioCodec in setOf("aac", "mp3")
         return compatibleContainer && compatibleVideo && compatibleAudio
@@ -302,12 +349,22 @@ internal class VideoEditorEngine {
     private fun secondsArg(ms: Long): String = String.format(Locale.US, "%.3f", ms / 1000.0)
 
     companion object {
-        private val SUPPORTED_EXTENSIONS = setOf("mp4", "mov", "mkv", "webm")
+        private val SUPPORTED_EXTENSIONS = setOf("mp4", "mov", "mkv", "webm", "avi", "m4v")
 
         private fun parseDurationMs(value: String): Long {
             val seconds = value.toDoubleOrNull() ?: return 0L
             if (!seconds.isFinite() || seconds <= 0.0) return 0L
             return (seconds * 1000.0).toLong()
+        }
+
+        private fun parseFps(value: String): Double {
+            if (value.isBlank() || value == "0/0") return 0.0
+            if ('/' !in value) return value.toDoubleOrNull()?.takeIf { it.isFinite() } ?: 0.0
+            val parts = value.split('/', limit = 2)
+            val numerator = parts.getOrNull(0)?.toDoubleOrNull() ?: return 0.0
+            val denominator = parts.getOrNull(1)?.toDoubleOrNull() ?: return 0.0
+            if (denominator == 0.0) return 0.0
+            return (numerator / denominator).takeIf { it.isFinite() } ?: 0.0
         }
 
         private fun discoverAppDir(): Path {
