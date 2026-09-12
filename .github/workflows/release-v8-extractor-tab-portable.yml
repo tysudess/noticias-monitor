@@ -18,6 +18,7 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DirectMediaHtmlFallback.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
       - 'tools/integrate-v8-extractor-tab.py'
       - 'tools/patch-extractor-generic-html.py'
       - 'tools/patch-extractor-live-current-point.py'
@@ -29,6 +30,8 @@ on:
       - 'tools/patch-extractor-portable-paths.py'
       - 'tools/patch-extractor-dedicated-workspace.py'
       - 'tools/patch-extractor-hidden-process.py'
+      - 'tools/patch-pdf-editor-naval-layout.py'
+      - 'tools/patch-pdf-editor-naval-layout-refine.py'
       - '.github/workflows/release-v8-extractor-tab-portable.yml'
 
 permissions:
@@ -51,7 +54,7 @@ jobs:
         run: |
           $hash=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
           "PDF_HASH=$hash" | Out-File $env:GITHUB_ENV -Append
-          Write-Host "PDF aprovado: $hash"
+          Write-Host "PDF base funcional: $hash"
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -61,16 +64,45 @@ jobs:
       - name: Aplicar integração completa do Extrator
         shell: pwsh
         run: |
+          $ErrorActionPreference='Stop'
           python tools/integrate-v8-extractor-tab.py
+          if($LASTEXITCODE -ne 0){throw 'Falha em integrate-v8-extractor-tab.py'}
           python tools/patch-extractor-generic-html.py
+          if($LASTEXITCODE -ne 0){throw 'Falha em patch-extractor-generic-html.py'}
           python tools/patch-extractor-hidden-process.py
+          if($LASTEXITCODE -ne 0){throw 'Falha em patch-extractor-hidden-process.py'}
 
-      - name: Garantir que Editor PDF não mudou
+      - name: Garantir que lógica base do Editor PDF não mudou pelo Extrator
         shell: pwsh
         run: |
           $after=(Get-FileHash 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Algorithm SHA256).Hash
-          if ($after -ne $env:PDF_HASH) { throw 'PdfEditorScreenV2.kt foi alterado. Release bloqueado.' }
-          if (git diff --name-only | Select-String -SimpleMatch 'PdfEditorScreenV2.kt') { throw 'Editor PDF apareceu no diff. Release bloqueado.' }
+          if ($after -ne $env:PDF_HASH) { throw 'PdfEditorScreenV2.kt foi alterado pelos patches do Extrator. Release bloqueado.' }
+          if (git diff --name-only | Select-String -SimpleMatch 'PdfEditorScreenV2.kt') { throw 'Editor PDF apareceu no diff antes do patch visual. Release bloqueado.' }
+
+      - name: Aplicar layout naval da Imagem 2 ao Editor PDF
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python tools/patch-pdf-editor-naval-layout.py
+          if($LASTEXITCODE -ne 0){throw 'Falha no layout naval do PDF.'}
+          python tools/patch-pdf-editor-naval-layout-refine.py
+          if($LASTEXITCODE -ne 0){throw 'Falha no refinamento naval do PDF.'}
+
+      - name: Validar layout e funções do Editor PDF
+        shell: pwsh
+        run: |
+          $pdf=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt' -Raw
+          foreach($x in @('DEPARTAMENTO','DE IMPRENSA','VISUALIZAÇÃO DO DOCUMENTO','Banco de Opiniões 1304','Capa e Exportação','GERAR PDF','Selecionar arquivos','Voltar ao Monitor','Miniaturas','Lista')){
+            if($pdf -notmatch [regex]::Escape($x)){throw "Layout PDF incompleto: $x"}
+          }
+          foreach($x in @('chooseAll()','choosePdfs()','startCrop()','showResizeInfo()','createBlankPage()','deleteSelected()','focusReorder()','changeCover()','exportPdf()','undo()','redo()','clearAll()','installFileDrop','renderFinalPage','appendVector','appendRaster')){
+            if($pdf -notmatch [regex]::Escape($x)){throw "Função PDF ausente: $x"}
+          }
+          foreach($x in @('Cortar','Redimensionar','Criar','Excluir','Ordenar','Trocar capa','Incluir capa padrão')){
+            if($pdf -notmatch [regex]::Escape($x)){throw "Controle PDF ausente: $x"}
+          }
+          if($pdf -notmatch 'thumbsHost\.isVisible=pages\.isNotEmpty\(\)'){throw 'Miniaturas condicionais do PDF ausentes.'}
+          if($pdf -notmatch 'HUD CORNERS PDF'){throw 'HUD/radar do PDF ausente.'}
 
       - name: Setup Java 17
         uses: actions/setup-java@v5
@@ -170,17 +202,18 @@ jobs:
           if($dash -notmatch 'ExtractorVideoScreen \{ section = V5Section.HOME \}'){throw 'Workspace dedicada do Extrator ausente.'}
           if($screen -match 'ANALISAR'){throw 'ANALISAR não pode ficar visível.'}
           foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')){if(($screen+$engine) -notmatch [regex]::Escape($q)){throw "Qualidade ausente: $q"}}
-          foreach($x in @('Formato de saída: MP4','↓  BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO','LIMPAR HISTÓRICO','SALVAR PROXY','REMOVER PROXY','ExtractorPortableStateStore')){if($screen -notmatch [regex]::Escape($x)){throw "UI/estado ausente: $x"}}
+          foreach($x in @('Formato de saída: MP4','BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO','LIMPAR HISTÓRICO','ExtractorPortableStateStore','NavalHudBackdrop','HudFrame')){if($screen -notmatch [regex]::Escape($x)){throw "UI/estado ausente: $x"}}
           foreach($x in @('YouTubeLiveSnapshot.download','--download-sections','runYtDlpQuality','quality.compat','libx264','veryfast','yuv420p','160k','+faststart','yt-dlp-stable.exe','--force-ipv4','--ignore-config','--no-mtime','m3u8:native','GloboplayHtmlFallback.extractM3u8Candidates','R7HtmlFallback.extractMediaCandidates','DirectMediaHtmlFallback.extractCandidates','createRuntimeCookieFile','HiddenWindowsProcess.start','HiddenWindowsProcess.destroyTree','jpackage.app-path','MonitorDeNoticias.exe','val r7Base = listOf("--force-ipv4", "--no-mtime")')){if($engine -notmatch [regex]::Escape($x)){throw "Motor incompleto: $x"}}
           if($engine -match 'liveStatus == "post_live"'){throw 'post_live não pode ser tratado como live ativa.'}
           foreach($x in @('#EXT-X-ENDLIST','protocol_whitelist','durationSeconds','libx264','160k')){if($live -notmatch [regex]::Escape($x)){throw "Snapshot HLS incompleto: $x"}}
-          foreach($x in @('history.txt','settings.properties','proxy.dpapi','ProtectedData','CurrentUser','loadHistory','saveQualityIndex','saveProxy','[Console]::In.ReadToEnd()','stdinText')){if($state -notmatch [regex]::Escape($x)){throw "Persistência portable incompleta: $x"}}
+          foreach($x in @('history.txt','settings.properties','ProtectedData','CurrentUser','loadHistory','saveQualityIndex','[Console]::In.ReadToEnd()','stdinText')){if($state -notmatch [regex]::Escape($x)){throw "Persistência portable incompleta: $x"}}
           if($r7 -notmatch 'take\(15\)'){throw 'R7 sem limite 15.'}
           if($generic -notmatch 'take\(15\)'){throw 'Fallback genérico sem limite 15.'}
           foreach($x in @('-WindowStyle','Hidden','taskkill.exe','/T','/F')){if($hidden -notmatch [regex]::Escape($x)){throw "Launcher oculto incompleto: $x"}}
-          foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR','WebView')){if($login -notmatch [regex]::Escape($x)){throw "Login interno incompleto: $x"}}
+          foreach($x in @('ABRIR GLOBOPLAY','SALVAR SESSÃO E VOLTAR','FECHAR')){if($login -notmatch [regex]::Escape($x)){throw "Login interno incompleto: $x"}}
           foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi','HiddenWindowsProcess.start','[Console]::In.ReadToEnd()','stdinText')){if($session -notmatch [regex]::Escape($x)){throw "Sessão segura incompleta: $x"}}
           foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','HiddenWindowsProcess.start','Intencionalmente NÃO apagamos backup aqui')){if($updater -notmatch [regex]::Escape($x)){throw "Updater incompleto: $x"}}
+          if($screen -match 'Proxy opcional'){throw 'Proxy próprio do Extrator voltou para a UI.'}
 
       - name: Criar ZIP e SHA256
         shell: pwsh
@@ -205,7 +238,7 @@ jobs:
           $zip='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip'
           $sha='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip.sha256'
           $buildSha='${{ github.sha }}'
-          $notes="Preview completa: Extrator como workspace interna do Monitor, cinco binários portáteis, subprocessos ocultos, YouTube Live com snapshot HLS congelado e fallback até o ponto do clique, H.264, seletores compatíveis, R7/Record com IPv4/no-mtime e fallback de candidatos, histórico/configurações portáteis, proxy e sessão Globoplay protegidos por DPAPI via stdin, login oficial interno, HLS/m3u8 e atualizador seguro do yt-dlp com preservação de backup. Editor de PDF protegido e inalterado. Build SHA: $buildSha."
+          $notes="Preview visual: Extrator com layout naval/HUD da Imagem 1 e Editor PDF com layout da Imagem 2, preservando as funções existentes. Extrator com cinco binários portáteis, subprocessos ocultos, YouTube Live, H.264, R7/Record, Globoplay interno e atualizador seguro. Proxy próprio do Extrator removido. Build SHA: $buildSha."
           if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){
             gh release upload $tag $zip $sha --repo tysudess/noticias-monitor --clobber
             if($LASTEXITCODE -ne 0){throw 'Falha ao substituir assets da preview; release anterior foi preservada.'}
