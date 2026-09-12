@@ -4,24 +4,28 @@ import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.platform.win32.WinDef.HWND
 import com.sun.jna.win32.StdCallLibrary
-import org.json.JSONObject
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.EventQueue
 import java.awt.Panel
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
-import java.io.BufferedReader
-import java.io.BufferedWriter
 import java.io.File
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
+import java.nio.file.Files
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import javax.swing.Timer
-import kotlin.concurrent.thread
 
+/**
+ * Ponte mínima entre a aba Compose/Swing do Monitor e o editor PySide6 original.
+ *
+ * Regra de projeto: o motor do editor NÃO é reimplementado aqui. Este controlador
+ * apenas inicia o host original, obtém o HWND por arquivo temporário e o torna
+ * filho nativo do painel da aba. Não depende de stdin/stdout, pois o host é
+ * empacotado pelo PyInstaller em modo --windowed.
+ */
 internal class LegacyVideoEditorHostController {
     private interface User32Ext : StdCallLibrary {
         fun SetParent(child: HWND?, newParent: HWND?): HWND?
@@ -66,10 +70,14 @@ internal class LegacyVideoEditorHostController {
     private val hostHwnd = AtomicLong(0L)
     private val lastError = AtomicReference<String?>(null)
     private val attached = AtomicBoolean(false)
-    private val showSent = AtomicBoolean(false)
+
+    private val bridgeDir: File = Files.createTempDirectory("monitor-video-editor-bridge-").toFile()
+    private val hwndFile = File(bridgeDir, "hwnd.txt")
+    private val showFile = File(bridgeDir, "show.flag")
+    private val quitFile = File(bridgeDir, "quit.flag")
+    private val errorFile = File(bridgeDir, "error.txt")
 
     private var process: Process? = null
-    private var writer: BufferedWriter? = null
     private var attachTimer: Timer? = null
 
     init {
@@ -89,54 +97,47 @@ internal class LegacyVideoEditorHostController {
             ?: throw IllegalStateException("video-editor-host.exe não encontrado no Portable.")
     }
 
+    @Synchronized
     private fun startHost() {
         if (process?.isAlive == true) return
         runCatching {
+            bridgeDir.mkdirs()
+            hwndFile.delete()
+            showFile.delete()
+            quitFile.delete()
+            errorFile.delete()
+
             val exe = findHostExe()
-            val p = ProcessBuilder(exe.absolutePath)
+            val p = ProcessBuilder(
+                exe.absolutePath,
+                "--bridge-dir",
+                bridgeDir.absolutePath
+            )
                 .directory(exe.parentFile)
-                .redirectErrorStream(true)
                 .start()
             process = p
-            writer = BufferedWriter(OutputStreamWriter(p.outputStream, Charsets.UTF_8))
-            thread(name = "legacy-video-editor-host-reader", isDaemon = true) {
-                BufferedReader(InputStreamReader(p.inputStream, Charsets.UTF_8)).useLines { lines ->
-                    lines.forEach { line -> handleHostLine(line) }
-                }
-            }
         }.onFailure {
             lastError.set(it.message ?: "Falha ao iniciar o Editor de Vídeo original.")
         }
     }
 
-    private fun handleHostLine(line: String) {
-        runCatching {
-            val obj = JSONObject(line)
-            when (obj.optString("type")) {
-                "hwnd" -> {
-                    hostHwnd.set(obj.optLong("value", 0L))
-                    scheduleAttach()
-                }
-                "error" -> lastError.set(obj.optString("message", "Falha no Editor de Vídeo original."))
-            }
-        }.onFailure {
-            lastError.set("Falha ao interpretar resposta do editor: ${it.message}")
+    private fun refreshHostState(): Long {
+        errorFile.takeIf { it.isFile }?.let { file ->
+            runCatching { file.readText(Charsets.UTF_8).trim() }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { lastError.compareAndSet(null, it) }
         }
-    }
 
-    @Synchronized
-    private fun send(action: String, block: (JSONObject.() -> Unit)? = null) {
-        startHost()
-        val out = writer ?: return
-        runCatching {
-            val obj = JSONObject().put("action", action)
-            block?.invoke(obj)
-            out.write(obj.toString())
-            out.newLine()
-            out.flush()
-        }.onFailure {
-            lastError.set(it.message ?: "Falha ao comunicar com o Editor de Vídeo original.")
-        }
+        val cached = hostHwnd.get()
+        if (cached != 0L) return cached
+
+        val value = runCatching {
+            if (!hwndFile.isFile) return@runCatching 0L
+            hwndFile.readText(Charsets.UTF_8).trim().toLongOrNull() ?: 0L
+        }.getOrDefault(0L)
+        if (value != 0L) hostHwnd.compareAndSet(0L, value)
+        return hostHwnd.get()
     }
 
     private fun scheduleAttach() {
@@ -146,9 +147,20 @@ internal class LegacyVideoEditorHostController {
             var attempts = 0
             attachTimer = Timer(120) {
                 attempts++
-                if (attachWindow() || attempts >= 80) {
+
+                val p = process
+                if (p != null && !p.isAlive) {
                     attachTimer?.stop()
-                    if (!attached.get() && attempts >= 80 && lastError.get() == null) {
+                    val detail = errorFile.takeIf { it.isFile }
+                        ?.let { runCatching { it.readText(Charsets.UTF_8).trim() }.getOrNull() }
+                        ?.takeIf { it.isNotBlank() }
+                    lastError.set(detail ?: "O Editor de Vídeo original encerrou antes de ser embutido.")
+                    return@Timer
+                }
+
+                if (attachWindow() || attempts >= 100) {
+                    attachTimer?.stop()
+                    if (!attached.get() && attempts >= 100 && lastError.get() == null) {
                         lastError.set("Não foi possível embutir o Editor de Vídeo original na aba.")
                     }
                 }
@@ -158,7 +170,7 @@ internal class LegacyVideoEditorHostController {
 
     private fun attachWindow(): Boolean {
         if (!panel.isDisplayable) return false
-        val childValue = hostHwnd.get()
+        val childValue = refreshHostState()
         if (childValue == 0L) return false
 
         return runCatching {
@@ -187,14 +199,11 @@ internal class LegacyVideoEditorHostController {
                 h,
                 User32Ext.SWP_NOZORDER or User32Ext.SWP_NOACTIVATE or User32Ext.SWP_FRAMECHANGED
             )
+
+            // O host só chama QWidget.show() depois que este sinal existe.
+            showFile.writeText("show", Charsets.UTF_8)
             u.ShowWindow(child, User32Ext.SW_SHOW)
             attached.set(true)
-
-            send("resize") {
-                put("width", w)
-                put("height", h)
-            }
-            if (showSent.compareAndSet(false, true)) send("show")
             true
         }.getOrElse {
             lastError.set("Falha ao embutir Editor de Vídeo Qt: ${it.message}")
@@ -204,7 +213,7 @@ internal class LegacyVideoEditorHostController {
 
     private fun resizeChild() {
         if (!attached.get() || !panel.isDisplayable) return
-        val childValue = hostHwnd.get()
+        val childValue = refreshHostState()
         if (childValue == 0L) return
         EventQueue.invokeLater {
             runCatching {
@@ -220,10 +229,6 @@ internal class LegacyVideoEditorHostController {
                     h,
                     User32Ext.SWP_NOZORDER or User32Ext.SWP_NOACTIVATE
                 )
-                send("resize") {
-                    put("width", w)
-                    put("height", h)
-                }
             }.onFailure {
                 lastError.set("Falha ao redimensionar Editor de Vídeo Qt: ${it.message}")
             }
@@ -235,16 +240,20 @@ internal class LegacyVideoEditorHostController {
     fun stopAndDispose() {
         attachTimer?.stop()
         attachTimer = null
-        send("quit")
-        runCatching { writer?.close() }
+
         runCatching {
-            process?.waitFor(1800, java.util.concurrent.TimeUnit.MILLISECONDS)
+            bridgeDir.mkdirs()
+            quitFile.writeText("quit", Charsets.UTF_8)
+        }
+
+        runCatching {
+            process?.waitFor(2500, TimeUnit.MILLISECONDS)
             if (process?.isAlive == true) process?.destroyForcibly()
         }
-        writer = null
+
         process = null
         hostHwnd.set(0L)
         attached.set(false)
-        showSent.set(false)
+        runCatching { bridgeDir.deleteRecursively() }
     }
 }
