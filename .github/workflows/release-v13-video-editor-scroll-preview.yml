@@ -1,0 +1,106 @@
+name: Release V13 Video Editor Scroll Preview
+
+on:
+  push:
+    branches:
+      - work/v13-video-editor-scroll-preview
+    paths:
+      - '.github/workflows/release-v13-video-editor-scroll-preview.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v13-video-editor-scroll-preview
+          fetch-depth: 0
+
+      - name: Protect functional backend
+        shell: pwsh
+        run: |
+          $engine=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorEngine.kt').Trim()
+          $preview=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt').Trim()
+          if($engine -ne 'f7a1a9b278996c928741683c911376f06b6c91b6'){throw 'Backend alterado.'}
+          if($preview -ne '31ba194f865d8538dc26ce9bf41bb9b6e3ed33b4'){throw 'Preview controller alterado.'}
+
+      - name: Apply larger preview and vertical scroll
+        shell: pwsh
+        run: |
+          $script=@'
+          from pathlib import Path
+          p=Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt')
+          s=p.read_text(encoding='utf-8')
+          if 'import androidx.compose.foundation.verticalScroll' not in s:
+              s=s.replace('import androidx.compose.foundation.horizontalScroll\n','import androidx.compose.foundation.horizontalScroll\nimport androidx.compose.foundation.verticalScroll\n',1)
+          old='Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp),\n            verticalArrangement = Arrangement.spacedBy(7.dp)'
+          new='Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),\n            verticalArrangement = Arrangement.spacedBy(9.dp)'
+          if old in s:
+              s=s.replace(old,new,1)
+          elif new not in s:
+              raise SystemExit('Root layout contract not found')
+          for old,new in {
+              'Modifier.fillMaxWidth().height(280.dp),':'Modifier.fillMaxWidth().height(420.dp),',
+              'modifier = Modifier.width(322.dp),':'modifier = Modifier.width(355.dp),',
+              'Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(15.dp))':'Modifier.fillMaxWidth().height(100.dp).clip(RoundedCornerShape(15.dp))',
+              'NeonPanel(Modifier.fillMaxWidth().height(218.dp))':'NeonPanel(Modifier.fillMaxWidth().height(238.dp))',
+              'NeonPanel(Modifier.fillMaxWidth().height(96.dp))':'NeonPanel(Modifier.fillMaxWidth().height(108.dp))'
+          }.items():
+              if old in s:
+                  s=s.replace(old,new,1)
+              elif new not in s:
+                  raise SystemExit('Visual contract missing: '+old)
+          p.write_text(s,encoding='utf-8')
+          '@
+          $script | python -
+
+      - name: Validate and commit
+        shell: pwsh
+        run: |
+          $s=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
+          foreach($x in @('verticalScroll(rememberScrollState())','height(420.dp)','width(355.dp)','height(238.dp)','height(108.dp)')){if($s -notmatch [regex]::Escape($x)){throw "Mudança ausente: $x"}}
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt
+          git diff --cached --check
+          if(-not (git diff --cached --quiet)){git commit -m 'ui: enlarge Video Editor preview and add vertical scroll'; git push origin HEAD:work/v13-video-editor-scroll-preview}
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build updated Windows app
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Rebuild validated portable from V12
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v12-video-editor-fine-tune-20260912 --repo tysudess/noticias-monitor --pattern 'Monitor-de-Noticias-V12-Editor-de-Video-Ajuste-Fino-Windows-Portable.zip' --dir previous
+          Expand-Archive 'previous/Monitor-de-Noticias-V12-Editor-de-Video-Ajuste-Fino-Windows-Portable.zip' 'portable' -Force
+          $fresh='desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          Copy-Item (Join-Path $fresh '*') 'portable' -Recurse -Force
+          foreach($n in @('bin/ffmpeg.exe','bin/ffprobe.exe','bin/yt-dlp.exe','bin/deno.exe','MonitorDeNoticias.exe')){if(-not(Test-Path (Join-Path 'portable' $n))){throw "Portable incompleto: $n"}}
+
+      - name: Package and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip='Monitor-de-Noticias-V13-Editor-de-Video-Preview-Maior-Scroll-Windows-Portable.zip'
+          Compress-Archive -Path 'portable/*' -DestinationPath $zip -CompressionLevel Optimal
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower(); "$hash  $zip" | Set-Content "$zip.sha256"; Write-Host "SHA256=$hash"
+          $tag='v13-video-editor-scroll-preview-20260912'
+          if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag}
+          gh release create $tag $zip "$zip.sha256" --repo tysudess/noticias-monitor --target work/v13-video-editor-scroll-preview --title 'Monitor V13 — Editor de Vídeo Preview Maior + Scroll — Windows Portable' --notes 'Preview do Editor de Vídeo ampliado para 420dp e conteúdo da aba com rolagem vertical. Timeline e exportação mantidas abaixo e acessíveis por scroll. Backend funcional preservado; Portable reconstruído a partir da V12 validada.'
