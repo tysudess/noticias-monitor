@@ -46,7 +46,7 @@ fun VideoEditorScreen(onBack: () -> Unit = {}) {
     ) {
         SwingPanel(
             modifier = Modifier.fillMaxSize(),
-            background = java.awt.Color(5, 7, 15),
+            background = Color(0xFF05070F),
             factory = { host.panel }
         )
 
