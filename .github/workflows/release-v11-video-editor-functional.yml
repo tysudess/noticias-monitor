@@ -93,10 +93,16 @@ jobs:
           if(-not $ffmpeg -or -not $ffprobe){throw 'ffmpeg/ffprobe ausentes.'}
           Copy-Item $ffmpeg.FullName 'portable-bin/ffmpeg.exe' -Force
           Copy-Item $ffprobe.FullName 'portable-bin/ffprobe.exe' -Force
-          & 'portable-bin/ffmpeg.exe' -version | Select-Object -First 1
+          & 'portable-bin/ffmpeg.exe' -version *> $null
           if($LASTEXITCODE -ne 0){throw 'FFmpeg inválido.'}
-          & 'portable-bin/ffprobe.exe' -version | Select-Object -First 1
+          & 'portable-bin/ffprobe.exe' -version *> $null
           if($LASTEXITCODE -ne 0){throw 'FFprobe inválido.'}
+          & 'portable-bin/yt-dlp.exe' --version *> $null
+          if($LASTEXITCODE -ne 0){throw 'yt-dlp nightly inválido.'}
+          & 'portable-bin/yt-dlp-stable.exe' --version *> $null
+          if($LASTEXITCODE -ne 0){throw 'yt-dlp stable inválido.'}
+          & 'portable-bin/deno.exe' --version *> $null
+          if($LASTEXITCODE -ne 0){throw 'Deno inválido.'}
 
       - name: Assemble complete Monitor Portable
         shell: pwsh
