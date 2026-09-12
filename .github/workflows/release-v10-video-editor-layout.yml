@@ -1,89 +1,11 @@
-name: Release V10 Video Editor Layout
+name: Archived — Release V10 Video Editor Layout
 
 on:
-  push:
-    branches:
-      - work/v10-video-editor-layout
-    paths:
-      - '.github/workflows/release-v10-video-editor-layout.yml'
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  release:
-    runs-on: windows-latest
-    timeout-minutes: 45
+  archived:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: work/v10-video-editor-layout
-          fetch-depth: 0
-
-      - name: Validate frozen Extractor and PDF
-        shell: pwsh
-        run: |
-          $extractor = (git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt').Trim()
-          $pdf = (git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt').Trim()
-          if ($extractor -ne '72ef34a27058d61f001b7236c6b66c80310c0862') { throw "Extractor mudou: $extractor" }
-          if ($pdf -ne '5610d1e75a40863864dd0320453c021197ee48c5') { throw "PDF mudou: $pdf" }
-          Write-Host 'Extrator e PDF preservados.'
-
-      - name: Validate Video Editor route
-        shell: pwsh
-        run: |
-          $dash = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
-          if ($dash -notmatch 'VIDEO_EDITOR\("Editor de Vídeo"') { throw 'Aba Editor de Vídeo ausente.' }
-          if ($dash -notmatch 'VideoEditorScreen') { throw 'Rota VideoEditorScreen ausente.' }
-          if (-not (Test-Path 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt')) { throw 'VideoEditorScreen.kt ausente.' }
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Setup Gradle 8.10.2
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
-
-      - name: Build Windows portable
-        shell: pwsh
-        run: gradle :desktop:createDistributable --stacktrace
-
-      - name: Validate distribution
-        shell: pwsh
-        run: |
-          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
-          if (-not (Test-Path $root)) { throw 'Portable não foi gerado.' }
-          if (-not (Test-Path (Join-Path $root 'MonitorDeNoticias.exe'))) { throw 'MonitorDeNoticias.exe ausente.' }
-          New-Item -ItemType Directory -Force -Path (Join-Path $root 'data') | Out-Null
-
-      - name: Package ZIP and SHA-256
-        shell: pwsh
-        run: |
-          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
-          $zip = 'Monitor-de-Noticias-V10-Editor-de-Video-Layout-Windows-Portable.zip'
-          if (Test-Path $zip) { Remove-Item $zip -Force }
-          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  $zip" | Set-Content "$zip.sha256"
-          Write-Host "SHA256=$hash"
-
-      - name: Publish GitHub release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $tag = 'v10-video-editor-layout-20260912'
-          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) {
-            gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag
-          }
-          gh release create $tag `
-            'Monitor-de-Noticias-V10-Editor-de-Video-Layout-Windows-Portable.zip' `
-            'Monitor-de-Noticias-V10-Editor-de-Video-Layout-Windows-Portable.zip.sha256' `
-            --repo tysudess/noticias-monitor `
-            --target work/v10-video-editor-layout `
-            --title 'Monitor V10 — Novo Layout Editor de Vídeo — Windows Portable' `
-            --notes 'Mudança visual congelada no módulo Editor de Vídeo. Preserva por hash o Extrator v3.0.1 e o Editor de PDF aprovado. Implementa geometria, cabeçalho naval, radar, preview, marcação rápida, timeline e exportação conforme especificação textual. A validação pixel-perfect final ainda depende da imagem visual de referência.'
+      - name: Archived workflow
+        run: echo "Historical V10 workflow only. Use Release Windows Portable V19 for current builds."
