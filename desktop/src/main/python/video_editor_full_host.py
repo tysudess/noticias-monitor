@@ -3,22 +3,32 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QWindow
+from PySide6.QtWidgets import QApplication, QScrollArea, QVBoxLayout, QWidget
 
 from advanced_editor_v300 import AdvancedVideoEditorWidget300
 from legacy_theme import FUTURE_STYLESHEET
 
 
-class EditorHost(AdvancedVideoEditorWidget300):
-    def __init__(self, bridge_dir: Path):
+class EditorHost(QWidget):
+    """Contêiner de integração.
+
+    O motor original permanece inteiro dentro de ``self.editor``. Esta classe
+    apenas o hospeda, cria a rolagem da aba e vincula a janela Qt ao HWND do
+    painel do Monitor ANTES de exibi-la. Isso evita o comportamento de uma
+    janela Qt top-level reaparecer por cima do Monitor quando QVideoWidget
+    muda de estado ao carregar/reproduzir mídia.
+    """
+
+    def __init__(self, bridge_dir: Path, parent_hwnd: int):
+        super().__init__()
         self.bridge_dir = bridge_dir
         self.bridge_dir.mkdir(parents=True, exist_ok=True)
         self.hwnd_file = self.bridge_dir / "hwnd.txt"
-        self.show_file = self.bridge_dir / "show.flag"
         self.quit_file = self.bridge_dir / "quit.flag"
         self.error_file = self.bridge_dir / "error.txt"
-        self._shown_inside_monitor = False
         self._shutdown_done = False
+        self._foreign_parent = None
 
         app_root = self._resolve_app_root()
         videos_dir = app_root / "Videos"
@@ -26,15 +36,43 @@ class EditorHost(AdvancedVideoEditorWidget300):
         ffmpeg_exe = app_root / "bin" / "ffmpeg.exe"
         ffprobe_exe = app_root / "bin" / "ffprobe.exe"
 
-        super().__init__(videos_dir, ffmpeg_exe, ffprobe_exe)
+        # O editor abaixo é exatamente o AdvancedVideoEditorWidget300 antigo.
+        # Nenhuma função de preview/timeline/corte/exportação é reimplementada.
+        self.editor = AdvancedVideoEditorWidget300(videos_dir, ffmpeg_exe, ffprobe_exe, self)
+
+        # A tela antiga é mais alta que a área disponível dentro do Monitor.
+        # Mantemos a interface original e oferecemos apenas uma rolagem externa.
+        self.editor.setMinimumWidth(1180)
+        self.editor.setMinimumHeight(1100)
+
+        self.scroll = QScrollArea(self)
+        self.scroll.setWidget(self.editor)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.scroll)
+
         self.setWindowTitle("MonitorVideoEditorHost")
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
         self.resize(1450, 900)
-        self.hide()
 
-        # Força a criação do HWND ainda oculto e entrega o identificador ao Monitor
-        # sem depender de stdin/stdout (inexistentes no PyInstaller --windowed).
+        # Cria o HWND Qt ainda oculto, informa ao Qt que o pai é uma janela
+        # estrangeira do Monitor e somente DEPOIS mostra o host.
         hwnd = int(self.winId())
+        handle = self.windowHandle()
+        self._foreign_parent = QWindow.fromWinId(int(parent_hwnd))
+        if handle is None or self._foreign_parent is None:
+            raise RuntimeError("Não foi possível criar a relação nativa Monitor/Qt.")
+        handle.setParent(self._foreign_parent)
+        self.move(0, 0)
+        self.show()
+
         tmp = self.bridge_dir / "hwnd.tmp"
         tmp.write_text(str(hwnd), encoding="utf-8")
         tmp.replace(self.hwnd_file)
@@ -50,7 +88,6 @@ class EditorHost(AdvancedVideoEditorWidget300):
         # Portable final: <raiz>/bin/video-editor-host/video-editor-host.exe
         if exe.parent.name.lower() == "video-editor-host" and exe.parent.parent.name.lower() == "bin":
             return exe.parent.parent.parent
-        # Desenvolvimento / fallback controlado.
         cwd = Path.cwd().resolve()
         if (cwd / "bin" / "ffmpeg.exe").exists():
             return cwd
@@ -69,11 +106,6 @@ class EditorHost(AdvancedVideoEditorWidget300):
             if self.quit_file.exists():
                 self.bridge_timer.stop()
                 self.close()
-                return
-
-            if not self._shown_inside_monitor and self.show_file.exists():
-                self._shown_inside_monitor = True
-                self.show()
         except Exception as exc:
             self._write_error(exc)
 
@@ -82,7 +114,7 @@ class EditorHost(AdvancedVideoEditorWidget300):
             return
         self._shutdown_done = True
         try:
-            self.shutdown()
+            self.editor.shutdown()
         except Exception as exc:
             self._write_error(exc)
 
@@ -95,6 +127,7 @@ class EditorHost(AdvancedVideoEditorWidget300):
 def parse_args():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--bridge-dir", required=True)
+    parser.add_argument("--parent-hwnd", required=True, type=int)
     return parser.parse_args()
 
 
@@ -110,7 +143,7 @@ def main():
     app.setStyleSheet(FUTURE_STYLESHEET)
 
     try:
-        host = EditorHost(bridge_dir)
+        host = EditorHost(bridge_dir, args.parent_hwnd)
         code = app.exec()
         host._shutdown_once()
         raise SystemExit(code)
