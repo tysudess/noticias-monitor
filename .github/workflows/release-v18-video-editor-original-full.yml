@@ -23,7 +23,7 @@ jobs:
       - name: Protect unrelated approved modules
         shell: pwsh
         run: |
-          $changed = @(git diff --name-only work/v17-qt-preview-engine...HEAD)
+          $changed = @(git diff --name-only origin/work/v17-qt-preview-engine...HEAD)
           $forbidden = $changed | Where-Object { $_ -match 'ExtractorVideo|PdfEditor|PDFEditor|pdf_editor' }
           if ($forbidden) {
             Write-Host ($forbidden -join "`n")
