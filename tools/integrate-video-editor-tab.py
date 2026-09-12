@@ -27,6 +27,12 @@ protected_before = {
     EXTRACTOR_ENGINE: sha(EXTRACTOR_ENGINE),
 }
 
+# Correção local do Editor de Vídeo antes da compilação: VideoEditorMediaInfo não possui campo "format".
+# A tela deve exibir o formato pelo próprio arquivo aberto, sem inventar metadado inexistente.
+editor_src = EDITOR_SCREEN.read_text(encoding='utf-8')
+editor_src = editor_src.replace('info?.format ?: input.extension.uppercase()', 'input.extension.uppercase()')
+EDITOR_SCREEN.write_text(editor_src, encoding='utf-8')
+
 src = DASH.read_text(encoding='utf-8')
 
 if 'VIDEO_EDITOR("Editor de Vídeo"' not in src:
@@ -50,9 +56,11 @@ for path, before in protected_before.items():
         raise SystemExit(f'PROTEÇÃO: {path.name} foi alterado durante a integração do Editor de Vídeo.')
 
 updated = DASH.read_text(encoding='utf-8')
+updated_editor = EDITOR_SCREEN.read_text(encoding='utf-8')
 assert 'VIDEO_EDITOR("Editor de Vídeo"' in updated
 assert 'else if (section == V5Section.VIDEO_EDITOR)' in updated
 assert 'VideoEditorScreen { section = V5Section.HOME }' in updated
 assert 'EXTRACTOR("Extrator de Vídeos"' in updated
 assert 'PDF_EDITOR("Editor de PDF"' in updated
+assert 'info?.format' not in updated_editor
 print('Editor de Vídeo integrado em tela cheia; PDF e motor/tela do Extrator permaneceram byte a byte intactos.')
