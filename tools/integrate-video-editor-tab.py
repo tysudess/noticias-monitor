@@ -27,102 +27,13 @@ protected_before = {
     EXTRACTOR_ENGINE: sha(EXTRACTOR_ENGINE),
 }
 
-# Correção local do Editor de Vídeo antes da compilação: VideoEditorMediaInfo não possui campo "format".
-# A tela deve exibir o formato pelo próprio arquivo aberto, sem inventar metadado inexistente.
+# Correção defensiva: a tela deve exibir o formato pelo próprio arquivo aberto, sem inventar metadado inexistente.
 editor_src = EDITOR_SCREEN.read_text(encoding='utf-8')
 editor_src = editor_src.replace('info?.format ?: input.extension.uppercase()', 'input.extension.uppercase()')
-
-# Preview funcional sem JavaFX Media: a tela branca ocorria porque o painel JavaFX/MediaView não pintava
-# o vídeo dentro do Compose portable em alguns Windows. Agora o preview usa frames JPEG gerados pelo
-# FFmpeg bundled e renderizados diretamente no Compose. Não usa o motor do Extrator e não altera o corte.
-if 'import kotlinx.coroutines.delay' not in editor_src:
-    editor_src = editor_src.replace('import kotlinx.coroutines.launch\n', 'import kotlinx.coroutines.delay\nimport kotlinx.coroutines.launch\n')
-
-if 'var previewSource by remember' not in editor_src:
-    editor_src = editor_src.replace(
-        '    var input by remember { mutableStateOf<File?>(null) }\n',
-        '    var input by remember { mutableStateOf<File?>(null) }\n'
-        '    var previewSource by remember { mutableStateOf<File?>(null) }\n'
-        '    var previewFrameVersion by remember { mutableLongStateOf(0L) }\n'
-    )
-
-if 'LaunchedEffect(playing, previewSource, busy, outMs, inMs)' not in editor_src:
-    marker = '''    fun showNotImplemented(feature: String) {
-        status = "Esta função ainda não existe no motor atual: $feature."
-    }
-
-'''
-    injected = '''    LaunchedEffect(previewSource, previewFrameVersion) {
-        val source = previewSource ?: return@LaunchedEffect
-        val duration = info?.durationMs ?: 0L
-        val safeTarget = when {
-            duration <= 0L -> currentMs.coerceAtLeast(0L)
-            currentMs >= duration -> (duration - 120L).coerceAtLeast(0L)
-            else -> currentMs.coerceAtLeast(0L)
-        }
-        engine.extractPreviewFrame(source, safeTarget).fold(
-            onSuccess = { preview.showFrame(it) },
-            onFailure = { status = "Preview por frames: ${it.message ?: "falha ao gerar frame"}" }
-        )
-    }
-
-    LaunchedEffect(playing, previewSource, busy, outMs, inMs) {
-        val source = previewSource ?: return@LaunchedEffect
-        while (playing && !busy) {
-            val duration = info?.durationMs ?: 0L
-            val end = if (outMs > inMs) outMs else duration
-            if (end <= 0L) {
-                preview.pause()
-                break
-            }
-            val next = (currentMs + 500L).coerceAtMost(end)
-            currentMs = next
-            val safeTarget = if (next >= end && end > 120L) end - 120L else next
-            engine.extractPreviewFrame(source, safeTarget).fold(
-                onSuccess = { preview.showFrame(it) },
-                onFailure = { status = "Preview por frames: ${it.message ?: "falha ao gerar frame"}" }
-            )
-            if (next >= end) {
-                preview.pause()
-                break
-            }
-            delay(80L)
-        }
-    }
-
-''' + marker
-    if marker not in editor_src:
-        raise SystemExit('Ponto de inserção do preview por frames não encontrado no VideoEditorScreen.kt.')
-    editor_src = editor_src.replace(marker, injected, 1)
-
-if 'previewFrameVersion++' not in editor_src.split('fun seekTo', 1)[1].split('fun seekBy', 1)[0]:
-    editor_src = editor_src.replace(
-        '        currentMs = target\n        preview.seek(target)\n',
-        '        currentMs = target\n        preview.seek(target)\n        previewFrameVersion++\n',
-        1
-    )
-
-if 'previewSource = null' not in editor_src.split('fun openVideo', 1)[1].split('scope.launch', 1)[0]:
-    editor_src = editor_src.replace(
-        '        preview.pause()\n        busy = true\n',
-        '        preview.pause()\n        previewSource = null\n        preview.clearFrame()\n        busy = true\n',
-        1
-    )
-
-if 'previewSource = file' not in editor_src:
-    editor_src = editor_src.replace(
-        '                    status = "Vídeo pronto para preview e timeline: ${chosen.name}"\n                    preview.load(file)\n',
-        '                    status = "Vídeo pronto. Preview interno por frames FFmpeg: ${chosen.name}"\n'
-        '                    previewSource = file\n'
-        '                    preview.load(file)\n'
-        '                    previewFrameVersion++\n',
-        1
-    )
-
 EDITOR_SCREEN.write_text(editor_src, encoding='utf-8')
 
-# Correção de preview: alguns MP4/H.264 passam no ffprobe, mas players internos podem falhar.
-# O preview passa sempre por proxy MP4 compatível gerado pelo FFmpeg. O corte/exportação usa o original.
+# Correção defensiva: o preview não deve voltar ao caminho direto/JavaFX instável.
+# A versão atual usa proxy FFmpeg + sequência de frames em cache, para manter velocidade estável.
 engine_src = EDITOR_ENGINE.read_text(encoding='utf-8')
 old_preview_direct = '''            if (canPlayDirectly(input, info)) {
                 update(100, "Preview pronto.")
@@ -132,58 +43,6 @@ old_preview_direct = '''            if (canPlayDirectly(input, info)) {
 '''
 if old_preview_direct in engine_src:
     engine_src = engine_src.replace(old_preview_direct, '', 1)
-elif 'return@runCatching input' in engine_src:
-    raise SystemExit('Bloco de preview direto mudou; integração bloqueada para não adivinhar o motor.')
-
-if 'suspend fun extractPreviewFrame(' not in engine_src:
-    marker = '''    suspend fun generateThumbnails(
-        input: File,
-        startMs: Long,
-        endMs: Long,
-        maxCount: Int = 6
-    ): Result<List<File>> = withContext(Dispatchers.IO) {
-'''
-    method = '''    suspend fun extractPreviewFrame(input: File, positionMs: Long): Result<File> = withContext(Dispatchers.IO) {
-        runCatching {
-            require(ffmpeg.exists()) { "ffmpeg.exe não encontrado em ${binDir.absolutePath}." }
-            require(input.exists()) { "Arquivo de preview não encontrado." }
-            thumbnailDir.mkdirs()
-
-            val bucketMs = (positionMs.coerceAtLeast(0L) / 500L) * 500L
-            val frame = File(thumbnailDir, "${previewKey(input)}_frame_$bucketMs.jpg")
-            if (frame.exists() && frame.length() > 1024L && frame.lastModified() >= input.lastModified()) {
-                return@runCatching frame
-            }
-
-            runCatching { frame.delete() }
-            val result = runProcessCapture(
-                listOf(
-                    ffmpeg.absolutePath,
-                    "-y",
-                    "-ss", secondsArg(bucketMs),
-                    "-i", input.absolutePath,
-                    "-frames:v", "1",
-                    "-an",
-                    "-q:v", "3",
-                    "-vf", "scale=w='min(1280,iw)':h=-2",
-                    frame.absolutePath
-                ),
-                30
-            )
-            if (result.exitCode != 0 || !frame.exists() || frame.length() <= 512L) {
-                runCatching { frame.delete() }
-                error("Falha ao gerar frame do preview. ${result.output.takeLast(500)}")
-            }
-            frame.setLastModified(System.currentTimeMillis())
-            frame
-        }
-    }
-
-'''
-    if marker not in engine_src:
-        raise SystemExit('Ponto de inserção do extrator de frames não encontrado no VideoEditorEngine.kt.')
-    engine_src = engine_src.replace(marker, method + marker, 1)
-
 EDITOR_ENGINE.write_text(engine_src, encoding='utf-8')
 
 src = DASH.read_text(encoding='utf-8')
@@ -219,8 +78,10 @@ assert 'EXTRACTOR("Extrator de Vídeos"' in updated
 assert 'PDF_EDITOR("Editor de PDF"' in updated
 assert 'info?.format' not in updated_editor
 assert 'return@runCatching input' not in updated_engine
-assert 'extractPreviewFrame' in updated_engine
-assert 'previewSource = file' in updated_editor
-assert 'LaunchedEffect(playing, previewSource, busy, outMs, inMs)' in updated_editor
+assert 'preparePreviewFrames' in updated_engine
+assert 'VideoEditorFrameSequence' in updated_engine
+assert 'previewSequence' in updated_editor
+assert 'LaunchedEffect(playing, previewSequence, busy, outMs, inMs, playbackSeed)' in updated_editor
+assert 'extractPreviewFrame' not in updated_editor
 assert 'javafx.scene.media.MediaPlayer' not in updated_preview
-print('Editor de Vídeo integrado em tela cheia; preview trocado para frames FFmpeg/Compose; PDF e motor/tela do Extrator permaneceram byte a byte intactos.')
+print('Editor de Vídeo integrado em tela cheia; preview estabilizado com sequência de frames FFmpeg em cache; PDF e motor/tela do Extrator permaneceram byte a byte intactos.')
