@@ -19,32 +19,21 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.swing.Timer
 
 /**
- * Ponte mínima entre a aba Compose/Swing do Monitor e o editor PySide6 original.
+ * Ponte mínima entre a aba do Monitor e o AdvancedVideoEditorWidget300 original.
  *
- * Regra de projeto: o motor do editor NÃO é reimplementado aqui. Este controlador
- * apenas inicia o host original, obtém o HWND por arquivo temporário e o torna
- * filho nativo do painel da aba. Não depende de stdin/stdout, pois o host é
- * empacotado pelo PyInstaller em modo --windowed.
+ * O motor antigo não é reimplementado aqui. Diferente da V18, o host Qt recebe
+ * o HWND do painel ANTES de se tornar visível e faz o vínculo pelo próprio Qt.
+ * Este controlador apenas inicia o processo, valida a paternidade nativa e
+ * mantém o tamanho do único host dentro da aba.
  */
 internal class LegacyVideoEditorHostController {
     private interface User32Ext : StdCallLibrary {
-        fun SetParent(child: HWND?, newParent: HWND?): HWND?
-        fun GetWindowLongW(hwnd: HWND?, index: Int): Int
-        fun SetWindowLongW(hwnd: HWND?, index: Int, value: Int): Int
+        fun GetParent(hwnd: HWND?): HWND?
         fun SetWindowPos(hwnd: HWND?, insertAfter: HWND?, x: Int, y: Int, width: Int, height: Int, flags: Int): Boolean
         fun ShowWindow(hwnd: HWND?, cmd: Int): Boolean
 
         companion object {
             val INSTANCE: User32Ext = Native.load("user32", User32Ext::class.java)
-            const val GWL_STYLE = -16
-            const val WS_CHILD = 0x40000000
-            const val WS_VISIBLE = 0x10000000
-            const val WS_POPUP = -0x80000000
-            const val WS_CAPTION = 0x00C00000
-            const val WS_THICKFRAME = 0x00040000
-            const val WS_MINIMIZEBOX = 0x00020000
-            const val WS_MAXIMIZEBOX = 0x00010000
-            const val WS_SYSMENU = 0x00080000
             const val SW_SHOW = 5
             const val SWP_NOZORDER = 0x0004
             const val SWP_NOACTIVATE = 0x0010
@@ -56,14 +45,20 @@ internal class LegacyVideoEditorHostController {
         override fun addNotify() {
             super.addNotify()
             background = Color(5, 7, 15)
-            scheduleAttach()
+            EventQueue.invokeLater {
+                startHostForPanel()
+                scheduleAttach()
+            }
         }
     }.apply {
         background = Color(5, 7, 15)
         isFocusable = false
         addComponentListener(object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent?) = resizeChild()
-            override fun componentShown(e: ComponentEvent?) = scheduleAttach()
+            override fun componentShown(e: ComponentEvent?) {
+                startHostForPanel()
+                scheduleAttach()
+            }
         })
     }
 
@@ -73,16 +68,11 @@ internal class LegacyVideoEditorHostController {
 
     private val bridgeDir: File = Files.createTempDirectory("monitor-video-editor-bridge-").toFile()
     private val hwndFile = File(bridgeDir, "hwnd.txt")
-    private val showFile = File(bridgeDir, "show.flag")
     private val quitFile = File(bridgeDir, "quit.flag")
     private val errorFile = File(bridgeDir, "error.txt")
 
     private var process: Process? = null
     private var attachTimer: Timer? = null
-
-    init {
-        startHost()
-    }
 
     private fun findHostExe(): File {
         val base = File(System.getProperty("user.dir"))
@@ -97,25 +87,34 @@ internal class LegacyVideoEditorHostController {
             ?: throw IllegalStateException("video-editor-host.exe não encontrado no Portable.")
     }
 
+    private fun panelNativeValue(): Long {
+        if (!panel.isDisplayable) return 0L
+        val ptr = runCatching { Native.getComponentPointer(panel) }.getOrNull() ?: return 0L
+        return Pointer.nativeValue(ptr)
+    }
+
     @Synchronized
-    private fun startHost() {
+    private fun startHostForPanel() {
         if (process?.isAlive == true) return
+        val parentHwnd = panelNativeValue()
+        if (parentHwnd == 0L) return
+
         runCatching {
             bridgeDir.mkdirs()
             hwndFile.delete()
-            showFile.delete()
             quitFile.delete()
             errorFile.delete()
+            hostHwnd.set(0L)
+            attached.set(false)
 
             val exe = findHostExe()
-            val p = ProcessBuilder(
+            process = ProcessBuilder(
                 exe.absolutePath,
-                "--bridge-dir",
-                bridgeDir.absolutePath
+                "--bridge-dir", bridgeDir.absolutePath,
+                "--parent-hwnd", parentHwnd.toString()
             )
                 .directory(exe.parentFile)
                 .start()
-            process = p
         }.onFailure {
             lastError.set(it.message ?: "Falha ao iniciar o Editor de Vídeo original.")
         }
@@ -147,15 +146,14 @@ internal class LegacyVideoEditorHostController {
             var attempts = 0
             attachTimer = Timer(120) {
                 attempts++
+                if (process?.isAlive != true) startHostForPanel()
 
                 val p = process
                 if (p != null && !p.isAlive) {
-                    attachTimer?.stop()
                     val detail = errorFile.takeIf { it.isFile }
                         ?.let { runCatching { it.readText(Charsets.UTF_8).trim() }.getOrNull() }
                         ?.takeIf { it.isNotBlank() }
-                    lastError.set(detail ?: "O Editor de Vídeo original encerrou antes de ser embutido.")
-                    return@Timer
+                    if (detail != null) lastError.compareAndSet(null, detail)
                 }
 
                 if (attachWindow() || attempts >= 100) {
@@ -170,27 +168,22 @@ internal class LegacyVideoEditorHostController {
 
     private fun attachWindow(): Boolean {
         if (!panel.isDisplayable) return false
+        val parentValue = panelNativeValue()
+        if (parentValue == 0L) return false
         val childValue = refreshHostState()
         if (childValue == 0L) return false
 
         return runCatching {
-            val parentPtr = Native.getComponentPointer(panel)
-            if (parentPtr == null || Pointer.nativeValue(parentPtr) == 0L) return@runCatching false
-
-            val parent = HWND(parentPtr)
             val child = HWND(Pointer(childValue))
-            val u = User32Ext.INSTANCE
-
-            u.SetParent(child, parent)
-            val style = u.GetWindowLongW(child, User32Ext.GWL_STYLE)
-            val removeMask = User32Ext.WS_POPUP or User32Ext.WS_CAPTION or User32Ext.WS_THICKFRAME or
-                User32Ext.WS_MINIMIZEBOX or User32Ext.WS_MAXIMIZEBOX or User32Ext.WS_SYSMENU
-            val newStyle = (style and removeMask.inv()) or User32Ext.WS_CHILD or User32Ext.WS_VISIBLE
-            u.SetWindowLongW(child, User32Ext.GWL_STYLE, newStyle)
+            val parent = User32Ext.INSTANCE.GetParent(child)
+            val actualParent = parent?.pointer?.let { Pointer.nativeValue(it) } ?: 0L
+            if (actualParent != parentValue) {
+                return@runCatching false
+            }
 
             val w = panel.width.coerceAtLeast(1)
             val h = panel.height.coerceAtLeast(1)
-            u.SetWindowPos(
+            User32Ext.INSTANCE.SetWindowPos(
                 child,
                 null,
                 0,
@@ -199,14 +192,11 @@ internal class LegacyVideoEditorHostController {
                 h,
                 User32Ext.SWP_NOZORDER or User32Ext.SWP_NOACTIVATE or User32Ext.SWP_FRAMECHANGED
             )
-
-            // O host só chama QWidget.show() depois que este sinal existe.
-            showFile.writeText("show", Charsets.UTF_8)
-            u.ShowWindow(child, User32Ext.SW_SHOW)
+            User32Ext.INSTANCE.ShowWindow(child, User32Ext.SW_SHOW)
             attached.set(true)
             true
         }.getOrElse {
-            lastError.set("Falha ao embutir Editor de Vídeo Qt: ${it.message}")
+            lastError.set("Falha ao validar Editor de Vídeo Qt dentro da aba: ${it.message}")
             false
         }
     }
@@ -247,7 +237,7 @@ internal class LegacyVideoEditorHostController {
         }
 
         runCatching {
-            process?.waitFor(2500, TimeUnit.MILLISECONDS)
+            process?.waitFor(3000, TimeUnit.MILLISECONDS)
             if (process?.isAlive == true) process?.destroyForcibly()
         }
 
