@@ -4,8 +4,8 @@ import java.io.File
 import javax.swing.SwingUtilities
 
 /**
- * Login oficial do Globoplay em navegador Chromium embutido, reproduzindo o fluxo
- * da versão portátil v3.0.1 original (PySide6/Qt WebEngine).
+ * Login oficial do Globoplay em Chromium embutido, reproduzindo o fluxo da
+ * versão portátil v3.0.1 original (PySide6/Qt WebEngine).
  * A senha nunca é recebida pelo Monitor; somente o cookie jar retornado pelo
  * helper é protegido com DPAPI pelo GloboplaySessionStore.
  */
@@ -19,9 +19,8 @@ internal class GloboplayLoginWindow(
     @Volatile private var activeProcess: Process? = null
 
     fun open() {
-        val helper = File(engine.binDir, "GloboplayLoginHelper/GloboplayLoginHelper.exe")
-        if (!helper.isFile) {
-            onSessionChanged(false, "Navegador interno do Globoplay não encontrado no pacote.")
+        val helper = runCatching { resolveBundledHelper() }.getOrElse {
+            onSessionChanged(false, "Navegador interno do Globoplay não encontrado no pacote: ${it.message.orEmpty()}")
             return
         }
 
@@ -81,5 +80,20 @@ internal class GloboplayLoginWindow(
             isDaemon = true
             start()
         }
+    }
+
+    private fun resolveBundledHelper(): File {
+        val runtimeDir = File(engine.appDir.toFile(), "data/extractor/runtime").apply { mkdirs() }
+        val target = File(runtimeDir, "GloboplayLoginHelper.exe")
+        val resourcePath = "/globoplay-login-helper/GloboplayLoginHelper.exe"
+        val stream = javaClass.getResourceAsStream(resourcePath)
+            ?: error("Recurso $resourcePath ausente.")
+        stream.use { input ->
+            target.outputStream().buffered().use { output -> input.copyTo(output) }
+        }
+        require(target.isFile && target.length() > 20_000_000L) {
+            "Navegador interno foi extraído de forma incompleta."
+        }
+        return target
     }
 }
