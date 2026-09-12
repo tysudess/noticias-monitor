@@ -58,17 +58,37 @@ internal class GloboplaySessionStore(private val baseDir: File) {
             "-Command", script
         )
         val process = HiddenWindowsProcess.start(command, sessionDir)
+        val output = StringBuilder()
+        val readerThread = Thread({
+            runCatching {
+                process.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                    lines.forEach { line ->
+                        output.appendLine(line)
+                    }
+                }
+            }
+        }, "globoplay-dpapi-output").apply {
+            isDaemon = true
+            start()
+        }
+
         process.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
             writer.write(stdinText)
             writer.flush()
         }
-        val ok = process.waitFor(30, TimeUnit.SECONDS)
+
+        val ok = process.waitFor(120, TimeUnit.SECONDS)
         if (!ok) {
             HiddenWindowsProcess.destroyTree(process)
-            error("Tempo excedido ao proteger a sessão do Globoplay.")
+            readerThread.join(1500)
+            error("Tempo excedido ao acessar a proteção segura do Windows para a sessão do Globoplay.")
         }
-        val output = process.inputStream.bufferedReader(Charsets.UTF_8).readText()
-        if (process.exitValue() != 0) error(output.takeLast(1000))
-        return output
+
+        readerThread.join(5000)
+        val result = output.toString()
+        if (process.exitValue() != 0) {
+            error(result.takeLast(1000).ifBlank { "O Windows não conseguiu proteger a sessão do Globoplay." })
+        }
+        return result
     }
 }
