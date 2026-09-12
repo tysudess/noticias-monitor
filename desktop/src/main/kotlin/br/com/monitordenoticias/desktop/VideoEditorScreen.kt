@@ -46,7 +46,6 @@ private val VE_PURPLE = Color(0xFF7651D8)
 private val VE_ORANGE = Color(0xFFFF6B44)
 
 private enum class ProjectMediaFilter(val label: String) { ALL("Todos"), VIDEOS("Vídeos"), IMAGES("Imagens"), AUDIOS("Áudios") }
-private enum class InspectorTab(val label: String) { VIDEO("Vídeo"), AUDIO("Áudio"), EFFECTS("Efeitos"), ADJUST("Ajustes") }
 
 @Composable
 fun VideoEditorScreen(onBack: () -> Unit) {
@@ -66,11 +65,13 @@ fun VideoEditorScreen(onBack: () -> Unit) {
     var status by remember { mutableStateOf("Pronto. Abra um vídeo para começar.") }
     var exported by remember { mutableStateOf<File?>(null) }
     var mediaFilter by remember { mutableStateOf(ProjectMediaFilter.ALL) }
-    var inspectorTab by remember { mutableStateOf(InspectorTab.VIDEO) }
 
     DisposableEffect(preview) {
         preview.onReady = { duration ->
-            if (outMs <= 0L && duration > 0L) outMs = duration
+            if (duration > 0L) {
+                outMs = duration
+                currentMs = currentMs.coerceIn(0L, duration)
+            }
         }
         preview.onPosition = { value ->
             currentMs = value
@@ -91,7 +92,31 @@ fun VideoEditorScreen(onBack: () -> Unit) {
     }
 
     fun showNotImplemented(feature: String) {
-        status = "Esta função não existe no motor atual: $feature."
+        status = "Esta função ainda não existe no motor atual: $feature."
+    }
+
+    fun seekTo(targetMs: Long) {
+        val duration = max(1L, info?.durationMs ?: 0L)
+        val target = targetMs.coerceIn(0L, duration)
+        currentMs = target
+        preview.seek(target)
+    }
+
+    fun seekBy(deltaMs: Long) {
+        seekTo(currentMs + deltaMs)
+    }
+
+    fun markIn() {
+        val safeOut = if (outMs > 100L) outMs else max(100L, info?.durationMs ?: 100L)
+        inMs = min(currentMs, safeOut - 100L).coerceAtLeast(0L)
+        if (currentMs < inMs) seekTo(inMs)
+        status = "Ponto inicial definido em ${formatTime(inMs)}"
+    }
+
+    fun markOut() {
+        val duration = max(100L, info?.durationMs ?: 100L)
+        outMs = max(inMs + 100L, min(currentMs, duration)).coerceAtMost(duration)
+        status = "Ponto final definido em ${formatTime(outMs)}"
     }
 
     fun openVideo() {
@@ -127,7 +152,7 @@ fun VideoEditorScreen(onBack: () -> Unit) {
             prepared.fold(
                 onSuccess = { file ->
                     progress = 1f
-                    status = "Vídeo pronto para edição: ${chosen.name}"
+                    status = "Vídeo pronto para preview e timeline: ${chosen.name}"
                     preview.load(file)
                 },
                 onFailure = { status = it.message ?: "Falha ao preparar o preview." }
@@ -144,7 +169,7 @@ fun VideoEditorScreen(onBack: () -> Unit) {
         preview.pause()
         busy = true
         progress = 0f
-        status = "Exportando trecho selecionado com o motor atual..."
+        status = "Exportando trecho selecionado..."
         scope.launch {
             val result = engine.exportPrecise(source, inMs, outMs) { pct, msg ->
                 progress = pct.coerceIn(0, 100) / 100f
@@ -162,26 +187,6 @@ fun VideoEditorScreen(onBack: () -> Unit) {
         }
     }
 
-    fun seekBy(deltaMs: Long) {
-        val duration = info?.durationMs ?: 0L
-        if (duration <= 0L) return
-        val target = (currentMs + deltaMs).coerceIn(0L, duration)
-        currentMs = target
-        preview.seek(target)
-    }
-
-    fun markIn() {
-        val maxIn = max(0L, outMs - 100L)
-        inMs = min(currentMs, maxIn)
-        status = "Ponto inicial definido em ${formatTime(inMs)}"
-    }
-
-    fun markOut() {
-        val duration = info?.durationMs ?: 0L
-        outMs = max(inMs + 100L, min(currentMs, duration)).coerceAtMost(duration)
-        status = "Ponto final definido em ${formatTime(outMs)}"
-    }
-
     Box(
         Modifier.fillMaxSize().background(
             Brush.radialGradient(listOf(Color(0xFF102A43), VE_BG), radius = 1450f)
@@ -197,7 +202,7 @@ fun VideoEditorScreen(onBack: () -> Unit) {
                 onNotImplemented = ::showNotImplemented
             )
 
-            Row(Modifier.fillMaxWidth().heightIn(min = 690.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 650.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LeftModuleRail(
                     onOpen = ::openVideo,
                     onCut = ::exportCut,
@@ -205,7 +210,7 @@ fun VideoEditorScreen(onBack: () -> Unit) {
                 )
 
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.fillMaxWidth().height(430.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth().height(560.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ProjectMediaPanel(
                             input = input,
                             info = info,
@@ -213,7 +218,7 @@ fun VideoEditorScreen(onBack: () -> Unit) {
                             onFilter = { mediaFilter = it },
                             onOpen = ::openVideo,
                             onNotImplemented = ::showNotImplemented,
-                            modifier = Modifier.width(450.dp).fillMaxHeight()
+                            modifier = Modifier.width(390.dp).fillMaxHeight()
                         )
 
                         PreviewStudioPanel(
@@ -229,29 +234,16 @@ fun VideoEditorScreen(onBack: () -> Unit) {
                             onPlayPause = {
                                 if (input != null && !busy) {
                                     if (playing) preview.pause() else {
-                                        if (outMs > inMs && currentMs >= outMs - 40L) preview.seek(inMs)
+                                        if (outMs > inMs && currentMs >= outMs - 40L) seekTo(inMs)
                                         preview.play()
                                     }
                                 }
                             },
-                            onSeek = {
-                                currentMs = it
-                                preview.seek(it)
-                            },
+                            onSeek = ::seekTo,
                             onBackFive = { seekBy(-5000L) },
                             onForwardFive = { seekBy(5000L) },
                             onNotImplemented = ::showNotImplemented,
                             modifier = Modifier.weight(1f).fillMaxHeight()
-                        )
-
-                        InspectorPanel(
-                            tab = inspectorTab,
-                            onTab = { inspectorTab = it },
-                            info = info,
-                            inMs = inMs,
-                            outMs = outMs,
-                            onNotImplemented = ::showNotImplemented,
-                            modifier = Modifier.width(300.dp).fillMaxHeight()
                         )
                     }
 
@@ -263,15 +255,12 @@ fun VideoEditorScreen(onBack: () -> Unit) {
                         inMs = inMs,
                         outMs = outMs,
                         enabled = input != null && !busy,
-                        onSeek = {
-                            currentMs = it
-                            preview.seek(it)
-                        },
+                        onSeek = ::seekTo,
                         onMarkIn = ::markIn,
                         onMarkOut = ::markOut,
                         onExport = ::exportCut,
                         onNotImplemented = ::showNotImplemented,
-                        modifier = Modifier.fillMaxWidth().height(280.dp)
+                        modifier = Modifier.fillMaxWidth().height(235.dp)
                     )
 
                     QuickActionBar(
@@ -316,26 +305,20 @@ private fun VideoMasterTopBar(onOpen: () -> Unit, onBack: () -> Unit, onNotImple
     ) {
         Text("▥", color = VE_BLUE_2, fontSize = 42.sp, fontWeight = FontWeight.Light)
         Spacer(Modifier.width(14.dp))
-        Column(Modifier.width(430.dp)) {
+        Column(Modifier.width(480.dp)) {
             Text("VideoMaster PRO", color = VE_TEXT, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text("Editor • Extrator • Conversor • Compactador • Tudo em um só lugar", color = VE_MUTED, fontSize = 13.sp)
+            Text("Editor de Vídeo em tela cheia • Preview • Timeline • Corte por IN/OUT", color = VE_MUTED, fontSize = 13.sp)
         }
         Spacer(Modifier.weight(1f))
-        TopToolbarButton("▭", "Abrir Projeto", onClick = onOpen)
+        TopToolbarButton("▭", "Abrir Vídeo", onClick = onOpen)
         TopToolbarButton("▣", "Salvar Projeto", onClick = { onNotImplemented("Salvar Projeto") })
         TopToolbarButton("⚙", "Configurações", onClick = { onNotImplemented("Configurações") })
-        Spacer(Modifier.width(22.dp))
-        Text("—", color = VE_MUTED, fontSize = 20.sp)
-        Spacer(Modifier.width(18.dp))
-        Text("□", color = VE_MUTED, fontSize = 17.sp)
-        Spacer(Modifier.width(18.dp))
-        Text("×", color = VE_MUTED, fontSize = 23.sp)
-        Spacer(Modifier.width(18.dp))
+        Spacer(Modifier.width(20.dp))
         OutlinedButton(
             onClick = onBack,
             border = BorderStroke(1.dp, VE_BORDER),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = VE_MUTED),
-            modifier = Modifier.height(38.dp)
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = VE_TEXT),
+            modifier = Modifier.height(42.dp)
         ) { Text("Voltar ao Monitor", fontSize = 12.sp) }
     }
 }
@@ -367,20 +350,15 @@ private fun LeftModuleRail(onOpen: () -> Unit, onCut: () -> Unit, onNotImplement
         ModuleButton("✄", "Corte", selected = false, onClick = onCut)
         ModuleButton("▣", "Unir Vídeos", selected = false, onClick = { onNotImplemented("Unir Vídeos") })
         ModuleButton("↻", "Converter", selected = false, onClick = { onNotImplemented("Converter") })
-        Spacer(Modifier.height(18.dp))
-        HorizontalDivider(color = VE_BORDER)
-        ToolLabel("◒", "Mídia", supported = true, onClick = onOpen)
-        ToolLabel("✥", "Efeitos", supported = false, onClick = { onNotImplemented("Efeitos") })
-        ToolLabel("◧", "Transições", supported = false, onClick = { onNotImplemented("Transições") })
-        ToolLabel("♫", "Áudio", supported = false, onClick = { onNotImplemented("Áudio como faixa editável") })
-        ToolLabel("T", "Texto", supported = false, onClick = { onNotImplemented("Texto/legendas") })
-        ToolLabel("⌁", "Mais", supported = false, onClick = { onNotImplemented("Mais ferramentas") })
         Spacer(Modifier.weight(1f))
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("▥", color = VE_FADED, fontSize = 30.sp)
-            Spacer(Modifier.height(8.dp))
-            Text("Crie • Edite • Converta", color = VE_MUTED, fontSize = 11.sp)
-            Text("Sem funções falsas", color = VE_FADED, fontSize = 11.sp)
+        Surface(color = Color(0x55121F31), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, VE_BORDER_SOFT)) {
+            Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                Text("Funcional agora", color = VE_GREEN, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Abrir vídeo", color = VE_MUTED, fontSize = 11.sp)
+                Text("Preview interno", color = VE_MUTED, fontSize = 11.sp)
+                Text("Timeline + IN/OUT", color = VE_MUTED, fontSize = 11.sp)
+                Text("Exportar corte MP4", color = VE_MUTED, fontSize = 11.sp)
+            }
         }
     }
 }
@@ -393,21 +371,9 @@ private fun ModuleButton(symbol: String, label: String, selected: Boolean, onCli
             .clickable(onClick = onClick).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(symbol, color = VE_TEXT, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text(symbol, color = if (selected) Color.White else VE_TEXT, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(12.dp))
-        Text(label, color = VE_TEXT, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
-    }
-}
-
-@Composable
-private fun ToolLabel(symbol: String, label: String, supported: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(symbol, color = if (supported) VE_MUTED else VE_FADED, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.width(14.dp))
-        Text(label, color = if (supported) VE_MUTED else VE_FADED, fontSize = 14.sp)
+        Text(label, color = if (selected) Color.White else VE_TEXT, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
     }
 }
 
@@ -425,13 +391,12 @@ private fun ProjectMediaPanel(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Mídia do Projeto", color = VE_TEXT, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            Text("↕", color = VE_MUTED, fontSize = 16.sp)
+            Text("vídeo único", color = VE_FADED, fontSize = 11.sp)
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MediaAction("⇩", "Importar", onClick = onOpen, modifier = Modifier.weight(1f))
             MediaAction("●", "Gravar", onClick = { onNotImplemented("Gravar") }, modifier = Modifier.weight(1f))
-            MediaAction("▭", "Adicionar Pasta", onClick = { onNotImplemented("Adicionar Pasta") }, modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -442,17 +407,14 @@ private fun ProjectMediaPanel(
         Spacer(Modifier.height(12.dp))
         val showVideo = filter == ProjectMediaFilter.ALL || filter == ProjectMediaFilter.VIDEOS
         if (input != null && showVideo) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MediaCard(input, info, Modifier.weight(1f))
-                EmptyMediaCard("Próximo vídeo", "Unir vídeos não existe", Modifier.weight(1f))
-                EmptyMediaCard("Imagem/Logo", "Imagem não existe", Modifier.weight(1f))
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                EmptyMediaCard("Áudio", "Áudio editável não existe", Modifier.weight(1f))
-                EmptyMediaCard("Texto", "Legenda/texto não existe", Modifier.weight(1f))
-                EmptyMediaCard("Pasta", "Adicionar pasta não existe", Modifier.weight(1f))
-            }
+            MediaCard(input, info, Modifier.fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
+            LabelValue("Duração", formatTime(info?.durationMs ?: 0L), VE_GREEN)
+            LabelValue("Resolução", "${info?.width ?: 0}×${info?.height ?: 0}", VE_BLUE_2)
+            LabelValue("Codec", info?.videoCodec?.uppercase() ?: "VIDEO", VE_CYAN)
+            LabelValue("Formato", info?.format ?: input.extension.uppercase(), VE_MUTED)
+            Spacer(Modifier.height(12.dp))
+            Text("Outras mídias, múltiplos vídeos, imagens, texto e áudio editável ainda não existem no motor atual.", color = VE_FADED, fontSize = 11.sp)
         } else {
             Box(
                 Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp)).background(Color(0x800A1320))
@@ -501,26 +463,16 @@ private fun SmallTab(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun MediaCard(file: File, info: VideoEditorMediaInfo?, modifier: Modifier) {
-    Column(modifier.height(132.dp).clip(RoundedCornerShape(7.dp)).background(VE_PANEL_2).border(1.dp, VE_BORDER_SOFT, RoundedCornerShape(7.dp))) {
-        Box(Modifier.fillMaxWidth().height(82.dp).background(Brush.horizontalGradient(listOf(Color(0xFF0C7EBC), Color(0xFF14345B)))), contentAlignment = Alignment.Center) {
-            Text("VÍDEO", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    Column(modifier.height(150.dp).clip(RoundedCornerShape(7.dp)).background(VE_PANEL_2).border(1.dp, VE_BORDER_SOFT, RoundedCornerShape(7.dp))) {
+        Box(Modifier.fillMaxWidth().height(96.dp).background(Brush.horizontalGradient(listOf(Color(0xFF0C7EBC), Color(0xFF14345B)))), contentAlignment = Alignment.Center) {
+            Text("VÍDEO", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
             Surface(color = Color(0xAA000000), shape = RoundedCornerShape(4.dp), modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp)) {
                 Text(formatTime(info?.durationMs ?: 0L), color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(file.name, color = VE_TEXT, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp))
-        Text("${info?.width ?: 0}×${info?.height ?: 0} • ${info?.videoCodec ?: "vídeo"}", color = VE_MUTED, fontSize = 9.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 8.dp))
-    }
-}
-
-@Composable
-private fun EmptyMediaCard(title: String, detail: String, modifier: Modifier) {
-    Box(modifier.height(132.dp).clip(RoundedCornerShape(7.dp)).background(Color(0x66121F31)).border(1.dp, VE_BORDER_SOFT, RoundedCornerShape(7.dp)), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, color = VE_MUTED, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(detail, color = VE_FADED, fontSize = 9.sp, maxLines = 2)
-        }
+        Spacer(Modifier.height(7.dp))
+        Text(file.name, color = VE_TEXT, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp))
+        Text("${info?.width ?: 0}×${info?.height ?: 0} • ${info?.videoCodec ?: "vídeo"}", color = VE_MUTED, fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
 
@@ -544,10 +496,12 @@ private fun PreviewStudioPanel(
 ) {
     Panel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Pré-visualização", color = VE_TEXT, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("Pré-visualização", color = VE_TEXT, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(12.dp))
+            Text("${info?.width ?: 0}×${info?.height ?: 0}", color = VE_MUTED, fontSize = 12.sp)
             Spacer(Modifier.weight(1f))
             Surface(color = Color(0xFF09121F), shape = RoundedCornerShape(5.dp), border = BorderStroke(1.dp, VE_BORDER_SOFT)) {
-                Text("1080p (Full HD)  ▾", color = VE_MUTED, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
+                Text("Preview interno", color = VE_MUTED, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
             }
             Spacer(Modifier.width(12.dp))
             Text("⛶", color = VE_TEXT, fontSize = 18.sp, modifier = Modifier.clickable { onNotImplemented("Tela cheia") })
@@ -556,16 +510,16 @@ private fun PreviewStudioPanel(
         Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(5.dp)).background(Color.Black).border(1.dp, VE_BORDER, RoundedCornerShape(5.dp)), contentAlignment = Alignment.Center) {
             if (input == null) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("▥", color = VE_FADED, fontSize = 56.sp)
-                    Text("Nenhum vídeo aberto", color = VE_TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text("Use Importar para carregar um vídeo", color = VE_MUTED, fontSize = 12.sp)
+                    Text("▥", color = VE_FADED, fontSize = 64.sp)
+                    Text("Nenhum vídeo aberto", color = VE_TEXT, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("Use Importar para carregar um vídeo", color = VE_MUTED, fontSize = 13.sp)
                     Spacer(Modifier.height(12.dp))
                     Button(onClick = onOpen, colors = ButtonDefaults.buttonColors(containerColor = VE_BLUE)) { Text("Abrir vídeo") }
                 }
             } else {
                 VideoEditorPreview(preview, Modifier.fillMaxSize().padding(1.dp))
                 Surface(color = Color(0xAA08101C), shape = RoundedCornerShape(4.dp), modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)) {
-                    Text("Trecho selecionado: ${formatTime(inMs)} até ${formatTime(outMs)}", color = VE_TEXT, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                    Text("Trecho: ${formatTime(inMs)} até ${formatTime(outMs)}", color = VE_TEXT, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                 }
             }
         }
@@ -583,13 +537,12 @@ private fun PreviewStudioPanel(
             Text(formatTime(info?.durationMs ?: 0L), color = VE_TEXT, fontSize = 12.sp)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            PlayerButton("◀", enabled = input != null && !busy, onClick = onBackFive)
+            PlayerButton("◀ 5s", enabled = input != null && !busy, onClick = onBackFive)
             PlayerButton(if (playing) "Ⅱ" else "▶", enabled = input != null && !busy, onClick = onPlayPause, large = true)
-            PlayerButton("▶", enabled = input != null && !busy, onClick = onForwardFive)
-            Spacer(Modifier.width(26.dp))
+            PlayerButton("5s ▶", enabled = input != null && !busy, onClick = onForwardFive)
+            Spacer(Modifier.width(22.dp))
             PlayerButton("🔊", enabled = false, onClick = { onNotImplemented("Controle de volume") })
             PlayerButton("▣", enabled = false, onClick = { onNotImplemented("Captura de frame") })
-            PlayerButton("⛶", enabled = false, onClick = { onNotImplemented("Tela cheia") })
         }
     }
 }
@@ -599,109 +552,10 @@ private fun PlayerButton(label: String, enabled: Boolean, onClick: () -> Unit, l
     Text(
         label,
         color = if (enabled) VE_TEXT else VE_FADED,
-        fontSize = if (large) 31.sp else 23.sp,
+        fontSize = if (large) 31.sp else 17.sp,
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(horizontal = 15.dp).clickable(enabled = enabled, onClick = onClick)
     )
-}
-
-@Composable
-private fun InspectorPanel(tab: InspectorTab, onTab: (InspectorTab) -> Unit, info: VideoEditorMediaInfo?, inMs: Long, outMs: Long, onNotImplemented: (String) -> Unit, modifier: Modifier) {
-    Panel(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            InspectorTab.values().forEach { item ->
-                Text(
-                    item.label,
-                    color = if (tab == item) VE_BLUE_2 else VE_TEXT,
-                    fontSize = 13.sp,
-                    fontWeight = if (tab == item) FontWeight.Bold else FontWeight.Normal,
-                    modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(if (tab == item) Color(0xFF112A44) else Color.Transparent)
-                        .clickable { onTab(item) }.padding(horizontal = 10.dp, vertical = 10.dp)
-                )
-            }
-        }
-        HorizontalDivider(color = VE_BORDER_SOFT)
-        Spacer(Modifier.height(10.dp))
-        when (tab) {
-            InspectorTab.VIDEO -> {
-                SectionTitle("⌄", "Transformação")
-                DisabledSliderRow("Zoom", "100%", onClick = { onNotImplemented("Zoom") })
-                DisabledPairRow("Posição", "X", "0", "Y", "0", onClick = { onNotImplemented("Posição X/Y") })
-                DisabledSliderRow("Rotação", "0°", onClick = { onNotImplemented("Rotação") })
-                DisabledPairRow("Espelhar", "H", "—", "V", "—", onClick = { onNotImplemented("Espelhamento") })
-                Spacer(Modifier.height(10.dp))
-                SectionTitle("⌄", "Ajustes de Cor")
-                DisabledSliderRow("Brilho", "0", onClick = { onNotImplemented("Brilho") })
-                DisabledSliderRow("Contraste", "0", onClick = { onNotImplemented("Contraste") })
-                DisabledSliderRow("Saturação", "0", onClick = { onNotImplemented("Saturação") })
-                DisabledSliderRow("Temperatura", "0", onClick = { onNotImplemented("Temperatura") })
-                DisabledSliderRow("Matiz", "0", onClick = { onNotImplemented("Matiz") })
-                Spacer(Modifier.height(8.dp))
-                Text("Esta função não existe no motor atual para transformação/ajustes. O motor atual suporta preview, IN/OUT e exportação de corte.", color = VE_FADED, fontSize = 10.sp)
-                Spacer(Modifier.height(10.dp))
-                info?.let {
-                    LabelValue("Resolução", "${it.width}×${it.height}", VE_BLUE_2)
-                    LabelValue("Codec", it.videoCodec.uppercase(), VE_CYAN)
-                    LabelValue("Trecho", formatTime((outMs - inMs).coerceAtLeast(0L)), VE_GREEN)
-                }
-            }
-            InspectorTab.AUDIO -> NotImplementedPanel("Áudio editável/faixas de áudio", onNotImplemented)
-            InspectorTab.EFFECTS -> NotImplementedPanel("Efeitos", onNotImplemented)
-            InspectorTab.ADJUST -> NotImplementedPanel("Ajustes aplicados ao vídeo", onNotImplemented)
-        }
-    }
-}
-
-@Composable
-private fun SectionTitle(symbol: String, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(symbol, color = VE_BLUE_2, fontSize = 14.sp)
-        Spacer(Modifier.width(8.dp))
-        Text(label, color = VE_TEXT, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.weight(1f))
-        Text("⌃", color = VE_MUTED, fontSize = 12.sp)
-    }
-}
-
-@Composable
-private fun DisabledSliderRow(label: String, value: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().height(34.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = VE_MUTED, fontSize = 12.sp, modifier = Modifier.width(82.dp))
-        Slider(value = 0.45f, onValueChange = {}, enabled = false, colors = SliderDefaults.colors(disabledThumbColor = VE_FADED, disabledActiveTrackColor = VE_BORDER, disabledInactiveTrackColor = Color(0xFF263348)), modifier = Modifier.weight(1f))
-        Surface(color = Color(0xFF0A1320), shape = RoundedCornerShape(5.dp), border = BorderStroke(1.dp, VE_BORDER_SOFT)) {
-            Text(value, color = VE_MUTED, fontSize = 11.sp, modifier = Modifier.width(52.dp).padding(vertical = 5.dp), maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun DisabledPairRow(title: String, a: String, av: String, b: String, bv: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().height(34.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, color = VE_MUTED, fontSize = 12.sp, modifier = Modifier.width(82.dp))
-        Text(a, color = VE_MUTED, fontSize = 11.sp)
-        ValuePill(av)
-        Spacer(Modifier.width(8.dp))
-        Text(b, color = VE_MUTED, fontSize = 11.sp)
-        ValuePill(bv)
-    }
-}
-
-@Composable
-private fun ValuePill(value: String) {
-    Surface(color = Color(0xFF0A1320), shape = RoundedCornerShape(5.dp), border = BorderStroke(1.dp, VE_BORDER_SOFT), modifier = Modifier.padding(start = 6.dp)) {
-        Text(value, color = VE_MUTED, fontSize = 11.sp, modifier = Modifier.width(42.dp).padding(vertical = 5.dp))
-    }
-}
-
-@Composable
-private fun NotImplementedPanel(feature: String, onNotImplemented: (String) -> Unit) {
-    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(Color(0x660A1320)).clickable { onNotImplemented(feature) }, contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("⚠", color = VE_FADED, fontSize = 35.sp)
-            Text("Esta função não existe", color = VE_TEXT, fontWeight = FontWeight.Bold)
-            Text("no motor atual: $feature", color = VE_MUTED, fontSize = 11.sp)
-        }
-    }
 }
 
 @Composable
@@ -721,39 +575,44 @@ private fun ProfessionalTimelinePanel(
     modifier: Modifier
 ) {
     val scroll = rememberScrollState()
+    val safeDuration = max(1L, durationMs)
     Panel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Timeline", color = VE_TEXT, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(60.dp))
+            Spacer(Modifier.width(28.dp))
             TimelineTool("↶", enabled = false, onClick = { onNotImplemented("Desfazer") })
             TimelineTool("↷", enabled = false, onClick = { onNotImplemented("Refazer") })
             TimelineTool("✂", enabled = enabled, onClick = { onMarkIn(); onMarkOut() })
-            TimelineTool("🛡", enabled = false, onClick = { onNotImplemented("Proteção/seleção de trecho") })
-            TimelineTool("🗑", enabled = false, onClick = { onNotImplemented("Excluir") })
-            TimelineTool("⌘", enabled = false, onClick = { onNotImplemented("Separar") })
-            TimelineTool("↩", enabled = false, onClick = { onNotImplemented("Copiar/colar") })
             Spacer(Modifier.weight(1f))
             Text(formatTime(currentMs), color = VE_BLUE_2, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(12.dp))
-            Text("Zoom", color = VE_MUTED, fontSize = 11.sp)
-            Slider(value = 0.55f, onValueChange = {}, enabled = false, modifier = Modifier.width(120.dp))
-            OutlinedButton(onClick = { onNotImplemented("Ajustar zoom da timeline") }, border = BorderStroke(1.dp, VE_BORDER), modifier = Modifier.height(34.dp)) { Text("Ajustar", color = VE_MUTED, fontSize = 11.sp) }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("00:00.000", color = VE_MUTED, fontSize = 10.sp)
+            Slider(
+                value = currentMs.coerceIn(0L, safeDuration).toFloat(),
+                onValueChange = { onSeek(it.toLong()) },
+                enabled = enabled,
+                valueRange = 0f..safeDuration.toFloat(),
+                colors = SliderDefaults.colors(thumbColor = VE_BLUE_2, activeTrackColor = VE_BLUE, inactiveTrackColor = Color(0xFF33435A)),
+                modifier = Modifier.weight(1f).padding(horizontal = 10.dp)
+            )
+            Text(formatTime(durationMs), color = VE_MUTED, fontSize = 10.sp)
+        }
         Row(Modifier.fillMaxWidth()) {
-            Column(Modifier.width(205.dp)) {
-                Spacer(Modifier.height(34.dp))
-                TrackHeader("▭", "Vídeo 2", supported = false, onNotImplemented = onNotImplemented)
+            Column(Modifier.width(170.dp)) {
+                Spacer(Modifier.height(28.dp))
                 TrackHeader("▭", "Vídeo 1", supported = input != null, onNotImplemented = onNotImplemented)
-                TrackHeader("♫", "Áudio 1", supported = false, onNotImplemented = onNotImplemented)
-                TrackHeader("↕", "Áudio 2", supported = false, onNotImplemented = onNotImplemented)
+                TrackHeader("♫", "Áudio 1", supported = input != null, onNotImplemented = onNotImplemented)
             }
             Column(Modifier.weight(1f).horizontalScroll(scroll)) {
                 TimelineRuler(durationMs)
-                TimelineTrack(durationMs, currentMs, enabled, onSeek) { GhostClip("Faixa disponível visualmente", VE_BORDER) }
-                TimelineTrack(durationMs, currentMs, enabled, onSeek) { if (input != null) RealVideoClip(input, info, inMs, outMs) else GhostClip("Aguardando vídeo", VE_BORDER) }
-                TimelineTrack(durationMs, currentMs, enabled, onSeek) { GhostClip("Waveform não existe no motor atual", Color(0xFF0B777B)) }
-                TimelineTrack(durationMs, currentMs, enabled, onSeek) { GhostClip("Faixa não implementada", VE_BORDER) }
+                TimelineTrack(durationMs, currentMs, enabled, onSeek) {
+                    if (input != null) RealVideoClip(input, info, inMs, outMs) else GhostClip("Aguardando vídeo", VE_BORDER)
+                }
+                TimelineTrack(durationMs, currentMs, enabled, onSeek) {
+                    if (input != null) GhostClip("Áudio original do vídeo", Color(0xFF0B777B)) else GhostClip("Aguardando áudio do vídeo", Color(0xFF0B777B))
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -780,20 +639,19 @@ private fun TrackHeader(symbol: String, label: String, supported: Boolean, onNot
     Row(Modifier.fillMaxWidth().height(42.dp).border(1.dp, VE_BORDER_SOFT).clickable { if (!supported) onNotImplemented(label) }, verticalAlignment = Alignment.CenterVertically) {
         Text(symbol, color = if (supported) VE_TEXT else VE_FADED, fontSize = 14.sp, modifier = Modifier.padding(start = 10.dp).width(26.dp))
         Text(label, color = if (supported) VE_TEXT else VE_MUTED, fontSize = 12.sp, modifier = Modifier.weight(1f))
-        Text("🔒", color = VE_FADED, fontSize = 11.sp, modifier = Modifier.padding(end = 9.dp))
         Text("◉", color = if (supported) VE_TEXT else VE_FADED, fontSize = 11.sp, modifier = Modifier.padding(end = 9.dp))
     }
 }
 
 @Composable
 private fun TimelineRuler(durationMs: Long) {
-    Row(Modifier.width(980.dp).height(34.dp).background(Color(0x660A1320)).border(1.dp, VE_BORDER_SOFT), verticalAlignment = Alignment.Bottom) {
+    Row(Modifier.width(980.dp).height(28.dp).background(Color(0x660A1320)).border(1.dp, VE_BORDER_SOFT), verticalAlignment = Alignment.Bottom) {
         val safeDuration = max(1L, durationMs)
         for (i in 0..6) {
             val t = safeDuration * i / 6
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                 Text(formatTime(t), color = VE_MUTED, fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
-                Box(Modifier.width(1.dp).height(10.dp).background(VE_BORDER))
+                Box(Modifier.width(1.dp).height(8.dp).background(VE_BORDER))
             }
         }
     }
@@ -812,7 +670,7 @@ private fun TimelineTrack(durationMs: Long, currentMs: Long, enabled: Boolean, o
 @Composable
 private fun BoxScope.RealVideoClip(file: File, info: VideoEditorMediaInfo?, inMs: Long, outMs: Long) {
     Row(
-        Modifier.align(Alignment.CenterStart).padding(start = 78.dp).width(360.dp).height(32.dp).clip(RoundedCornerShape(4.dp))
+        Modifier.align(Alignment.CenterStart).padding(start = 70.dp).width(430.dp).height(32.dp).clip(RoundedCornerShape(4.dp))
             .background(Brush.horizontalGradient(listOf(Color(0xFF168FFF), Color(0xFF123D6A))))
             .border(1.dp, VE_BLUE_2, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -827,7 +685,7 @@ private fun BoxScope.RealVideoClip(file: File, info: VideoEditorMediaInfo?, inMs
 @Composable
 private fun BoxScope.GhostClip(text: String, color: Color) {
     Box(
-        Modifier.align(Alignment.CenterStart).padding(start = 70.dp).width(330.dp).height(30.dp).clip(RoundedCornerShape(4.dp))
+        Modifier.align(Alignment.CenterStart).padding(start = 70.dp).width(430.dp).height(30.dp).clip(RoundedCornerShape(4.dp))
             .background(color.copy(alpha = 0.25f)).border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(4.dp)),
         contentAlignment = Alignment.Center
     ) { Text(text, color = VE_FADED, fontSize = 10.sp) }
@@ -837,10 +695,10 @@ private fun BoxScope.GhostClip(text: String, color: Color) {
 private fun QuickActionBar(hasVideo: Boolean, busy: Boolean, onCut: () -> Unit, onOpen: () -> Unit, onNotImplemented: (String) -> Unit) {
     Row(Modifier.fillMaxWidth().height(74.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         QuickCard("✂", "Cortar Vídeo", "Remove trecho por IN/OUT", VE_GREEN, hasVideo && !busy, onClick = onCut, modifier = Modifier.weight(1f))
-        QuickCard("▣", "Unir Vídeos", "Esta função não existe", VE_PURPLE, true, onClick = { onNotImplemented("Unir Vídeos") }, modifier = Modifier.weight(1f))
-        QuickCard("⇩", "Extrair", "Esta função não existe", VE_BLUE, true, onClick = { onNotImplemented("Extrair") }, modifier = Modifier.weight(1f))
-        QuickCard("▤", "Compactar", "Esta função não existe", VE_ORANGE, true, onClick = { onNotImplemented("Compactar") }, modifier = Modifier.weight(1f))
-        QuickCard("↻", "Converter", "Esta função não existe", VE_BLUE, true, onClick = { onNotImplemented("Converter") }, modifier = Modifier.weight(1f))
+        QuickCard("▣", "Unir Vídeos", "Ainda não existe", VE_PURPLE, true, onClick = { onNotImplemented("Unir Vídeos") }, modifier = Modifier.weight(1f))
+        QuickCard("⇩", "Extrair", "Ainda não existe", VE_BLUE, true, onClick = { onNotImplemented("Extrair") }, modifier = Modifier.weight(1f))
+        QuickCard("▤", "Compactar", "Ainda não existe", VE_ORANGE, true, onClick = { onNotImplemented("Compactar") }, modifier = Modifier.weight(1f))
+        QuickCard("↻", "Converter", "Ainda não existe", VE_BLUE, true, onClick = { onNotImplemented("Converter") }, modifier = Modifier.weight(1f))
     }
 }
 
@@ -867,7 +725,7 @@ private fun BottomStatusBar(status: String, busy: Boolean, progress: Float, info
             .border(1.dp, VE_BORDER_SOFT, RoundedCornerShape(8.dp)).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("VideoMaster PRO v1.0", color = VE_TEXT, fontSize = 12.sp)
+        Text("VideoMaster PRO v1.1", color = VE_TEXT, fontSize = 12.sp)
         Spacer(Modifier.width(18.dp))
         Text(if (busy) "● Processando" else "● Pronto", color = if (busy) VE_BLUE_2 else VE_GREEN, fontSize = 12.sp)
         Spacer(Modifier.width(14.dp))
@@ -881,15 +739,14 @@ private fun BottomStatusBar(status: String, busy: Boolean, progress: Float, info
         }
         Spacer(Modifier.width(16.dp))
         Surface(color = VE_PANEL_2, shape = RoundedCornerShape(6.dp), border = BorderStroke(1.dp, VE_BORDER_SOFT)) {
-            Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Text("Qualidade: H.264", color = VE_MUTED, fontSize = 11.sp)
-                Text("Formato: MP4", color = VE_MUTED, fontSize = 11.sp)
-                Text("Resolução: ${info?.width ?: 0}×${info?.height ?: 0}", color = VE_MUTED, fontSize = 11.sp)
-                Text("Tamanho estimado: não existe no motor atual", color = VE_MUTED, fontSize = 11.sp)
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text("H.264", color = VE_MUTED, fontSize = 11.sp)
+                Text("MP4", color = VE_MUTED, fontSize = 11.sp)
+                Text("${info?.width ?: 0}×${info?.height ?: 0}", color = VE_MUTED, fontSize = 11.sp)
             }
         }
         Spacer(Modifier.width(12.dp))
-        Button(onClick = onExport, enabled = info != null && !busy, colors = ButtonDefaults.buttonColors(containerColor = VE_BLUE), shape = RoundedCornerShape(8.dp), modifier = Modifier.height(48.dp).width(210.dp)) { Text("↥  Exportar Vídeo", color = Color.White, fontSize = 16.sp) }
+        Button(onClick = onExport, enabled = info != null && !busy, colors = ButtonDefaults.buttonColors(containerColor = VE_BLUE), shape = RoundedCornerShape(8.dp), modifier = Modifier.height(48.dp).width(190.dp)) { Text("↥ Exportar Vídeo", color = Color.White, fontSize = 15.sp) }
         Spacer(Modifier.width(8.dp))
         OutlinedButton(onClick = onOpenFolder, border = BorderStroke(1.dp, VE_BORDER), modifier = Modifier.height(48.dp)) { Text("Pasta", color = VE_MUTED, fontSize = 12.sp) }
     }
