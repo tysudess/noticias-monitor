@@ -9,11 +9,13 @@ if not SCREEN.exists() or not STORE.exists():
 
 src = SCREEN.read_text(encoding='utf-8')
 
-src = src.replace(
-    '    val updater = remember { YtDlpUpdater(engine) }\n',
-    '    val updater = remember { YtDlpUpdater(engine) }\n    val portableState = remember { ExtractorPortableStateStore(engine.appDir.toFile()) }\n',
-    1,
-)
+# Idempotente: o novo layout já pode trazer o estado portable diretamente no source.
+if 'val portableState = remember { ExtractorPortableStateStore(engine.appDir.toFile()) }' not in src:
+    src = src.replace(
+        '    val updater = remember { YtDlpUpdater(engine) }\n',
+        '    val updater = remember { YtDlpUpdater(engine) }\n    val portableState = remember { ExtractorPortableStateStore(engine.appDir.toFile()) }\n',
+        1,
+    )
 src = src.replace(
     '    var qualityIndex by remember { mutableIntStateOf(1) }\n',
     '    var qualityIndex by remember { mutableIntStateOf(portableState.loadQualityIndex(1)) }\n',
@@ -35,7 +37,7 @@ src = src.replace(
     'GloboplayLoginWindow(null, engine, "")',
 )
 
-# Remove o bloco de proxy da tela de Configurações.
+# Remove o bloco de proxy da tela de Configurações em árvores antigas.
 proxy_block = '''                    Text("Proxy opcional", color = ExText, fontWeight = FontWeight.SemiBold)\n                    OutlinedTextField(\n                        value = proxy,\n                        onValueChange = { proxy = it },\n                        modifier = Modifier.fillMaxWidth(),\n                        placeholder = { Text("http://usuario:senha@servidor:porta", color = ExMuted) },\n                        singleLine = true,\n                        colors = OutlinedTextFieldDefaults.colors(\n                            focusedTextColor = ExText,\n                            unfocusedTextColor = ExText,\n                            focusedBorderColor = ExPurple,\n                            unfocusedBorderColor = ExBorder\n                        )\n                    )\n                    Text("O mesmo proxy é aplicado ao navegador interno, yt-dlp e fallbacks HTML/HLS.", color = ExMuted)\n\n'''
 src = src.replace(proxy_block, '')
 
@@ -74,6 +76,7 @@ for required in (
     'SALVAR PROXY', 'REMOVER PROXY'
 ):
     assert required in updated, required
+assert updated.count('val portableState = remember { ExtractorPortableStateStore(engine.appDir.toFile()) }') == 1
 for forbidden in ('Proxy opcional', 'portableState.loadProxy()', 'value = proxy', 'onValueChange = { proxy = it }'):
     assert forbidden not in updated, forbidden
-print('Persistência portable integrada; proxy específico do Extrator removido e conexão direta ativada.')
+print('Persistência portable integrada de forma idempotente; proxy específico removido e conexão direta ativada.')
