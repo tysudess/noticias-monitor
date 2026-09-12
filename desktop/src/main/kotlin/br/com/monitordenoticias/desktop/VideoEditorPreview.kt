@@ -14,7 +14,19 @@ import javafx.scene.media.MediaPlayer
 import javafx.scene.media.MediaView
 import javafx.util.Duration
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.SwingUtilities
+
+private object VideoEditorJavaFxToolkit {
+    private val initialized = AtomicBoolean(false)
+
+    fun ensureStarted() {
+        if (initialized.compareAndSet(false, true)) {
+            JFXPanel()
+            Platform.setImplicitExit(false)
+        }
+    }
+}
 
 internal class VideoEditorPreviewController {
     @Volatile private var panel: JFXPanel? = null
@@ -26,11 +38,13 @@ internal class VideoEditorPreviewController {
     var onError: ((String) -> Unit)? = null
 
     fun attach(target: JFXPanel) {
+        VideoEditorJavaFxToolkit.ensureStarted()
         panel = target
         Platform.runLater { Platform.setImplicitExit(false) }
     }
 
     fun load(file: File) {
+        VideoEditorJavaFxToolkit.ensureStarted()
         Platform.runLater {
             runCatching {
                 player?.stop()
@@ -71,13 +85,23 @@ internal class VideoEditorPreviewController {
         }
     }
 
-    fun play() = Platform.runLater { player?.play() }
-    fun pause() = Platform.runLater { player?.pause() }
-    fun seek(positionMs: Long) = Platform.runLater {
-        player?.seek(Duration.millis(positionMs.coerceAtLeast(0L).toDouble()))
+    fun play() {
+        VideoEditorJavaFxToolkit.ensureStarted()
+        Platform.runLater { player?.play() }
+    }
+
+    fun pause() {
+        VideoEditorJavaFxToolkit.ensureStarted()
+        Platform.runLater { player?.pause() }
+    }
+
+    fun seek(positionMs: Long) {
+        VideoEditorJavaFxToolkit.ensureStarted()
+        Platform.runLater { player?.seek(Duration.millis(positionMs.coerceAtLeast(0L).toDouble())) }
     }
 
     fun dispose() {
+        VideoEditorJavaFxToolkit.ensureStarted()
         Platform.runLater {
             runCatching { player?.stop() }
             runCatching { player?.dispose() }
@@ -97,7 +121,10 @@ internal fun VideoEditorPreview(controller: VideoEditorPreviewController, modifi
         onDispose { controller.dispose() }
     }
     SwingPanel(
-        factory = { JFXPanel().also(controller::attach) },
+        factory = {
+            VideoEditorJavaFxToolkit.ensureStarted()
+            JFXPanel().also(controller::attach)
+        },
         modifier = modifier,
         background = Color.Black
     )
