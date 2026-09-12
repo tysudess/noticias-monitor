@@ -1,14 +1,7 @@
-name: Release V19 Single Embedded Video Editor + Scroll
+name: Release Windows Portable V19
 
 on:
-  push:
-    branches:
-      - work/v19-video-editor-single-host-scroll
-    paths:
-      - '.github/workflows/release-v19-video-editor-single-host-scroll.yml'
-      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/LegacyVideoEditorHostController.kt'
-      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt'
-      - 'desktop/src/main/python/video_editor_full_host.py'
+  workflow_dispatch:
 
 permissions:
   contents: write
