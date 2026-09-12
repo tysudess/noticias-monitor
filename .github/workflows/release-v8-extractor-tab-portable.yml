@@ -23,6 +23,7 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorEngine.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorPreview.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorProcess.kt'
+      - 'video_editor_pyside/**'
       - 'tools/integrate-v8-extractor-tab.py'
       - 'tools/integrate-video-editor-tab.py'
       - 'tools/patch-extractor-generic-html.py'
@@ -45,7 +46,7 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 80
 
     steps:
       - name: Checkout
@@ -67,6 +68,7 @@ jobs:
           python-version: '3.12'
 
       - name: Aplicar integração completa do Extrator
+        timeout-minutes: 10
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -128,6 +130,20 @@ jobs:
         shell: pwsh
         run: gradle :desktop:createDistributable --stacktrace
 
+      - name: Empacotar Editor de Vídeo PySide6
+        timeout-minutes: 30
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python -m pip install --upgrade pip
+          python -m pip install -r video_editor_pyside/requirements.txt
+          python -m PyInstaller --noconfirm --clean --windowed --onedir --name VideoEditorPySide --collect-all PySide6 video_editor_pyside/main.py
+          if(-not (Test-Path 'dist/VideoEditorPySide/VideoEditorPySide.exe')){throw 'VideoEditorPySide.exe não foi gerado.'}
+          $pySideMain=Get-Content 'video_editor_pyside/main.py' -Raw
+          foreach($x in @('QMediaPlayer','QVideoWidget','QAudioOutput','QtMultimedia','SUPPORTED_EXTENSIONS')){
+            if($pySideMain -notmatch [regex]::Escape($x)){throw "Editor PySide6 incompleto: $x"}
+          }
+
       - name: Preparar binários do Extrator
         shell: pwsh
         run: |
@@ -183,8 +199,16 @@ jobs:
             $path=Join-Path $bin $name
             if(-not (Test-Path $path) -or (Get-Item $path).Length -lt 100000){throw "Binário inválido no portable: $name"}
           }
+          $editorSrc='dist/VideoEditorPySide'
+          $editorDst=Join-Path $root 'video-editor/VideoEditorPySide'
+          if(-not (Test-Path (Join-Path $editorSrc 'VideoEditorPySide.exe'))){throw 'Editor PySide6 não encontrado para copiar.'}
+          if(Test-Path $editorDst){Remove-Item $editorDst -Recurse -Force}
+          New-Item -ItemType Directory -Force (Split-Path $editorDst -Parent) | Out-Null
+          Copy-Item $editorSrc $editorDst -Recurse -Force
+          if(-not (Test-Path (Join-Path $editorDst 'VideoEditorPySide.exe'))){throw 'VideoEditorPySide.exe ausente no portable.'}
           New-Item -ItemType Directory -Force (Join-Path $root 'Videos') | Out-Null
           New-Item -ItemType Directory -Force (Join-Path $root 'data/extractor') | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $root 'VideoEditorExports') | Out-Null
           '${{ github.sha }}' | Set-Content (Join-Path $root 'BUILD-SHA.txt') -Encoding ascii
 
       - name: Validar contrato do Extrator
@@ -205,6 +229,7 @@ jobs:
           if($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"'){throw 'Aba Extrator ausente.'}
           if($dash -notmatch 'else if \(section == V5Section.EXTRACTOR\)'){throw 'Extrator não está em workspace dedicada.'}
           if($dash -notmatch 'ExtractorVideoScreen \{ section = V5Section.HOME \}'){throw 'Workspace dedicada do Extrator ausente.'}
+          if($dash -notmatch 'VIDEO_EDITOR\("Editor de Vídeo"'){throw 'Aba Editor de Vídeo ausente.'}
           if($screen -match 'ANALISAR'){throw 'ANALISAR não pode ficar visível.'}
           foreach($q in @('360p','480p','720p HD','1080p Full HD','Melhor disponível')){if(($screen+$engine) -notmatch [regex]::Escape($q)){throw "Qualidade ausente: $q"}}
           foreach($x in @('Formato de saída: MP4','BAIXAR VÍDEO','LOGIN GLOBOPLAY','ATUALIZAR YT-DLP','APAGAR SESSÃO','LIMPAR HISTÓRICO','ExtractorPortableStateStore','NavalHudBackdrop','HudFrame')){if($screen -notmatch [regex]::Escape($x)){throw "UI/estado ausente: $x"}}
@@ -219,6 +244,17 @@ jobs:
           foreach($x in @('ProtectedData','CurrentUser','globoplay.session.dpapi','HiddenWindowsProcess.start','[Console]::In.ReadToEnd()','stdinText')){if($session -notmatch [regex]::Escape($x)){throw "Sessão segura incompleta: $x"}}
           foreach($x in @('ATOMIC_MOVE','yt-dlp.backup.exe','--version','HiddenWindowsProcess.start','Intencionalmente NÃO apagamos backup aqui')){if($updater -notmatch [regex]::Escape($x)){throw "Updater incompleto: $x"}}
           if($screen -match 'Proxy opcional'){throw 'Proxy próprio do Extrator voltou para a UI.'}
+
+      - name: Validar Editor de Vídeo PySide6 no Portable
+        shell: pwsh
+        run: |
+          $root='desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $editor=Join-Path $root 'video-editor/VideoEditorPySide/VideoEditorPySide.exe'
+          if(-not (Test-Path $editor)){throw 'VideoEditorPySide.exe ausente no portable final.'}
+          $screen=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
+          $py=Get-Content 'video_editor_pyside/main.py' -Raw
+          foreach($x in @('PySideVideoEditorLauncher','VideoEditorPySide.exe','PySide6 6.9.1','QMediaPlayer')){if($screen -notmatch [regex]::Escape($x)){throw "Launcher do editor incompleto: $x"}}
+          foreach($x in @('QMediaPlayer','QVideoWidget','QAudioOutput','probe_video','open_files','TimelineWidget','export_selected')){if($py -notmatch [regex]::Escape($x)){throw "Editor PySide6 incompleto: $x"}}
 
       - name: Criar ZIP e SHA256
         shell: pwsh
@@ -243,13 +279,13 @@ jobs:
           $zip='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip'
           $sha='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip.sha256'
           $buildSha='${{ github.sha }}'
-          $notes="Preview visual: Extrator com layout naval/HUD da Imagem 1, Editor PDF com layout da Imagem 2 e Editor de Vídeo com layout profissional inspirado na referência VideoMaster PRO, preservando os motores e funções existentes. Extrator com cinco binários portáteis, subprocessos ocultos, YouTube Live, H.264, R7/Record, Globoplay interno e atualizador seguro. Editor de Vídeo com preview, timeline visual, IN/OUT e exportação por corte preciso. Build SHA: $buildSha."
+          $notes="Preview visual: Extrator com layout naval/HUD da Imagem 1, Editor PDF com layout da Imagem 2 e Editor de Vídeo migrado para PySide6 6.9.1/QtMultimedia, usando QMediaPlayer, QVideoWidget e QAudioOutput para pré-visualização real com áudio. Extrator com cinco binários portáteis, subprocessos ocultos, YouTube Live, H.264, R7/Record, Globoplay interno e atualizador seguro. Editor de Vídeo com abertura de múltiplos vídeos, timeline visual, preview QtMultimedia e exportação de trecho via FFmpeg do portable. Build SHA: $buildSha."
           if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){
             gh release upload $tag $zip $sha --repo tysudess/noticias-monitor --clobber
             if($LASTEXITCODE -ne 0){throw 'Falha ao substituir assets da preview; release anterior foi preservada.'}
-            gh release edit $tag --repo tysudess/noticias-monitor --target work/v8-extrator-v301-tab --prerelease --title 'Monitor V8 + Extrator + Editor de Vídeo — Preview Portable' --notes $notes
+            gh release edit $tag --repo tysudess/noticias-monitor --target work/v8-extrator-v301-tab --prerelease --title 'Monitor V8 + Extrator + Editor de Vídeo PySide6 — Preview Portable' --notes $notes
           } else {
-            gh release create $tag $zip $sha --repo tysudess/noticias-monitor --target work/v8-extrator-v301-tab --prerelease --title 'Monitor V8 + Extrator + Editor de Vídeo — Preview Portable' --notes $notes
+            gh release create $tag $zip $sha --repo tysudess/noticias-monitor --target work/v8-extrator-v301-tab --prerelease --title 'Monitor V8 + Extrator + Editor de Vídeo PySide6 — Preview Portable' --notes $notes
           }
 
       - name: Upload artifact
@@ -259,4 +295,3 @@ jobs:
           path: |
             Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip
             Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip.sha256
-          retention-days: 14
