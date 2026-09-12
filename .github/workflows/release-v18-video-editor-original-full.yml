@@ -100,6 +100,8 @@ jobs:
           if ($v300 -notmatch 'class AdvancedVideoEditorWidget300') { throw 'Editor v3.0 com undo ausente.' }
           if ($range -notmatch 'class RangeSlider\(QWidget\)') { throw 'RangeSlider original ausente.' }
           if ($hostSource -notmatch 'AdvancedVideoEditorWidget300') { throw 'Host não está usando o editor final original.' }
+          if ($hostSource -notmatch '--bridge-dir') { throw 'Ponte windowed segura ausente no host.' }
+          if ($hostSource -match 'for line in sys\.stdin') { throw 'Host ainda depende de stdin e não é seguro em --windowed.' }
 
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
@@ -163,10 +165,38 @@ jobs:
         shell: pwsh
         run: |
           $exe = Resolve-Path 'base/bin/video-editor-host/video-editor-host.exe'
-          $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
-          Start-Sleep -Seconds 6
-          if ($p.HasExited) { throw "Editor original encerrou prematuramente com código $($p.ExitCode)." }
-          Stop-Process -Id $p.Id -Force
+          $bridge = Join-Path $env:RUNNER_TEMP 'v18-editor-smoke'
+          Remove-Item $bridge -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $bridge | Out-Null
+
+          $p = Start-Process -FilePath $exe -ArgumentList @('--bridge-dir', $bridge) -WorkingDirectory (Split-Path $exe) -PassThru
+          $hwndFile = Join-Path $bridge 'hwnd.txt'
+          $errorFile = Join-Path $bridge 'error.txt'
+          $hwnd = 0L
+
+          for ($i = 0; $i -lt 60; $i++) {
+            Start-Sleep -Milliseconds 250
+            if ($p.HasExited) {
+              $detail = if (Test-Path $errorFile) { Get-Content $errorFile -Raw } else { '' }
+              throw "Editor original encerrou antes de publicar HWND. Código=$($p.ExitCode). $detail"
+            }
+            if (Test-Path $hwndFile) {
+              $text = (Get-Content $hwndFile -Raw).Trim()
+              if ([Int64]::TryParse($text, [ref]$hwnd) -and $hwnd -gt 0) { break }
+            }
+          }
+
+          if ($hwnd -le 0) {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            throw 'Editor original iniciou, mas não publicou um HWND válido para a aba.'
+          }
+
+          Set-Content -Path (Join-Path $bridge 'quit.flag') -Value 'quit' -Encoding utf8
+          if (-not $p.WaitForExit(5000)) {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            throw 'Editor original não encerrou de forma controlada pelo bridge.'
+          }
+          Write-Host "Host original validado. HWND=$hwnd"
 
       - name: Package and publish V18
         shell: pwsh
