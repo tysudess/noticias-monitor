@@ -55,11 +55,11 @@ dependencies {
     implementation("net.sf.kxml:kxml2:2.3.0")
 
     // Navegador interno do login Globoplay. Mantido isolado do restante do Monitor.
-    implementation("org.openjfx:javafx-base:17.0.16:win")
-    implementation("org.openjfx:javafx-graphics:17.0.16:win")
-    implementation("org.openjfx:javafx-controls:17.0.16:win")
-    implementation("org.openjfx:javafx-swing:17.0.16:win")
-    implementation("org.openjfx:javafx-web:17.0.16:win")
+    implementation("org.openjfx:javafx-base:21.0.10:win")
+    implementation("org.openjfx:javafx-graphics:21.0.10:win")
+    implementation("org.openjfx:javafx-controls:21.0.10:win")
+    implementation("org.openjfx:javafx-swing:21.0.10:win")
+    implementation("org.openjfx:javafx-web:21.0.10:win")
 }
 
 compose.desktop {
