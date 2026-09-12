@@ -1,0 +1,124 @@
+name: Release V9 Video Editor Tab V1
+
+on:
+  push:
+    branches:
+      - work/v9-video-editor-tab-v1
+    paths:
+      - '.github/workflows/release-v9-video-editor-tab-v1.yml'
+      - '.github/scripts/integrate_video_editor_tab.py'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v9-video-editor-tab-v1
+          fetch-depth: 0
+
+      - name: Validate frozen PDF editor before changes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pdf = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
+          $expected = '5610d1e75a40863864dd0320453c021197ee48c5'
+          $actual = (git hash-object $pdf).Trim()
+          Write-Host "PDF_EDITOR_BLOB=$actual"
+          if ($actual -ne $expected) { throw "Editor de PDF congelado mudou: esperado $expected, atual $actual" }
+
+      - name: Integrate Video Editor tab idempotently
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python .github/scripts/integrate_video_editor_tab.py
+          git diff --check
+          Select-String -Path 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Pattern 'VIDEO_EDITOR\("Editor de Vídeo"' | Out-Null
+          Select-String -Path 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Pattern 'VideoEditorScreen' | Out-Null
+
+      - name: Validate frozen PDF editor after changes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pdf = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
+          $expected = '5610d1e75a40863864dd0320453c021197ee48c5'
+          $actual = (git hash-object $pdf).Trim()
+          if ($actual -ne $expected) { throw "Regressão: Editor de PDF foi alterado durante integração." }
+
+      - name: Commit tab integration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt
+          if (-not (git diff --cached --quiet)) {
+            git diff --cached --check
+            git commit -m 'feat: integrate Video Editor as Monitor tab'
+            git push origin HEAD:work/v9-video-editor-tab-v1
+          } else {
+            Write-Host 'Integração já estava aplicada; sem novo commit.'
+          }
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Windows portable
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Validate distribution
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $exe = Join-Path $root 'MonitorDeNoticias.exe'
+          if (-not (Test-Path $root)) { throw 'Distribuição portátil não foi gerada.' }
+          if (-not (Test-Path $exe)) { throw 'MonitorDeNoticias.exe ausente.' }
+          if (-not (Test-Path 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt')) { throw 'VideoEditorScreen.kt ausente.' }
+          New-Item -ItemType Directory -Force -Path (Join-Path $root 'data') | Out-Null
+          Write-Host 'Distribuição validada.'
+
+      - name: Package ZIP and SHA-256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $zip = 'Monitor-de-Noticias-V9-Editor-de-Video-Aba-V1-Windows-Portable.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          Write-Host "SHA256=$hash"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'v9-video-editor-tab-v1-20260912'
+          $zip = 'Monitor-de-Noticias-V9-Editor-de-Video-Aba-V1-Windows-Portable.zip'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) {
+            gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag
+          }
+          gh release create $tag `
+            $zip `
+            "$zip.sha256" `
+            --repo tysudess/noticias-monitor `
+            --target work/v9-video-editor-tab-v1 `
+            --title 'Monitor de Notícias V9 — Editor de Vídeo Aba V1 — Windows Portable' `
+            --notes 'Primeiro build testável da nova aba Editor de Vídeo dentro do Monitor. Valida navegação e layout-base do editor sem alterar o Editor de PDF congelado. Esta versão é propositalmente inicial: os controles funcionais da timeline, preview e exportação serão ligados em ciclos posteriores após o teste real no Windows.'
