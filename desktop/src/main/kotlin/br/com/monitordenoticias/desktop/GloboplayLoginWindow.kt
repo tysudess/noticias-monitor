@@ -1,194 +1,85 @@
 package br.com.monitordenoticias.desktop
 
-import java.awt.BorderLayout
-import java.awt.Desktop
-import java.awt.Dimension
-import java.awt.FlowLayout
-import java.awt.Window
 import java.io.File
-import java.net.URI
-import javax.swing.JButton
-import javax.swing.JDialog
-import javax.swing.JFileChooser
-import javax.swing.JLabel
-import javax.swing.JPanel
-import javax.swing.JScrollPane
-import javax.swing.JTextArea
 import javax.swing.SwingUtilities
-import javax.swing.filechooser.FileNameExtensionFilter
 
-// WebView removido intencionalmente: o Globoplay não renderiza de forma confiável no JavaFX WebView.
+/**
+ * Login oficial do Globoplay em navegador Chromium embutido, reproduzindo o fluxo
+ * da versão portátil v3.0.1 original (PySide6/Qt WebEngine).
+ * A senha nunca é recebida pelo Monitor; somente o cookie jar retornado pelo
+ * helper é protegido com DPAPI pelo GloboplaySessionStore.
+ */
 internal class GloboplayLoginWindow(
-    private val owner: Window?,
+    private val owner: java.awt.Window?,
     private val engine: ExtractorVideoEngine,
-    @Suppress("UNUSED_PARAMETER") private val proxyUrl: String,
+    private val proxyUrl: String,
     private val onSessionChanged: (Boolean, String) -> Unit
 ) {
     private val store = GloboplaySessionStore(engine.appDir.toFile())
-    private var dialog: JDialog? = null
-    private var pendingCookies: String? = null
+    @Volatile private var activeProcess: Process? = null
 
     fun open() {
-        SwingUtilities.invokeLater { buildAndShow() }
-    }
-
-    private fun buildAndShow() {
-        if (dialog?.isDisplayable == true) {
-            dialog?.toFront()
+        val helper = File(engine.binDir, "GloboplayLoginHelper/GloboplayLoginHelper.exe")
+        if (!helper.isFile) {
+            onSessionChanged(false, "Navegador interno do Globoplay não encontrado no pacote.")
             return
         }
 
-        val status = JLabel("Use o navegador normal do Windows para fazer login no Globoplay.")
-        val openButton = JButton("ABRIR GLOBOPLAY")
-        val importButton = JButton("IMPORTAR COOKIES.TXT")
-        val saveButton = JButton("SALVAR SESSÃO E VOLTAR")
-        val closeButton = JButton("FECHAR")
+        val dataDir = File(engine.appDir.toFile(), "data/extractor").apply { mkdirs() }
+        val profileDir = File(dataDir, "globoplay-web-profile").apply { mkdirs() }
+        val output = File.createTempFile("globoplay-session-", ".cookies", dataDir)
+        output.deleteOnExit()
 
-        val instructions = JTextArea(
-            """
-            Login seguro do Globoplay
-
-            1. Clique em ABRIR GLOBOPLAY.
-            2. Faça login normalmente no site oficial usando seu navegador.
-            3. Exporte os cookies do Globoplay em formato Netscape (cookies.txt).
-            4. Clique em IMPORTAR COOKIES.TXT e selecione esse arquivo.
-            5. Clique em SALVAR SESSÃO E VOLTAR.
-
-            O Monitor filtra apenas cookies dos domínios Globo/Globoplay e salva a sessão usando a proteção DPAPI do Windows.
-            Sua senha não é lida nem armazenada pelo Monitor.
-            """.trimIndent()
-        ).apply {
-            isEditable = false
-            lineWrap = true
-            wrapStyleWord = true
-            border = null
-        }
-
-        val d = JDialog(owner, "Login Globoplay — Extrator de Vídeos", java.awt.Dialog.ModalityType.MODELESS).apply {
-            layout = BorderLayout(10, 10)
-            minimumSize = Dimension(720, 420)
-            preferredSize = Dimension(820, 480)
-            add(status, BorderLayout.NORTH)
-            add(JScrollPane(instructions), BorderLayout.CENTER)
-            add(JPanel(FlowLayout(FlowLayout.RIGHT)).apply {
-                add(openButton)
-                add(importButton)
-                add(saveButton)
-                add(closeButton)
-            }, BorderLayout.SOUTH)
-            defaultCloseOperation = JDialog.DISPOSE_ON_CLOSE
-        }
-        dialog = d
-
-        openButton.addActionListener {
-            val result = runCatching {
-                check(Desktop.isDesktopSupported()) { "O navegador padrão do Windows não está disponível." }
-                val desktop = Desktop.getDesktop()
-                check(desktop.isSupported(Desktop.Action.BROWSE)) { "Ação de abrir navegador não está disponível." }
-                desktop.browse(URI("https://globoplay.globo.com/"))
-            }
-            status.text = result.fold(
-                onSuccess = { "Globoplay aberto no navegador. Faça login e depois importe o cookies.txt." },
-                onFailure = { "Não foi possível abrir o navegador: ${it.message.orEmpty()}" }
+        val process = runCatching {
+            ProcessBuilder(
+                helper.absolutePath,
+                "--output", output.absolutePath,
+                "--profile-dir", profileDir.absolutePath
             )
-        }
-
-        importButton.addActionListener {
-            val chooser = JFileChooser(File(System.getProperty("user.home", "."))).apply {
-                dialogTitle = "Selecionar cookies.txt do Globoplay"
-                fileFilter = FileNameExtensionFilter("Arquivo de cookies (*.txt)", "txt")
-                isAcceptAllFileFilterUsed = true
-            }
-            if (chooser.showOpenDialog(d) != JFileChooser.APPROVE_OPTION) return@addActionListener
-
-            val selected = chooser.selectedFile
-            val result = runCatching {
-                require(selected.isFile) { "Arquivo não encontrado." }
-                require(selected.length() in 1..5_000_000) { "Arquivo de cookies vazio ou grande demais." }
-                sanitizeNetscapeCookies(selected.readText(Charsets.UTF_8))
-            }
-            result.fold(
-                onSuccess = { sanitized ->
-                    pendingCookies = sanitized
-                    val count = sanitized.lineSequence().count { it.isNotBlank() && !it.startsWith("# Netscape") && !it.startsWith("# Generated") }
-                    status.text = "$count cookies Globo/Globoplay importados. Agora clique em SALVAR SESSÃO E VOLTAR."
-                },
-                onFailure = {
-                    pendingCookies = null
-                    status.text = "Falha ao importar cookies: ${it.message.orEmpty()}"
+                .directory(engine.appDir.toFile())
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .also { builder ->
+                    if (proxyUrl.isNotBlank()) {
+                        builder.environment()["MONITOR_GLOBOPLAY_PROXY"] = proxyUrl.trim()
+                    }
                 }
-            )
+                .start()
+        }.getOrElse {
+            output.delete()
+            onSessionChanged(false, "Não foi possível abrir o navegador interno do Globoplay: ${it.message.orEmpty()}")
+            return
         }
+        activeProcess = process
 
-        saveButton.addActionListener {
-            val netscape = pendingCookies
-            if (netscape.isNullOrBlank()) {
-                status.text = "Importe primeiro um cookies.txt válido do Globoplay."
-                return@addActionListener
-            }
-            val result = store.saveNetscapeCookies(netscape)
-            result.fold(
-                onSuccess = {
-                    status.text = "Sessão salva com proteção do Windows."
-                    onSessionChanged(true, "Sessão Globoplay salva com segurança.")
-                    close()
-                },
-                onFailure = {
-                    status.text = "Falha ao salvar sessão: ${it.message.orEmpty()}"
-                    onSessionChanged(store.hasSavedSession(), status.text)
+        Thread({
+            val result = runCatching {
+                val exit = process.waitFor()
+                activeProcess = null
+                if (exit != 0) {
+                    return@runCatching Pair(false, "Login do Globoplay cancelado ou não concluído.")
                 }
-            )
-        }
-
-        closeButton.addActionListener { close() }
-        d.addWindowListener(object : java.awt.event.WindowAdapter() {
-            override fun windowClosed(e: java.awt.event.WindowEvent?) {
-                dialog = null
-                pendingCookies = null
+                require(output.isFile && output.length() > 0L) {
+                    "O navegador interno não retornou cookies da sessão."
+                }
+                val netscape = output.readText(Charsets.UTF_8)
+                val cookieCount = netscape.lineSequence().count {
+                    it.isNotBlank() && !it.startsWith("#")
+                }
+                require(cookieCount > 0) { "Nenhum cookie Globo/Globoplay foi capturado." }
+                store.saveNetscapeCookies(netscape).getOrThrow()
+                Pair(true, "Sessão Globoplay salva com segurança ($cookieCount cookies).")
+            }.getOrElse {
+                Pair(store.hasSavedSession(), "Falha ao salvar sessão Globoplay: ${it.message.orEmpty()}")
             }
-        })
-        d.pack()
-        d.setLocationRelativeTo(owner)
-        d.isVisible = true
-    }
 
-    private fun sanitizeNetscapeCookies(raw: String): String {
-        val accepted = raw.lineSequence()
-            .map { it.trimEnd() }
-            .filter { it.isNotBlank() }
-            .filterNot { it.startsWith("#") && !it.startsWith("#HttpOnly_") }
-            .mapNotNull { line ->
-                val fields = line.split('\t')
-                if (fields.size < 7) return@mapNotNull null
-                val domainToken = fields[0]
-                val host = domainToken.removePrefix("#HttpOnly_").trim().trimStart('.').lowercase()
-                if (!isAllowedGloboHost(host)) return@mapNotNull null
-                line
+            runCatching { output.delete() }
+            SwingUtilities.invokeLater {
+                onSessionChanged(result.first, result.second)
             }
-            .distinct()
-            .toList()
-
-        require(accepted.isNotEmpty()) {
-            "O arquivo não contém cookies dos domínios globo.com/globoplay.com em formato Netscape."
-        }
-        return buildString {
-            appendLine("# Netscape HTTP Cookie File")
-            appendLine("# Generated by Monitor de Notícias — Extrator de Vídeos")
-            accepted.forEach { appendLine(it) }
-        }
-    }
-
-    private fun isAllowedGloboHost(value: String): Boolean {
-        val host = value.lowercase().trim().trimStart('.')
-        return host == "globo.com" || host.endsWith(".globo.com") ||
-            host == "globoplay.com" || host.endsWith(".globoplay.com")
-    }
-
-    private fun close() {
-        SwingUtilities.invokeLater {
-            dialog?.dispose()
-            dialog = null
-            pendingCookies = null
+        }, "globoplay-login-waiter").apply {
+            isDaemon = true
+            start()
         }
     }
 }
