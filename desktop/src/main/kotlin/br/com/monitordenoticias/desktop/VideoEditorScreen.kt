@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -372,8 +373,8 @@ fun VideoEditorScreen(onBack: () -> Unit = {}) {
         }
 
         Column(
-            Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
             EditorHeroHeader(
                 clipsCount = clips.size,
@@ -384,7 +385,7 @@ fun VideoEditorScreen(onBack: () -> Unit = {}) {
             )
 
             Row(
-                Modifier.fillMaxWidth().height(280.dp),
+                Modifier.fillMaxWidth().height(420.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 PreviewPanel(
@@ -412,7 +413,7 @@ fun VideoEditorScreen(onBack: () -> Unit = {}) {
                     onEnd = { seekGlobal(totalDuration(), false) }
                 )
                 QuickMarkPanel(
-                    modifier = Modifier.width(322.dp),
+                    modifier = Modifier.width(355.dp),
                     clip = selectedClip(),
                     startText = startText,
                     endText = endText,
@@ -489,7 +490,7 @@ private fun EditorHeroHeader(
     onReset: () -> Unit
 ) {
     Box(
-        Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(15.dp))
+        Modifier.fillMaxWidth().height(100.dp).clip(RoundedCornerShape(15.dp))
             .background(Brush.horizontalGradient(listOf(Color(0xEE05243D), Color(0xF0042037), Color(0xEE062B49))))
             .border(1.dp, VEBlueBorder.copy(alpha = .62f), RoundedCornerShape(15.dp))
             .padding(horizontal = 15.dp, vertical = 8.dp)
@@ -651,7 +652,7 @@ private fun TimelinePanel(
     onJump: (Long) -> Unit
 ) {
     val selected = clips.getOrNull(selectedIndex)
-    NeonPanel(Modifier.fillMaxWidth().height(218.dp)) {
+    NeonPanel(Modifier.fillMaxWidth().height(238.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.ViewList, null, tint = VECyanBright, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(7.dp))
             Text("TIMELINE", color = VEText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -840,7 +841,7 @@ private fun ExportPanel(
     onOpenFolder: () -> Unit,
     onFocus: (Boolean) -> Unit
 ) {
-    NeonPanel(Modifier.fillMaxWidth().height(96.dp)) {
+    NeonPanel(Modifier.fillMaxWidth().height(108.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.FileUpload, null, tint = VEYellow, modifier = Modifier.size(21.dp)); Spacer(Modifier.width(7.dp))
             Text("EXPORTAÇÃO", color = VEText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
