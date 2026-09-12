@@ -1,0 +1,136 @@
+name: Release V15 Video Open Preview V2
+
+on:
+  push:
+    branches:
+      - work/v15-video-open-preview
+    paths:
+      - '.github/workflows/release-v15-video-open-preview-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v15-video-open-preview
+          fetch-depth: 0
+
+      - name: Protect V14 layout
+        shell: pwsh
+        run: |
+          $hash = (git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt').Trim()
+          if ($hash -ne 'dbdaed107199e84d387c7915e29bdb5bb9eca1af') { throw "Layout V14 mudou: $hash" }
+
+      - name: Patch preview controller
+        shell: pwsh
+        run: |
+          $p = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt'
+          $s = Get-Content $p -Raw
+          if ($s -notmatch 'AtomicReference') {
+            $s = $s.Replace('import java.util.concurrent.atomic.AtomicLong', "import java.util.concurrent.atomic.AtomicLong`r`nimport java.util.concurrent.atomic.AtomicReference")
+          }
+          if ($s -notmatch 'lastError = AtomicReference') {
+            $s = $s.Replace('    private val durationMs = AtomicLong(0L)', "    private val durationMs = AtomicLong(0L)`r`n    private val lastError = AtomicReference<String?>(null)")
+          }
+          if ($s -match 'if \(!file\.exists\(\)\) return') {
+            $s = $s.Replace('        if (!file.exists()) return', "        if (!file.exists()) {`r`n            lastError.set(`"Arquivo não encontrado: `${file.absolutePath}`")`r`n            return`r`n        }")
+          }
+          if ($s -notmatch 'fun consumeError\(\)') {
+            $s = $s.Replace('    fun mediaDurationMs(): Long = durationMs.get()', "    fun mediaDurationMs(): Long = durationMs.get()`r`n    fun consumeError(): String? = lastError.getAndSet(null)")
+          }
+          if ($s -notmatch 'p\.setOnError') {
+            $old = "            val p = MediaPlayer(Media(file.toURI().toString()))`r`n            player = p`r`n            view?.mediaPlayer = p"
+            if (-not $s.Contains($old)) {
+              $old = "            val p = MediaPlayer(Media(file.toURI().toString()))`n            player = p`n            view?.mediaPlayer = p"
+            }
+            $new = "            val p = try {`r`n                MediaPlayer(Media(file.toURI().toString()))`r`n            } catch (t: Throwable) {`r`n                lastError.set(t.message ?: `"Falha ao carregar mídia no preview.`")`r`n                playing = false`r`n                return@runLater`r`n            }`r`n            player = p`r`n            view?.mediaPlayer = p`r`n            p.setOnError {`r`n                lastError.set(p.error?.message ?: `"Falha de reprodução no preview.`")`r`n                playing = false`r`n            }"
+            if (-not $s.Contains($old)) { throw 'Ponto de criação do MediaPlayer não encontrado.' }
+            $s = $s.Replace($old, $new)
+          }
+          [IO.File]::WriteAllText((Resolve-Path $p), $s, [Text.UTF8Encoding]::new($false))
+
+      - name: Patch editor diagnostics
+        shell: pwsh
+        run: |
+          $p = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt'
+          $s = Get-Content $p -Raw
+          if ($s -notmatch 'preview\.consumeError\(\)') {
+            $needle = "            delay(55)`r`n            val clip = selectedClip()"
+            if (-not $s.Contains($needle)) { $needle = "            delay(55)`n            val clip = selectedClip()" }
+            if (-not $s.Contains($needle)) { throw 'Ponto do monitor do preview não encontrado.' }
+            $insert = "            delay(55)`r`n            preview.consumeError()?.let { message ->`r`n                sequencePlaying = false`r`n                status = `"Falha no preview: `$message`"`r`n            }`r`n            val clip = selectedClip()"
+            $s = $s.Replace($needle, $insert)
+          }
+          $old = '            status = if (clips.isNotEmpty()) "${clips.size} clipe(s) na timeline • ${formatVideoTime(totalDuration())}" else "Nenhum vídeo válido foi adicionado."'
+          $new = '            status = if (clips.isNotEmpty()) "${clips.size} clipe(s) na timeline • ${formatVideoTime(totalDuration())} • Preview: ${File(clips[selectedIndex.coerceAtLeast(0)].path).name}" else "Nenhum vídeo válido foi adicionado."'
+          if ($s.Contains($old)) { $s = $s.Replace($old, $new) }
+          [IO.File]::WriteAllText((Resolve-Path $p), $s, [Text.UTF8Encoding]::new($false))
+
+      - name: Validate functional contract
+        shell: pwsh
+        run: |
+          $screen = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
+          $preview = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt' -Raw
+          foreach ($contract in @('verticalScroll(rememberScrollState())','height(420.dp)','preview.consumeError()','isMultipleMode = true','engine.probe(file)','loadIndex(0, 0L, false)')) {
+            if (-not $screen.Contains($contract)) { throw "Contrato ausente: $contract" }
+          }
+          foreach ($contract in @('AtomicReference','p.setOnError','consumeError')) {
+            if (-not $preview.Contains($contract)) { throw "Contrato do preview ausente: $contract" }
+          }
+
+      - name: Commit functional code
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt
+          git diff --cached --check
+          if (-not (git diff --cached --quiet)) {
+            git commit -m 'feat: activate robust video open and preview diagnostics'
+            git push origin HEAD:work/v15-video-open-preview
+          }
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Windows portable app
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Rebuild full portable from V14
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri 'https://github.com/tysudess/noticias-monitor/releases/download/v14-video-editor-final-polish-20260912/Monitor-de-Noticias-V14-Editor-de-Video-Polimento-Final-Windows-Portable.zip' -OutFile base.zip
+          Expand-Archive base.zip -DestinationPath base -Force
+          $newRoot = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          Copy-Item "$newRoot/*" 'base' -Recurse -Force
+          foreach ($required in @('MonitorDeNoticias.exe','bin/ffmpeg.exe','bin/ffprobe.exe')) {
+            if (-not (Test-Path (Join-Path 'base' $required))) { throw "Portable incompleto: $required" }
+          }
+
+      - name: Package and publish V15
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = 'Monitor-de-Noticias-V15-Editor-de-Video-Abrir-Preview-Windows-Portable.zip'
+          Compress-Archive -Path 'base/*' -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          $tag = 'v15-video-open-preview-20260912'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) { gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag }
+          gh release create $tag $zip "$zip.sha256" --repo tysudess/noticias-monitor --target work/v15-video-open-preview --title 'Monitor V15 — Editor de Vídeo Abrir + Preview — Windows Portable' --notes 'Primeiro ciclo funcional sobre o layout V14 congelado: abrir múltiplos vídeos, FFprobe, criação automática de clipes, carregamento do primeiro vídeo no preview e diagnóstico visível de erros de mídia.'
+          Write-Host "SHA256=$hash"
