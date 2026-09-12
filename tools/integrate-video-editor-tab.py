@@ -8,13 +8,12 @@ PDF = BASE / 'PdfEditorScreenV2.kt'
 EXTRACTOR_SCREEN = BASE / 'ExtractorVideoScreen.kt'
 EXTRACTOR_ENGINE = BASE / 'ExtractorVideoEngine.kt'
 EDITOR_SCREEN = BASE / 'VideoEditorScreen.kt'
-EDITOR_ENGINE = BASE / 'VideoEditorEngine.kt'
-EDITOR_PREVIEW = BASE / 'VideoEditorPreview.kt'
-EDITOR_PROCESS = BASE / 'VideoEditorProcess.kt'
+PYSIDE_MAIN = ROOT / 'video_editor_pyside/main.py'
+PYSIDE_REQ = ROOT / 'video_editor_pyside/requirements.txt'
 
-for required in (DASH, PDF, EXTRACTOR_SCREEN, EXTRACTOR_ENGINE, EDITOR_SCREEN, EDITOR_ENGINE, EDITOR_PREVIEW, EDITOR_PROCESS):
+for required in (DASH, PDF, EXTRACTOR_SCREEN, EXTRACTOR_ENGINE, EDITOR_SCREEN, PYSIDE_MAIN, PYSIDE_REQ):
     if not required.exists():
-        raise SystemExit(f'Arquivo obrigatório ausente: {required.name}')
+        raise SystemExit(f'Arquivo obrigatório ausente: {required}')
 
 
 def sha(path: Path) -> str:
@@ -27,29 +26,11 @@ protected_before = {
     EXTRACTOR_ENGINE: sha(EXTRACTOR_ENGINE),
 }
 
-# Correção defensiva: a tela deve exibir o formato pelo próprio arquivo aberto, sem inventar metadado inexistente.
-editor_src = EDITOR_SCREEN.read_text(encoding='utf-8')
-editor_src = editor_src.replace('info?.format ?: input.extension.uppercase()', 'input.extension.uppercase()')
-EDITOR_SCREEN.write_text(editor_src, encoding='utf-8')
-
-# Correção defensiva: o preview não deve voltar ao caminho direto/JavaFX instável.
-# A versão atual usa proxy FFmpeg + sequência de frames em cache, para manter velocidade estável.
-engine_src = EDITOR_ENGINE.read_text(encoding='utf-8')
-old_preview_direct = '''            if (canPlayDirectly(input, info)) {
-                update(100, "Preview pronto.")
-                return@runCatching input
-            }
-
-'''
-if old_preview_direct in engine_src:
-    engine_src = engine_src.replace(old_preview_direct, '', 1)
-EDITOR_ENGINE.write_text(engine_src, encoding='utf-8')
-
 src = DASH.read_text(encoding='utf-8')
 
 if 'VIDEO_EDITOR("Editor de Vídeo"' not in src:
     old = '    EXTRACTOR("Extrator de Vídeos", "Baixe vídeos com o fluxo direto v3.0.1", Icons.Default.Download)\n}'
-    new = '    EXTRACTOR("Extrator de Vídeos", "Baixe vídeos com o fluxo direto v3.0.1", Icons.Default.Download),\n    VIDEO_EDITOR("Editor de Vídeo", "Abra, marque um trecho e exporte um novo MP4", Icons.Default.Movie)\n}'
+    new = '    EXTRACTOR("Extrator de Vídeos", "Baixe vídeos com o fluxo direto v3.0.1", Icons.Default.Download),\n    VIDEO_EDITOR("Editor de Vídeo", "Abra o editor nativo PySide6/QtMultimedia", Icons.Default.Movie)\n}'
     if old not in src:
         raise SystemExit('Ponto de inserção da aba Editor de Vídeo não encontrado no enum V5Section.')
     src = src.replace(old, new, 1)
@@ -69,19 +50,17 @@ for path, before in protected_before.items():
 
 updated = DASH.read_text(encoding='utf-8')
 updated_editor = EDITOR_SCREEN.read_text(encoding='utf-8')
-updated_engine = EDITOR_ENGINE.read_text(encoding='utf-8')
-updated_preview = EDITOR_PREVIEW.read_text(encoding='utf-8')
+updated_pyside = PYSIDE_MAIN.read_text(encoding='utf-8')
+updated_req = PYSIDE_REQ.read_text(encoding='utf-8')
 assert 'VIDEO_EDITOR("Editor de Vídeo"' in updated
 assert 'else if (section == V5Section.VIDEO_EDITOR)' in updated
 assert 'VideoEditorScreen { section = V5Section.HOME }' in updated
 assert 'EXTRACTOR("Extrator de Vídeos"' in updated
 assert 'PDF_EDITOR("Editor de PDF"' in updated
-assert 'info?.format' not in updated_editor
-assert 'return@runCatching input' not in updated_engine
-assert 'preparePreviewFrames' in updated_engine
-assert 'VideoEditorFrameSequence' in updated_engine
-assert 'previewSequence' in updated_editor
-assert 'LaunchedEffect(playing, previewSequence, busy, outMs, inMs, playbackSeed)' in updated_editor
-assert 'extractPreviewFrame' not in updated_editor
-assert 'javafx.scene.media.MediaPlayer' not in updated_preview
-print('Editor de Vídeo integrado em tela cheia; preview estabilizado com sequência de frames FFmpeg em cache; PDF e motor/tela do Extrator permaneceram byte a byte intactos.')
+assert 'PySideVideoEditorLauncher' in updated_editor
+assert 'video-editor/VideoEditorPySide/VideoEditorPySide.exe' in updated_editor
+assert 'QMediaPlayer' in updated_pyside
+assert 'QVideoWidget' in updated_pyside
+assert 'QAudioOutput' in updated_pyside
+assert 'PySide6==6.9.1' in updated_req
+print('Editor de Vídeo integrado como launcher PySide6/QtMultimedia; PDF e motor/tela do Extrator permaneceram byte a byte intactos.')
