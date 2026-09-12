@@ -176,7 +176,7 @@ internal class LegacyVideoEditorHostController {
         return runCatching {
             val child = HWND(Pointer(childValue))
             val parent = User32Ext.INSTANCE.GetParent(child)
-            val actualParent = parent?.pointer?.let { Pointer.nativeValue(it) } ?: 0L
+            val actualParent = parent?.getPointer()?.let { Pointer.nativeValue(it) } ?: 0L
             if (actualParent != parentValue) {
                 return@runCatching false
             }
