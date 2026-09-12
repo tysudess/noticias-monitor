@@ -1,0 +1,153 @@
+name: Release V9 Video Editor on Extractor Base
+
+on:
+  push:
+    branches:
+      - work/v9-video-editor-on-extractor
+    paths:
+      - '.github/workflows/release-v9-video-editor-on-extractor.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v9-video-editor-on-extractor
+          fetch-depth: 0
+
+      - name: Validate frozen Extractor and PDF before changes
+        shell: pwsh
+        run: |
+          $extractor = (git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt').Trim()
+          $pdf = (git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt').Trim()
+          if ($extractor -ne '72ef34a27058d61f001b7236c6b66c80310c0862') { throw "Extractor mudou: $extractor" }
+          if ($pdf -ne '5610d1e75a40863864dd0320453c021197ee48c5') { throw "PDF mudou: $pdf" }
+          Write-Host 'Extractor e PDF congelados confirmados.'
+
+      - name: Integrate Video Editor tab idempotently
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = @'
+          from pathlib import Path
+          p = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt')
+          src = p.read_text(encoding='utf-8')
+          original = src
+
+          if 'VIDEO_EDITOR("Editor de Vídeo"' not in src:
+              old = '    PDF_EDITOR("Editor de PDF", "Monte, reorganize, recorte e exporte PDFs e imagens", Icons.Default.PictureAsPdf),\n    EXTRACTOR("Extrator de Vídeos", "Baixe vídeos com o fluxo direto v3.0.1", Icons.Default.Download)'
+              new = '    PDF_EDITOR("Editor de PDF", "Monte, reorganize, recorte e exporte PDFs e imagens", Icons.Default.PictureAsPdf),\n    EXTRACTOR("Extrator de Vídeos", "Baixe vídeos com o fluxo direto v3.0.1", Icons.Default.Download),\n    VIDEO_EDITOR("Editor de Vídeo", "Edite sequências, cortes e exportações de vídeo", Icons.Default.Movie)'
+              if old not in src:
+                  raise SystemExit('Contrato de enum não encontrado; abortando sem alteração improvisada.')
+              src = src.replace(old, new, 1)
+
+          if 'section == V5Section.PDF_EDITOR || section == V5Section.VIDEO_EDITOR' not in src:
+              old = '    if (section == V5Section.PDF_EDITOR) {'
+              if old not in src:
+                  raise SystemExit('Contrato da rota PDF não encontrado.')
+              src = src.replace(old, '    if (section == V5Section.PDF_EDITOR || section == V5Section.VIDEO_EDITOR) {', 1)
+
+          old = '                    PdfEditorScreenV2 { section = V5Section.HOME }'
+          new = '''                    when (section) {
+                        V5Section.PDF_EDITOR -> PdfEditorScreenV2 { section = V5Section.HOME }
+                        V5Section.VIDEO_EDITOR -> VideoEditorScreen { section = V5Section.HOME }
+                        else -> Unit
+                    }'''
+          if 'V5Section.VIDEO_EDITOR -> VideoEditorScreen' not in src:
+              if old not in src:
+                  raise SystemExit('Ponto de montagem do PDF não encontrado.')
+              src = src.replace(old, new, 1)
+
+          if 'V5Section.EXTRACTOR -> ExtractorVideoScreen' not in src:
+              raise SystemExit('Extrator não está integrado na base; abortando.')
+
+          if src != original:
+              p.write_text(src, encoding='utf-8')
+              print('Integração aplicada.')
+          else:
+              print('Integração já estava aplicada; patch idempotente.')
+          '@
+          $script | python -
+
+      - name: Validate frozen Extractor and PDF after changes
+        shell: pwsh
+        run: |
+          $extractor = (git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt').Trim()
+          $pdf = (git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt').Trim()
+          if ($extractor -ne '72ef34a27058d61f001b7236c6b66c80310c0862') { throw "REGRESSÃO NO EXTRATOR: $extractor" }
+          if ($pdf -ne '5610d1e75a40863864dd0320453c021197ee48c5') { throw "REGRESSÃO NO PDF: $pdf" }
+
+      - name: Commit Video Editor integration
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt
+          git diff --cached --check
+          if (git diff --cached --quiet) {
+            Write-Host 'Sem alterações novas para commit.'
+          } else {
+            git commit -m 'feat: add Video Editor tab preserving Extractor and PDF'
+            git push origin HEAD:work/v9-video-editor-on-extractor
+          }
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Windows portable
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Validate distribution and contracts
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if (-not (Test-Path $root)) { throw 'Portable não foi gerado.' }
+          if (-not (Test-Path (Join-Path $root 'MonitorDeNoticias.exe'))) { throw 'MonitorDeNoticias.exe ausente.' }
+          $dash = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/DashboardV5Main.kt' -Raw
+          if ($dash -notmatch 'EXTRACTOR\("Extrator de Vídeos"') { throw 'Aba Extrator ausente.' }
+          if ($dash -notmatch 'VIDEO_EDITOR\("Editor de Vídeo"') { throw 'Aba Editor de Vídeo ausente.' }
+          if ($dash -notmatch 'ExtractorVideoScreen') { throw 'Rota do Extrator ausente.' }
+          if ($dash -notmatch 'VideoEditorScreen') { throw 'Rota do Editor de Vídeo ausente.' }
+          New-Item -ItemType Directory -Force -Path (Join-Path $root 'data') | Out-Null
+
+      - name: Package ZIP and SHA-256
+        shell: pwsh
+        run: |
+          $root = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $zip = 'Monitor-de-Noticias-V9-Extrator-Editor-de-Video-V1-Windows-Portable.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          Write-Host "SHA256=$hash"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'v9-extrator-video-editor-v1-20260912'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) {
+            gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag
+          }
+          gh release create $tag `
+            'Monitor-de-Noticias-V9-Extrator-Editor-de-Video-V1-Windows-Portable.zip' `
+            'Monitor-de-Noticias-V9-Extrator-Editor-de-Video-V1-Windows-Portable.zip.sha256' `
+            --repo tysudess/noticias-monitor `
+            --target work/v9-video-editor-on-extractor `
+            --title 'Monitor V9 — Extrator + Editor de Vídeo V1 — Windows Portable' `
+            --notes 'Base correta: work/v8-extrator-v301-tab. Preserva por hash o Extrator v3.0.1 e o Editor de PDF aprovado, adicionando apenas a nova aba Editor de Vídeo em versão inicial testável.'
