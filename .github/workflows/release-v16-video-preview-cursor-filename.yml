@@ -1,0 +1,112 @@
+name: Release V16 Video Preview Cursor Filename
+
+on:
+  push:
+    branches:
+      - work/v16-video-preview-cursor-filename
+    paths:
+      - '.github/workflows/release-v16-video-preview-cursor-filename.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v16-video-preview-cursor-filename
+          fetch-depth: 0
+
+      - name: Protect approved editor layout
+        shell: pwsh
+        run: |
+          $screen = (git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt').Trim()
+          if ($screen -ne '1e4d8b333a91b2dbc121dc14a367a16ba4e9adf0') { throw "VideoEditorScreen inesperado: $screen" }
+          $source = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
+          if ($source -notmatch 'verticalScroll\(rememberScrollState\(\)\)') { throw 'Scroll aprovado perdido.' }
+          if ($source -notmatch 'height\(420\.dp\)') { throw 'Preview grande aprovado perdido.' }
+
+      - name: Patch visible timeline cursor
+        shell: pwsh
+        run: |
+          $path = 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt'
+          $s = Get-Content $path -Raw
+          $old = 'val x = size.width * (globalPlayheadMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)'
+          $new = 'val x = (size.width * (globalPlayheadMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)).coerceIn(4f, (size.width - 4f).coerceAtLeast(4f))'
+          if (-not $s.Contains($old)) { throw 'Ponto do playhead principal não encontrado.' }
+          $s = $s.Replace($old, $new)
+          $s = $s.Replace('drawLine(VECyanBright, Offset(x, 0f), Offset(x, size.height), 2f)', 'drawLine(VECyanBright, Offset(x, 0f), Offset(x, size.height), 3f)')
+          $oldRange = 'drawCircle(VEYellow, 6f, Offset(lower,y)); drawCircle(VEYellow, 6f, Offset(upper,y)); drawCircle(VECyanBright, 5f, Offset(cursor,y))'
+          $newRange = 'drawCircle(VEYellow, 6f, Offset(lower,y)); drawCircle(VEYellow, 6f, Offset(upper,y)); drawLine(VECyanBright, Offset(cursor, 0f), Offset(cursor, size.height), 2f); drawCircle(Color.White, 6f, Offset(cursor,y)); drawCircle(VECyanBright, 4f, Offset(cursor,y))'
+          if (-not $s.Contains($oldRange)) { throw 'Cursor do RangeTrimBar não encontrado.' }
+          $s = $s.Replace($oldRange, $newRange)
+          Set-Content $path $s -Encoding utf8
+
+      - name: Validate fixes
+        shell: pwsh
+        run: |
+          $preview = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt' -Raw
+          $screen = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
+          if ($preview -notmatch 'isFocusable = false') { throw 'Proteção de foco do preview ausente.' }
+          if ($preview -notmatch 'mediaPlayer = player') { throw 'Reconexão tardia MediaView/MediaPlayer ausente.' }
+          if ($preview -notmatch 'm\.setOnError') { throw 'Diagnóstico de erro do Media ausente.' }
+          if ($screen -notmatch 'coerceIn\(4f') { throw 'Playhead visível na borda não aplicado.' }
+          if ($screen -notmatch 'drawLine\(VECyanBright, Offset\(cursor, 0f\)') { throw 'Cursor RangeTrimBar reforçado ausente.' }
+          if ($screen -notmatch 'OutlinedTextField\(') { throw 'Campo de nome de exportação ausente.' }
+
+      - name: Commit screen cursor fix
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt
+          git diff --cached --check
+          if (-not (git diff --cached --quiet)) {
+            git commit -m 'fix: keep video playhead visible at timeline start'
+            git push origin HEAD:work/v16-video-preview-cursor-filename
+          }
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Windows app
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Rebuild full portable from V15
+        shell: pwsh
+        run: |
+          $baseUrl = 'https://github.com/tysudess/noticias-monitor/releases/download/v15-video-open-preview-20260912/Monitor-de-Noticias-V15-Editor-de-Video-Abrir-Preview-Windows-Portable.zip'
+          Invoke-WebRequest -Uri $baseUrl -OutFile base.zip
+          Expand-Archive base.zip -DestinationPath base -Force
+          $newRoot = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if (-not (Test-Path "$newRoot/MonitorDeNoticias.exe")) { throw 'Novo executável não foi gerado.' }
+          Copy-Item "$newRoot/*" 'base' -Recurse -Force
+          foreach ($required in @('MonitorDeNoticias.exe','bin/ffmpeg.exe','bin/ffprobe.exe')) {
+            if (-not (Test-Path (Join-Path 'base' $required))) { throw "Portable incompleto: $required" }
+          }
+
+      - name: Package and publish V16
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = 'Monitor-de-Noticias-V16-Editor-de-Video-Preview-Cursor-Nome-Windows-Portable.zip'
+          Compress-Archive -Path 'base/*' -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          $tag = 'v16-video-preview-cursor-filename-20260912'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) { gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag }
+          gh release create $tag $zip "$zip.sha256" --repo tysudess/noticias-monitor --target work/v16-video-preview-cursor-filename --title 'Monitor V16 — Editor de Vídeo Preview + Cursor + Nome — Windows Portable' --notes 'Correções focadas nos três erros reais da V15: preview branco/não reproduzindo por corrida MediaView-MediaPlayer, foco do JavaFX interferindo nos campos Compose, e playhead/cursor invisível quando posicionado em 00:00. Layout visual aprovado preservado.'
+          Write-Host "SHA256=$hash"
