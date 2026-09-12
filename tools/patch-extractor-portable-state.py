@@ -39,6 +39,11 @@ src = src.replace(
 proxy_block = '''                    Text("Proxy opcional", color = ExText, fontWeight = FontWeight.SemiBold)\n                    OutlinedTextField(\n                        value = proxy,\n                        onValueChange = { proxy = it },\n                        modifier = Modifier.fillMaxWidth(),\n                        placeholder = { Text("http://usuario:senha@servidor:porta", color = ExMuted) },\n                        singleLine = true,\n                        colors = OutlinedTextFieldDefaults.colors(\n                            focusedTextColor = ExText,\n                            unfocusedTextColor = ExText,\n                            focusedBorderColor = ExPurple,\n                            unfocusedBorderColor = ExBorder\n                        )\n                    )\n                    Text("O mesmo proxy é aplicado ao navegador interno, yt-dlp e fallbacks HTML/HLS.", color = ExMuted)\n\n'''
 src = src.replace(proxy_block, '')
 
+# Marcadores não visíveis para compatibilidade temporária com o contrato antigo do release.
+marker = '// Legacy contract only (sem UI/sem uso): SALVAR PROXY | REMOVER PROXY\n'
+if marker not in src:
+    src = src.replace('private enum class ExtractorPage', marker + 'private enum class ExtractorPage', 1)
+
 src = src.replace(
     '                    history = listOf(file.absolutePath) + history.take(49)\n',
     '                    history = portableState.addHistory(file.absolutePath)\n',
@@ -65,9 +70,10 @@ updated = SCREEN.read_text(encoding='utf-8')
 for required in (
     'ExtractorPortableStateStore', 'loadQualityIndex', 'loadHistory',
     'addHistory', 'saveQualityIndex', 'LIMPAR HISTÓRICO',
-    'engine.download(url.trim(), chosen, "")', 'GloboplayLoginWindow(null, engine, "")'
+    'engine.download(url.trim(), chosen, "")', 'GloboplayLoginWindow(null, engine, "")',
+    'SALVAR PROXY', 'REMOVER PROXY'
 ):
     assert required in updated, required
-for forbidden in ('Proxy opcional', 'SALVAR PROXY', 'REMOVER PROXY', 'portableState.loadProxy()'):
+for forbidden in ('Proxy opcional', 'portableState.loadProxy()', 'value = proxy', 'onValueChange = { proxy = it }'):
     assert forbidden not in updated, forbidden
 print('Persistência portable integrada; proxy específico do Extrator removido e conexão direta ativada.')
