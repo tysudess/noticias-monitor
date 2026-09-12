@@ -1,154 +1,91 @@
 package br.com.monitordenoticias.desktop
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
-import javafx.application.Platform
-import javafx.embed.swing.JFXPanel
-import javafx.scene.Scene
-import javafx.scene.layout.StackPane
-import javafx.scene.media.Media
-import javafx.scene.media.MediaPlayer
-import javafx.scene.media.MediaView
-import javafx.util.Duration
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import org.jetbrains.skia.Image as SkiaImage
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
-import javax.swing.SwingUtilities
 
-private object VideoEditorJavaFxToolkit {
-    private val initialized = AtomicBoolean(false)
-    private val lock = Any()
-
-    fun ensureStarted() {
-        if (initialized.get()) return
-        synchronized(lock) {
-            if (initialized.get()) return
-            val startToolkit = Runnable { JFXPanel() }
-            if (SwingUtilities.isEventDispatchThread()) {
-                startToolkit.run()
-            } else {
-                SwingUtilities.invokeAndWait(startToolkit)
-            }
-            Platform.runLater { Platform.setImplicitExit(false) }
-            initialized.set(true)
-        }
-    }
-}
-
+/**
+ * Preview interno do Editor de Vídeo sem JavaFX Media.
+ *
+ * O JavaFX Media estava abrindo o painel, mas em alguns portables/Windows ficava branco
+ * mesmo com MP4/H.264 compatível. Este controlador apenas exibe imagens JPEG geradas
+ * pelo FFmpeg no tempo atual. O motor de corte/exportação continua separado e usando
+ * o arquivo original.
+ */
 internal class VideoEditorPreviewController {
-    @Volatile private var panel: JFXPanel? = null
-    @Volatile private var player: MediaPlayer? = null
+    @Volatile private var source: File? = null
+
+    var frameFile by mutableStateOf<File?>(null)
+        private set
+    var frameVersion by mutableLongStateOf(0L)
+        private set
+    var loaded by mutableStateOf(false)
+        private set
 
     var onReady: ((Long) -> Unit)? = null
     var onPosition: ((Long) -> Unit)? = null
     var onPlayingChanged: ((Boolean) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    fun attach(target: JFXPanel) {
-        VideoEditorJavaFxToolkit.ensureStarted()
-        target.background = java.awt.Color.BLACK
-        target.isOpaque = true
-        target.isDoubleBuffered = true
-        panel = target
-        Platform.runLater {
-            Platform.setImplicitExit(false)
-            if (target.scene == null) {
-                target.scene = Scene(StackPane().apply { style = "-fx-background-color: #02060B;" }, 960.0, 540.0, javafx.scene.paint.Color.BLACK)
-            }
-        }
+    fun load(file: File) {
+        source = file
+        loaded = true
+        frameFile = null
+        frameVersion++
+        onReady?.invoke(0L)
     }
 
-    fun load(file: File) {
-        VideoEditorJavaFxToolkit.ensureStarted()
-        Platform.runLater {
-            runCatching {
-                val target = panel ?: error("Painel de preview ainda não foi inicializado.")
-                target.background = java.awt.Color.BLACK
-                target.isOpaque = true
-
-                player?.stop()
-                player?.dispose()
-
-                val media = Media(file.toURI().toString())
-                val next = MediaPlayer(media)
-                val view = MediaView(next).apply {
-                    isPreserveRatio = true
-                    isSmooth = true
-                }
-                val root = StackPane().apply {
-                    style = "-fx-background-color: #02060B;"
-                    children.add(view)
-                }
-                view.fitWidthProperty().bind(root.widthProperty())
-                view.fitHeightProperty().bind(root.heightProperty())
-                val scene = Scene(root, 960.0, 540.0, javafx.scene.paint.Color.BLACK).apply {
-                    fill = javafx.scene.paint.Color.BLACK
-                }
-                target.scene = scene
-                target.revalidate()
-                target.repaint()
-                player = next
-
-                next.setOnReady {
-                    val total = next.totalDuration.toMillis().toLong().coerceAtLeast(0L)
-                    next.seek(Duration.ZERO)
-                    dispatch { onReady?.invoke(total) }
-                }
-                next.currentTimeProperty().addListener { _, _, value ->
-                    dispatch { onPosition?.invoke(value.toMillis().toLong().coerceAtLeast(0L)) }
-                }
-                next.setOnPlaying { dispatch { onPlayingChanged?.invoke(true) } }
-                next.setOnPaused { dispatch { onPlayingChanged?.invoke(false) } }
-                next.setOnStopped { dispatch { onPlayingChanged?.invoke(false) } }
-                next.setOnEndOfMedia { dispatch { onPlayingChanged?.invoke(false) } }
-                next.setOnError {
-                    dispatch { onError?.invoke(next.error?.message ?: "Falha no player de vídeo.") }
-                }
-                media.errorProperty().addListener { _, _, error ->
-                    if (error != null) dispatch { onError?.invoke(error.message ?: "Falha ao abrir a mídia.") }
-                }
-            }.onFailure { error ->
-                dispatch { onError?.invoke(error.message ?: "Falha ao carregar o preview.") }
-            }
+    fun showFrame(file: File) {
+        if (!file.exists() || file.length() <= 0L) {
+            onError?.invoke("Frame de preview não foi gerado.")
+            return
         }
+        frameFile = file
+        frameVersion++
+    }
+
+    fun clearFrame() {
+        frameFile = null
+        frameVersion++
     }
 
     fun play() {
-        VideoEditorJavaFxToolkit.ensureStarted()
-        Platform.runLater {
-            val next = player
-            if (next == null) {
-                dispatch { onError?.invoke("Nenhum preview carregado para reproduzir.") }
-            } else {
-                next.play()
-            }
+        if (!loaded || source == null) {
+            onError?.invoke("Nenhum preview carregado para reproduzir.")
+            return
         }
+        onPlayingChanged?.invoke(true)
     }
 
     fun pause() {
-        VideoEditorJavaFxToolkit.ensureStarted()
-        Platform.runLater { player?.pause() }
+        onPlayingChanged?.invoke(false)
     }
 
     fun seek(positionMs: Long) {
-        VideoEditorJavaFxToolkit.ensureStarted()
-        Platform.runLater { player?.seek(Duration.millis(positionMs.coerceAtLeast(0L).toDouble())) }
+        onPosition?.invoke(positionMs.coerceAtLeast(0L))
     }
 
     fun dispose() {
-        VideoEditorJavaFxToolkit.ensureStarted()
-        Platform.runLater {
-            runCatching { player?.stop() }
-            runCatching { player?.dispose() }
-            player = null
-            panel?.scene = Scene(StackPane().apply { style = "-fx-background-color: #02060B;" }, 960.0, 540.0, javafx.scene.paint.Color.BLACK)
-        }
-    }
-
-    private fun dispatch(block: () -> Unit) {
-        if (SwingUtilities.isEventDispatchThread()) block() else SwingUtilities.invokeLater(block)
+        pause()
+        source = null
+        loaded = false
+        clearFrame()
     }
 }
 
@@ -157,16 +94,30 @@ internal fun VideoEditorPreview(controller: VideoEditorPreviewController, modifi
     DisposableEffect(controller) {
         onDispose { controller.dispose() }
     }
-    SwingPanel(
-        factory = {
-            VideoEditorJavaFxToolkit.ensureStarted()
-            JFXPanel().apply {
-                background = java.awt.Color.BLACK
-                isOpaque = true
-                isDoubleBuffered = true
-            }.also(controller::attach)
-        },
-        modifier = modifier,
-        background = Color.Black
-    )
+
+    val frame = controller.frameFile
+    val version = controller.frameVersion
+    val bitmap = remember(frame?.absolutePath, frame?.length(), frame?.lastModified(), version) {
+        frame?.let { decodePreviewFrame(it) }
+    }
+
+    Box(modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = "Preview do vídeo",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+        } else {
+            Text(
+                text = if (controller.loaded) "Gerando preview interno por FFmpeg..." else "Preview aguardando vídeo",
+                color = Color.White.copy(alpha = 0.72f)
+            )
+        }
+    }
 }
+
+private fun decodePreviewFrame(file: File) = runCatching {
+    SkiaImage.makeFromEncoded(file.readBytes()).toComposeImageBitmap()
+}.getOrNull()
