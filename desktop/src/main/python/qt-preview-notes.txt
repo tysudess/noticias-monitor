@@ -1,0 +1,1 @@
+Use original editor playback semantics; do not use JavaFX for preview.
