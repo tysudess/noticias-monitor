@@ -1,0 +1,151 @@
+name: Release V15 Video Open Preview
+
+on:
+  push:
+    branches:
+      - work/v15-video-open-preview
+    paths:
+      - '.github/workflows/release-v15-video-open-preview.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v15-video-open-preview
+          fetch-depth: 0
+
+      - name: Protect approved visual layout
+        shell: pwsh
+        run: |
+          $screen = (git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt').Trim()
+          if ($screen -ne 'dbdaed107199e84d387c7915e29bdb5bb9eca1af') { throw "Layout base V14 inesperado: $screen" }
+          Write-Host 'Layout V14 confirmado.'
+
+      - name: Apply functional open and preview diagnostics
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = @'
+          from pathlib import Path
+
+          controller = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt')
+          s = controller.read_text(encoding='utf-8')
+          if 'AtomicReference' not in s:
+              s = s.replace('import java.util.concurrent.atomic.AtomicLong', 'import java.util.concurrent.atomic.AtomicLong\nimport java.util.concurrent.atomic.AtomicReference')
+          if 'private val lastError = AtomicReference<String?>(null)' not in s:
+              s = s.replace('    private val durationMs = AtomicLong(0L)', '    private val durationMs = AtomicLong(0L)\n    private val lastError = AtomicReference<String?>(null)')
+          s = s.replace('        if (!file.exists()) return', '        if (!file.exists()) {\n            lastError.set("Arquivo não encontrado: ${file.absolutePath}")\n            return\n        }')
+          old = '''            val p = MediaPlayer(Media(file.toURI().toString()))
+            player = p
+            view?.mediaPlayer = p'''
+          new = '''            val p = try {
+                MediaPlayer(Media(file.toURI().toString()))
+            } catch (t: Throwable) {
+                lastError.set(t.message ?: "Falha ao carregar mídia no preview.")
+                playing = false
+                return@runLater
+            }
+            player = p
+            view?.mediaPlayer = p
+            p.setOnError {
+                lastError.set(p.error?.message ?: "Falha de reprodução no preview.")
+                playing = false
+            }'''
+          if old in s and 'p.setOnError' not in s:
+              s = s.replace(old, new)
+          if 'fun consumeError(): String?' not in s:
+              s = s.replace('    fun mediaDurationMs(): Long = durationMs.get()', '    fun mediaDurationMs(): Long = durationMs.get()\n    fun consumeError(): String? = lastError.getAndSet(null)')
+          controller.write_text(s, encoding='utf-8')
+
+          screen = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt')
+          s = screen.read_text(encoding='utf-8')
+          old = '''            if (clip != null && preview.currentPath == clip.path) {
+                val source = preview.currentPositionMs()'''
+          new = '''            preview.consumeError()?.let { message ->
+                sequencePlaying = false
+                status = "Falha no preview: $message"
+            }
+            if (clip != null && preview.currentPath == clip.path) {
+                val source = preview.currentPositionMs()'''
+          if old in s and 'preview.consumeError()' not in s:
+              s = s.replace(old, new, 1)
+          old_status = '            status = if (clips.isNotEmpty()) "${clips.size} clipe(s) na timeline • ${formatVideoTime(totalDuration())}" else "Nenhum vídeo válido foi adicionado."'
+          new_status = '            status = if (clips.isNotEmpty()) "${clips.size} clipe(s) na timeline • ${formatVideoTime(totalDuration())} • Preview: ${File(clips[selectedIndex.coerceAtLeast(0)].path).name}" else "Nenhum vídeo válido foi adicionado."'
+          if old_status in s:
+              s = s.replace(old_status, new_status, 1)
+          screen.write_text(s, encoding='utf-8')
+          '@
+          $script | python -
+
+      - name: Validate functional contracts and visual freeze
+        shell: pwsh
+        run: |
+          $screen = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
+          $preview = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt' -Raw
+          if ($screen -notmatch 'verticalScroll\(rememberScrollState\(\)\)') { throw 'Scroll visual V14 perdido.' }
+          if ($screen -notmatch 'height\(420\.dp\)') { throw 'Preview grande V14 perdido.' }
+          if ($screen -notmatch 'preview\.consumeError\(\)') { throw 'Diagnóstico de preview ausente.' }
+          if ($preview -notmatch 'consumeError') { throw 'Canal de erro do preview ausente.' }
+          if ($screen -notmatch 'isMultipleMode = true') { throw 'Seleção múltipla de vídeos ausente.' }
+          if ($screen -notmatch 'engine\.probe\(file\)') { throw 'FFprobe não está ligado à abertura.' }
+          if ($screen -notmatch 'loadIndex\(0, 0L, false\)') { throw 'Primeiro clipe não é carregado automaticamente.' }
+
+      - name: Commit functional cycle
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt
+          git diff --cached --check
+          if (-not (git diff --cached --quiet)) {
+            git commit -m 'feat: harden video open and preview loading'
+            git push origin HEAD:work/v15-video-open-preview
+          }
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build updated Windows app
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Rebuild validated portable from V14
+        shell: pwsh
+        run: |
+          $baseUrl = 'https://github.com/tysudess/noticias-monitor/releases/download/v14-video-editor-final-polish-20260912/Monitor-de-Noticias-V14-Editor-de-Video-Polimento-Final-Windows-Portable.zip'
+          Invoke-WebRequest -Uri $baseUrl -OutFile base.zip
+          Expand-Archive base.zip -DestinationPath base -Force
+          $newRoot = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if (-not (Test-Path "$newRoot/MonitorDeNoticias.exe")) { throw 'Novo executável não foi gerado.' }
+          Copy-Item "$newRoot/*" 'base' -Recurse -Force
+          foreach ($required in @('MonitorDeNoticias.exe','bin/ffmpeg.exe','bin/ffprobe.exe')) {
+            if (-not (Test-Path (Join-Path 'base' $required))) { throw "Portable incompleto: $required" }
+          }
+
+      - name: Package and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = 'Monitor-de-Noticias-V15-Editor-de-Video-Abrir-Preview-Windows-Portable.zip'
+          Compress-Archive -Path 'base/*' -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          $tag = 'v15-video-open-preview-20260912'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) { gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag }
+          gh release create $tag $zip "$zip.sha256" --repo tysudess/noticias-monitor --target work/v15-video-open-preview --title 'Monitor V15 — Editor de Vídeo Abrir + Preview — Windows Portable' --notes 'Primeiro ciclo funcional após congelar o layout V14: abertura múltipla, FFprobe, criação de clipes, seleção automática do primeiro vídeo e diagnóstico visível de falhas do preview. Layout V14 preservado.'
+          Write-Host "SHA256=$hash"
