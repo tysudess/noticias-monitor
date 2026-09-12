@@ -372,8 +372,8 @@ fun VideoEditorScreen(onBack: () -> Unit = {}) {
         }
 
         Column(
-            Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp)
+            Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             EditorHeroHeader(
                 clipsCount = clips.size,
@@ -384,7 +384,7 @@ fun VideoEditorScreen(onBack: () -> Unit = {}) {
             )
 
             Row(
-                Modifier.fillMaxWidth().height(314.dp),
+                Modifier.fillMaxWidth().height(280.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 PreviewPanel(
@@ -412,7 +412,7 @@ fun VideoEditorScreen(onBack: () -> Unit = {}) {
                     onEnd = { seekGlobal(totalDuration(), false) }
                 )
                 QuickMarkPanel(
-                    modifier = Modifier.width(330.dp),
+                    modifier = Modifier.width(322.dp),
                     clip = selectedClip(),
                     startText = startText,
                     endText = endText,
@@ -489,27 +489,27 @@ private fun EditorHeroHeader(
     onReset: () -> Unit
 ) {
     Box(
-        Modifier.fillMaxWidth().height(108.dp).clip(RoundedCornerShape(15.dp))
+        Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(15.dp))
             .background(Brush.horizontalGradient(listOf(Color(0xEE05243D), Color(0xF0042037), Color(0xEE062B49))))
             .border(1.dp, VEBlueBorder.copy(alpha = .62f), RoundedCornerShape(15.dp))
-            .padding(horizontal = 16.dp, vertical = 11.dp)
+            .padding(horizontal = 15.dp, vertical = 8.dp)
     ) {
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(50.dp).clip(RoundedCornerShape(12.dp))
+                Modifier.size(46.dp).clip(RoundedCornerShape(11.dp))
                     .background(Brush.verticalGradient(listOf(VEYellowLight, VEYellow, VEYellowDark)))
-                    .border(1.dp, Color(0xFFFFE987), RoundedCornerShape(12.dp)),
+                    .border(1.dp, Color(0xFFFFE987), RoundedCornerShape(11.dp)),
                 contentAlignment = Alignment.Center
-            ) { Icon(Icons.Default.MovieCreation, null, tint = Color(0xFF082033), modifier = Modifier.size(28.dp)) }
-            Spacer(Modifier.width(13.dp))
+            ) { Icon(Icons.Default.MovieCreation, null, tint = Color(0xFF082033), modifier = Modifier.size(23.dp)) }
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.width(430.dp)) {
                 Text("Vídeos  ›  Editor de Vídeo", color = VECyanSoft, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                Text("EDITOR DE VÍDEO", color = VEText, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = .4.sp)
-                Text(if (clipsCount == 0) "Edite, marque e exporte trechos de forma rápida e precisa." else "$clipsCount clipe(s) carregado(s) • editor funcional", color = VEText2, fontSize = 11.sp)
+                Text("EDITOR DE VÍDEO", color = VEText, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = .4.sp)
+                Text(if (clipsCount == 0) "Edite, marque e exporte trechos de forma rápida e precisa." else "$clipsCount clipe(s) carregado(s) • editor funcional", color = VEText2, fontSize = 10.sp)
             }
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                RadarGraphic(Modifier.align(Alignment.Center).size(103.dp))
-                Column(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), horizontalAlignment = Alignment.End) {
+                RadarGraphic(Modifier.align(Alignment.Center).size(88.dp))
+                Column(Modifier.align(Alignment.CenterEnd).padding(end = 10.dp), horizontalAlignment = Alignment.End) {
                     Text("VIGILÂNCIA", color = VECyanSoft.copy(alpha = .72f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     Text("MÍDIA", color = VECyanSoft.copy(alpha = .55f), fontSize = 9.sp)
                     Spacer(Modifier.height(4.dp))
@@ -525,9 +525,9 @@ private fun EditorHeroHeader(
                     Spacer(Modifier.width(5.dp)); Icon(Icons.Default.Anchor, null, tint = VEYellow, modifier = Modifier.size(17.dp))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    ActionButton("ABRIR VÍDEO", Icons.Default.FolderOpen, true, gold = true, width = 145.dp, onClick = onOpen)
-                    ActionButton("Desfazer (Ctrl+Z)", Icons.Default.Undo, canUndo, width = 145.dp, onClick = onUndo)
-                    ActionButton("Redefinir", Icons.Default.Refresh, true, width = 110.dp, onClick = onReset)
+                    ActionButton("ABRIR VÍDEO", Icons.Default.FolderOpen, true, gold = true, width = 140.dp, onClick = onOpen)
+                    ActionButton("Desfazer (Ctrl+Z)", Icons.Default.Undo, canUndo, width = 140.dp, onClick = onUndo)
+                    ActionButton("Redefinir", Icons.Default.Refresh, true, width = 105.dp, onClick = onReset)
                 }
             }
         }
@@ -556,7 +556,7 @@ private fun PreviewPanel(
             Spacer(Modifier.width(7.dp)); Text("PRÉ-VISUALIZAÇÃO", color = VEText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f)); Text(clip?.let { File(it.path).name } ?: "Nenhum vídeo selecionado", color = VEMuted, fontSize = 10.sp, maxLines = 1)
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Box(
             Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(11.dp))
                 .background(Brush.verticalGradient(listOf(Color(0xFF061522), Color(0xFF020A10))))
@@ -566,7 +566,7 @@ private fun PreviewPanel(
                 SwingPanel(factory = { preview.panel }, modifier = Modifier.fillMaxSize())
             } else {
                 Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.MovieCreation, null, tint = Color(0xFF315D79), modifier = Modifier.size(58.dp))
+                    Icon(Icons.Default.MovieCreation, null, tint = Color(0xFF315D79), modifier = Modifier.size(52.dp))
                     Spacer(Modifier.height(8.dp)); Text("Nenhum vídeo selecionado", color = VEText2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Text("Abra um arquivo de vídeo para começar a editar.", color = VEMuted, fontSize = 9.sp)
                 }
@@ -575,13 +575,13 @@ private fun PreviewPanel(
         }
         Spacer(Modifier.height(7.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("${formatVideoTime(currentGlobalMs)} / ${formatVideoTime(totalMs)}", color = VEText2, fontSize = 9.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(200.dp))
+            Text("${formatVideoTime(currentGlobalMs)} / ${formatVideoTime(totalMs)}", color = VEText2, fontSize = 9.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(180.dp))
             Spacer(Modifier.weight(1f))
             IconControl(Icons.Default.SkipPrevious, clip != null, onStart)
             Spacer(Modifier.width(4.dp)); IconControl(Icons.Default.Replay5, clip != null, onBack5)
             Spacer(Modifier.width(6.dp))
             Box(
-                Modifier.size(44.dp).clip(CircleShape)
+                Modifier.size(42.dp).clip(CircleShape)
                     .background(Brush.verticalGradient(listOf(Color(0xFF0A75B3), Color(0xFF08456F))))
                     .border(1.dp, VECyanBright, CircleShape).clickable(enabled = clip != null, onClick = onPlayPause),
                 contentAlignment = Alignment.Center
@@ -589,7 +589,7 @@ private fun PreviewPanel(
             Spacer(Modifier.width(6.dp)); IconControl(Icons.Default.Forward5, clip != null, onForward5)
             Spacer(Modifier.width(4.dp)); IconControl(Icons.Default.SkipNext, clip != null, onEnd)
             Spacer(Modifier.weight(1f)); Icon(Icons.Default.VolumeUp, null, tint = VEText2, modifier = Modifier.size(16.dp))
-            Slider(value = volume, onValueChange = onVolume, modifier = Modifier.width(82.dp), colors = SliderDefaults.colors(thumbColor = VECyanSoft, activeTrackColor = VECyan, inactiveTrackColor = Color(0xFF173F5E)))
+            Slider(value = volume, onValueChange = onVolume, modifier = Modifier.width(76.dp), colors = SliderDefaults.colors(thumbColor = VECyanSoft, activeTrackColor = VECyan, inactiveTrackColor = Color(0xFF173F5E)))
             Icon(Icons.Default.Fullscreen, null, tint = VEMuted, modifier = Modifier.size(18.dp))
         }
     }
@@ -616,11 +616,11 @@ private fun QuickMarkPanel(
             Icon(Icons.Default.Bolt, null, tint = VEYellow, modifier = Modifier.size(18.dp))
         }
         Text("Defina os pontos de início e fim do trecho desejado.", color = VEMuted, fontSize = 9.sp)
-        Spacer(Modifier.height(7.dp))
+        Spacer(Modifier.height(5.dp))
         TimeEditor("Início", startText, clip != null, onStartText, onFocus)
-        Spacer(Modifier.height(6.dp)); TimeEditor("Fim", endText, clip != null, onEndText, onFocus)
-        Spacer(Modifier.height(6.dp)); TimeEditor("Duração", durationText, false, {}, onFocus)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(5.dp)); TimeEditor("Fim", endText, clip != null, onEndText, onFocus)
+        Spacer(Modifier.height(5.dp)); TimeEditor("Duração", durationText, false, {}, onFocus)
+        Spacer(Modifier.height(5.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             SmallButton("Início aqui", Icons.Default.FirstPage, clip != null, Modifier.weight(1f), onMarkStart)
             SmallButton("Fim aqui", Icons.Default.LastPage, clip != null, Modifier.weight(1f), onMarkEnd)
@@ -651,14 +651,14 @@ private fun TimelinePanel(
     onJump: (Long) -> Unit
 ) {
     val selected = clips.getOrNull(selectedIndex)
-    NeonPanel(Modifier.fillMaxWidth().height(260.dp)) {
+    NeonPanel(Modifier.fillMaxWidth().height(218.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.ViewList, null, tint = VECyanBright, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(7.dp))
             Text("TIMELINE", color = VEText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(9.dp)); Text("Arraste o próprio vídeo com o mouse para reordenar", color = VEMuted, fontSize = 9.sp)
             Spacer(Modifier.weight(1f))
             Icon(Icons.Default.ZoomOut, null, tint = VEText2, modifier = Modifier.size(17.dp).clickable { onZoom(zoomIndex - 1) })
-            Slider(value = zoomIndex.toFloat(), onValueChange = { onZoom(it.toInt()) }, valueRange = 0f..5f, steps = 4, modifier = Modifier.width(90.dp), colors = SliderDefaults.colors(thumbColor = VECyanSoft, activeTrackColor = VECyan))
+            Slider(value = zoomIndex.toFloat(), onValueChange = { onZoom(it.toInt()) }, valueRange = 0f..5f, steps = 4, modifier = Modifier.width(82.dp), colors = SliderDefaults.colors(thumbColor = VECyanSoft, activeTrackColor = VECyan))
             Icon(Icons.Default.ZoomIn, null, tint = VEText2, modifier = Modifier.size(17.dp).clickable { onZoom(zoomIndex + 1) })
             Spacer(Modifier.width(7.dp)); Text("Zoom ${zoomIndex + 1}/6", color = VEText2, fontSize = 9.sp)
         }
@@ -668,7 +668,7 @@ private fun TimelinePanel(
         if (selected != null) {
             RangeTrimBar(selected, globalPlayheadMs - clips.take(selectedIndex).sumOf { it.durationMs }, onTrim) { local -> onSeek(clips.take(selectedIndex).sumOf { it.durationMs } + local) }
         } else {
-            Box(Modifier.fillMaxWidth().height(34.dp).background(Color(0xFF041B2E), RoundedCornerShape(7.dp)), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth().height(30.dp).background(Color(0xFF041B2E), RoundedCornerShape(7.dp)), contentAlignment = Alignment.Center) {
                 Text("Abra um vídeo para habilitar o RangeSlider de precisão.", color = VEMuted, fontSize = 9.sp)
             }
         }
@@ -704,8 +704,8 @@ private fun CompositionStrip(
 ) {
     val scroll = rememberScrollState()
     val pxPerSec = ZOOM_LEVELS[zoomIndex]
-    Column(Modifier.fillMaxWidth().height(108.dp)) {
-        Row(Modifier.fillMaxWidth().height(24.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxWidth().height(82.dp)) {
+        Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("${clips.size} clipe(s) • ${formatVideoTime(totalDurationMs)}", color = VEMuted, fontSize = 8.sp, modifier = Modifier.width(125.dp))
             Box(Modifier.weight(1f).height(20.dp).background(Color(0xFF041B2E), RoundedCornerShape(4.dp))) {
                 Canvas(Modifier.fillMaxSize()) {
@@ -840,7 +840,7 @@ private fun ExportPanel(
     onOpenFolder: () -> Unit,
     onFocus: (Boolean) -> Unit
 ) {
-    NeonPanel(Modifier.fillMaxWidth().height(132.dp)) {
+    NeonPanel(Modifier.fillMaxWidth().height(96.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.FileUpload, null, tint = VEYellow, modifier = Modifier.size(21.dp)); Spacer(Modifier.width(7.dp))
             Text("EXPORTAÇÃO", color = VEText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -851,7 +851,7 @@ private fun ExportPanel(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             OutlinedTextField(
                 value = outputName, onValueChange = onOutputName, singleLine = true,
-                modifier = Modifier.width(210.dp).height(48.dp).onFocusChanged { onFocus(it.isFocused) },
+                modifier = Modifier.width(200.dp).height(40.dp).onFocusChanged { onFocus(it.isFocused) },
                 textStyle = LocalTextStyle.current.copy(color = VEText2, fontSize = 10.sp),
                 label = { Text("Arquivo", fontSize = 8.sp) },
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = VECyan, unfocusedBorderColor = VEBlueBorder, focusedTextColor = VEText2, unfocusedTextColor = VEText2)
@@ -885,7 +885,7 @@ private fun TimeEditor(label: String, value: String, enabled: Boolean, onChange:
         onValueChange = onChange,
         enabled = enabled,
         singleLine = true,
-        modifier = Modifier.fillMaxWidth().height(52.dp).onFocusChanged { onFocus(it.isFocused) },
+        modifier = Modifier.fillMaxWidth().height(42.dp).onFocusChanged { onFocus(it.isFocused) },
         leadingIcon = { Icon(Icons.Default.Schedule, null, modifier = Modifier.size(16.dp)) },
         label = { Text(label, fontSize = 8.sp) },
         textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 10.sp),
@@ -902,7 +902,7 @@ private fun NeonPanel(modifier: Modifier, content: @Composable ColumnScope.() ->
         modifier = modifier
     ) {
         Column(
-            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xF5073556), Color(0xFA041F36)))).padding(12.dp),
+            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xF5073556), Color(0xFA041F36)))).padding(10.dp),
             content = content
         )
     }
@@ -919,7 +919,7 @@ private fun ActionButton(
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(10.dp)
-    val mod = if (fill) Modifier.fillMaxWidth().height(38.dp) else Modifier.width(width).height(38.dp)
+    val mod = if (fill) Modifier.fillMaxWidth().height(36.dp) else Modifier.width(width).height(36.dp)
     val brush = if (gold) Brush.verticalGradient(listOf(VEYellowLight, VEYellow, VEYellowDark)) else Brush.verticalGradient(listOf(Color(0xFF0A3B5E), Color(0xFF062B47)))
     Row(
         mod.clip(shape).background(if (enabled) brush else Brush.verticalGradient(listOf(Color(0xFF0A253A), Color(0xFF071D2E))))
@@ -935,7 +935,7 @@ private fun ActionButton(
 @Composable
 private fun SmallButton(label: String, icon: ImageVector, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(
-        modifier.height(34.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF072A45))
+        modifier.height(30.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF072A45))
             .border(1.dp, VEBlueBorder.copy(alpha = if (enabled) .65f else .25f), RoundedCornerShape(8.dp))
             .clickable(enabled = enabled, onClick = onClick).padding(horizontal=8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center
@@ -947,7 +947,7 @@ private fun SmallButton(label: String, icon: ImageVector, enabled: Boolean, modi
 @Composable
 private fun TimelineButton(label: String, icon: ImageVector, enabled: Boolean, color: Color, onClick: () -> Unit) {
     Row(
-        Modifier.height(32.dp).clip(RoundedCornerShape(7.dp)).background(Color(0xFF072A45))
+        Modifier.height(30.dp).clip(RoundedCornerShape(7.dp)).background(Color(0xFF072A45))
             .border(1.dp, color.copy(alpha=if(enabled) .7f else .2f), RoundedCornerShape(7.dp))
             .clickable(enabled=enabled,onClick=onClick).padding(horizontal=9.dp),
         verticalAlignment=Alignment.CenterVertically
@@ -957,7 +957,7 @@ private fun TimelineButton(label: String, icon: ImageVector, enabled: Boolean, c
 @Composable
 private fun TinyButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.height(28.dp).widthIn(min=42.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF072A45))
+        Modifier.height(26.dp).widthIn(min=40.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF072A45))
             .border(1.dp, VEBlueBorder.copy(alpha=if(enabled) .55f else .2f), RoundedCornerShape(6.dp)).clickable(enabled=enabled,onClick=onClick).padding(horizontal=6.dp),
         contentAlignment=Alignment.Center
     ) { Text(label,color=if(enabled) VEText2 else VEMuted.copy(alpha=.35f),fontSize=7.sp) }
@@ -966,7 +966,7 @@ private fun TinyButton(label: String, enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun CycleButton(label: String, onClick: () -> Unit) {
     Row(
-        Modifier.height(36.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF072A45)).border(1.dp, VEBlueBorder.copy(alpha=.6f),RoundedCornerShape(8.dp)).clickable(onClick=onClick).padding(horizontal=9.dp),
+        Modifier.height(32.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF072A45)).border(1.dp, VEBlueBorder.copy(alpha=.6f),RoundedCornerShape(8.dp)).clickable(onClick=onClick).padding(horizontal=9.dp),
         verticalAlignment=Alignment.CenterVertically
     ) { Text(label,color=VEText2,fontSize=8.sp); Spacer(Modifier.width(4.dp)); Icon(Icons.Default.ExpandMore,null,tint=VEMuted,modifier=Modifier.size(13.dp)) }
 }
