@@ -33,6 +33,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $script = @'
           from pathlib import Path
+          import re
 
           controller = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt')
           s = controller.read_text(encoding='utf-8')
@@ -65,18 +66,17 @@ jobs:
 
           screen = Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt')
           s = screen.read_text(encoding='utf-8')
-          marker = '''            delay(55)
-            val clip = selectedClip()'''
-          replacement = '''            delay(55)
-            preview.consumeError()?.let { message ->
+          if 'preview.consumeError()' not in s:
+              pattern = r'(\s*delay\(55\)\r?\n)(\s*val clip = selectedClip\(\))'
+              replacement = r'''\1            preview.consumeError()?.let { message ->
                 sequencePlaying = false
                 status = "Falha no preview: $message"
             }
-            val clip = selectedClip()'''
-          if 'preview.consumeError()' not in s:
-              if marker not in s:
+\2'''
+              s2, count = re.subn(pattern, replacement, s, count=1)
+              if count != 1:
                   raise SystemExit('Ponto do monitor de preview não encontrado.')
-              s = s.replace(marker, replacement, 1)
+              s = s2
           old_status = '            status = if (clips.isNotEmpty()) "${clips.size} clipe(s) na timeline • ${formatVideoTime(totalDuration())}" else "Nenhum vídeo válido foi adicionado."'
           new_status = '            status = if (clips.isNotEmpty()) "${clips.size} clipe(s) na timeline • ${formatVideoTime(totalDuration())} • Preview: ${File(clips[selectedIndex.coerceAtLeast(0)].path).name}" else "Nenhum vídeo válido foi adicionado."'
           if old_status in s:
