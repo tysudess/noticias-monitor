@@ -771,8 +771,8 @@ private fun CompositionStrip(
                             onDrag = { change, _ -> onSeek((change.position.x / size.width * totalDurationMs).toLong().coerceIn(0L, totalDurationMs)) }
                         )
                     }) {
-                        val x = size.width * (globalPlayheadMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
-                        drawLine(VECyanBright, Offset(x, 0f), Offset(x, size.height), 2f)
+                        val x = (size.width * (globalPlayheadMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)).coerceIn(4f, (size.width - 4f).coerceAtLeast(4f))
+                        drawLine(VECyanBright, Offset(x, 0f), Offset(x, size.height), 3f)
                         val path = Path().apply { moveTo(x - 6f, 0f); lineTo(x + 6f, 0f); lineTo(x, 9f); close() }
                         drawPath(path, VECyanBright)
                     }
@@ -818,7 +818,7 @@ private fun RangeTrimBar(clip: VideoClip, localCursorMs: Long, onTrim: (Long, Lo
             val y = size.height / 2f
             drawLine(Color(0xFF183D5A), Offset(0f,y), Offset(size.width,y), 5f, StrokeCap.Round)
             drawLine(VECyan, Offset(lower,y), Offset(upper,y), 5f, StrokeCap.Round)
-            drawCircle(VEYellow, 6f, Offset(lower,y)); drawCircle(VEYellow, 6f, Offset(upper,y)); drawCircle(VECyanBright, 5f, Offset(cursor,y))
+            drawCircle(VEYellow, 6f, Offset(lower,y)); drawCircle(VEYellow, 6f, Offset(upper,y)); drawLine(VECyanBright, Offset(cursor, 0f), Offset(cursor, size.height), 2f); drawCircle(Color.White, 6f, Offset(cursor,y)); drawCircle(VECyanBright, 4f, Offset(cursor,y))
         }
         Text("IN ${formatVideoTime(clip.startMs)}", color = VEMuted, fontSize = 7.sp, modifier = Modifier.align(Alignment.BottomStart).padding(start=8.dp,bottom=1.dp))
         Text("OUT ${formatVideoTime(clip.endMs)}", color = VEMuted, fontSize = 7.sp, modifier = Modifier.align(Alignment.BottomEnd).padding(end=8.dp,bottom=1.dp))
@@ -1006,3 +1006,4 @@ private fun CornerMark(alignment: Alignment) {
         }
     }
 }
+
