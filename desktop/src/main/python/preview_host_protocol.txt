@@ -1,0 +1,1 @@
+stdin/stdout JSONL protocol: hwnd, load, play, pause, seek, volume, stop, quit, tick, error.
