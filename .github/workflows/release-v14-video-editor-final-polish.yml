@@ -1,0 +1,110 @@
+name: Release V14 Video Editor Final Polish
+
+on:
+  push:
+    branches:
+      - work/v14-video-editor-final-polish
+    paths:
+      - '.github/workflows/release-v14-video-editor-final-polish.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v14-video-editor-final-polish
+          fetch-depth: 0
+
+      - name: Protect functional backend
+        shell: pwsh
+        run: |
+          $engine=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorEngine.kt').Trim()
+          $preview=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt').Trim()
+          if($engine -ne 'f7a1a9b278996c928741683c911376f06b6c91b6'){throw 'Backend funcional alterado.'}
+          if($preview -ne '31ba194f865d8538dc26ce9bf41bb9b6e3ed33b4'){throw 'Preview funcional alterado.'}
+
+      - name: Apply final visual polish
+        shell: pwsh
+        run: |
+          $script=@'
+          from pathlib import Path
+          p=Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt')
+          s=p.read_text(encoding='utf-8')
+          reps={
+            'NeonPanel(Modifier.fillMaxWidth().height(238.dp))': 'NeonPanel(Modifier.fillMaxWidth().height(260.dp))',
+            'Column(Modifier.fillMaxWidth().height(82.dp))': 'Column(Modifier.fillMaxWidth().height(98.dp))',
+            'NeonPanel(Modifier.fillMaxWidth().height(108.dp))': 'NeonPanel(Modifier.fillMaxWidth().height(124.dp))',
+            'modifier = Modifier.width(200.dp).height(40.dp)': 'modifier = Modifier.width(220.dp).height(44.dp)',
+            'SmallButton("Abrir pasta", Icons.Default.FolderOpen, true, Modifier.width(110.dp), onOpenFolder)': 'SmallButton("Abrir pasta", Icons.Default.FolderOpen, true, Modifier.width(120.dp), onOpenFolder)',
+            'width = 190.dp, onClick = onExport': 'width = 205.dp, onClick = onExport',
+            'Modifier.fillMaxWidth().height(42.dp).onFocusChanged': 'Modifier.fillMaxWidth().height(46.dp).onFocusChanged',
+            'focusedBorderColor = VECyan, unfocusedBorderColor = VEBlueBorder, focusedTextColor = VEText, unfocusedTextColor = VEText, disabledTextColor = VEMuted, disabledBorderColor = VEBlueBorder.copy(alpha=.4f)': 'focusedBorderColor = VECyanBright, unfocusedBorderColor = VEBlueBorder.copy(alpha=.9f), focusedTextColor = VEText, unfocusedTextColor = VEText, disabledTextColor = Color(0xFF7FA7C4), disabledBorderColor = VEBlueBorder.copy(alpha=.65f), focusedLabelColor = VECyanSoft, unfocusedLabelColor = VEText2, disabledLabelColor = Color(0xFF6F94AE), focusedLeadingIconColor = VECyanSoft, unfocusedLeadingIconColor = VEText2, disabledLeadingIconColor = Color(0xFF6F94AE)'
+          }
+          for old,new in reps.items():
+              if old in s:
+                  s=s.replace(old,new,1)
+              elif new not in s:
+                  raise SystemExit('Contrato visual não encontrado: '+old[:100])
+          p.write_text(s,encoding='utf-8')
+          '@
+          $script | python -
+
+      - name: Validate and commit
+        shell: pwsh
+        run: |
+          $s=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
+          foreach($x in @('height(420.dp)','verticalScroll(rememberScrollState())','height(260.dp)','height(124.dp)','height(46.dp)')){if($s -notmatch [regex]::Escape($x)){throw "Ajuste ausente: $x"}}
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt
+          git diff --cached --check
+          if(-not (git diff --cached --quiet)){
+            git commit -m 'ui: final polish Video Editor controls and spacing'
+            git push origin HEAD:work/v14-video-editor-final-polish
+          }
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build updated Windows app
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Rebuild validated portable from V13
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v13-video-editor-scroll-preview-20260912 --repo tysudess/noticias-monitor --pattern 'Monitor-de-Noticias-V13-Editor-de-Video-Preview-Maior-Scroll-Windows-Portable.zip' --dir base-v13
+          Expand-Archive 'base-v13/Monitor-de-Noticias-V13-Editor-de-Video-Preview-Maior-Scroll-Windows-Portable.zip' base-portable -Force
+          $new='desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if(-not(Test-Path (Join-Path $new 'MonitorDeNoticias.exe'))){throw 'Novo EXE ausente.'}
+          foreach($item in Get-ChildItem $new){
+            $target=Join-Path 'base-portable' $item.Name
+            if(Test-Path $target){Remove-Item $target -Recurse -Force}
+            Copy-Item $item.FullName 'base-portable' -Recurse -Force
+          }
+          foreach($n in @('ffmpeg.exe','ffprobe.exe','yt-dlp.exe','deno.exe')){if(-not(Test-Path (Join-Path 'base-portable/bin' $n))){throw "Ferramenta portátil ausente: $n"}}
+
+      - name: Package and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip='Monitor-de-Noticias-V14-Editor-de-Video-Polimento-Final-Windows-Portable.zip'
+          Compress-Archive -Path 'base-portable/*' -DestinationPath $zip -CompressionLevel Optimal
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower(); "$hash  $zip" | Set-Content "$zip.sha256"; Write-Host "SHA256=$hash"
+          $tag='v14-video-editor-final-polish-20260912'
+          if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag}
+          gh release create $tag $zip "$zip.sha256" --repo tysudess/noticias-monitor --target work/v14-video-editor-final-polish --title 'Monitor V14 — Editor de Vídeo Polimento Final — Windows Portable' --notes 'Mantém preview grande e scroll vertical da V13. Melhora legibilidade da Marcação Rápida, aumenta Timeline e dá mais espaço à Exportação sem alterar backend funcional.'
