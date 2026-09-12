@@ -652,7 +652,7 @@ private fun TimelinePanel(
     onJump: (Long) -> Unit
 ) {
     val selected = clips.getOrNull(selectedIndex)
-    NeonPanel(Modifier.fillMaxWidth().height(238.dp)) {
+    NeonPanel(Modifier.fillMaxWidth().height(260.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.ViewList, null, tint = VECyanBright, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(7.dp))
             Text("TIMELINE", color = VEText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -705,7 +705,7 @@ private fun CompositionStrip(
 ) {
     val scroll = rememberScrollState()
     val pxPerSec = ZOOM_LEVELS[zoomIndex]
-    Column(Modifier.fillMaxWidth().height(82.dp)) {
+    Column(Modifier.fillMaxWidth().height(98.dp)) {
         Row(Modifier.fillMaxWidth().height(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("${clips.size} clipe(s) • ${formatVideoTime(totalDurationMs)}", color = VEMuted, fontSize = 8.sp, modifier = Modifier.width(125.dp))
             Box(Modifier.weight(1f).height(20.dp).background(Color(0xFF041B2E), RoundedCornerShape(4.dp))) {
@@ -841,7 +841,7 @@ private fun ExportPanel(
     onOpenFolder: () -> Unit,
     onFocus: (Boolean) -> Unit
 ) {
-    NeonPanel(Modifier.fillMaxWidth().height(108.dp)) {
+    NeonPanel(Modifier.fillMaxWidth().height(124.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.FileUpload, null, tint = VEYellow, modifier = Modifier.size(21.dp)); Spacer(Modifier.width(7.dp))
             Text("EXPORTAÇÃO", color = VEText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -852,7 +852,7 @@ private fun ExportPanel(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             OutlinedTextField(
                 value = outputName, onValueChange = onOutputName, singleLine = true,
-                modifier = Modifier.width(200.dp).height(40.dp).onFocusChanged { onFocus(it.isFocused) },
+                modifier = Modifier.width(220.dp).height(44.dp).onFocusChanged { onFocus(it.isFocused) },
                 textStyle = LocalTextStyle.current.copy(color = VEText2, fontSize = 10.sp),
                 label = { Text("Arquivo", fontSize = 8.sp) },
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = VECyan, unfocusedBorderColor = VEBlueBorder, focusedTextColor = VEText2, unfocusedTextColor = VEText2)
@@ -869,9 +869,9 @@ private fun ExportPanel(
             }
             Slider(value = targetSizeMb.toFloat(), onValueChange = { onTargetSize(it.toInt().coerceIn(1,100)) }, valueRange = 1f..100f, enabled = targetSizeEnabled && !busy, modifier = Modifier.width(115.dp), colors = SliderDefaults.colors(thumbColor = VEYellow, activeTrackColor = VEYellowDark))
             Text("$targetSizeMb MB", color = VEText2, fontSize = 9.sp, modifier = Modifier.width(46.dp))
-            SmallButton("Abrir pasta", Icons.Default.FolderOpen, true, Modifier.width(110.dp), onOpenFolder)
+            SmallButton("Abrir pasta", Icons.Default.FolderOpen, true, Modifier.width(120.dp), onOpenFolder)
             Spacer(Modifier.weight(1f))
-            ActionButton(if (busy) "EXPORTANDO $progress%" else "EXPORTAR", Icons.Default.FileUpload, clips.isNotEmpty() && !busy, gold = true, width = 190.dp, onClick = onExport)
+            ActionButton(if (busy) "EXPORTANDO $progress%" else "EXPORTAR", Icons.Default.FileUpload, clips.isNotEmpty() && !busy, gold = true, width = 205.dp, onClick = onExport)
         }
         if (busy || progress > 0) {
             Spacer(Modifier.height(4.dp)); LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth().height(4.dp), color = VEYellow, trackColor = Color(0xFF173F5E))
@@ -886,11 +886,11 @@ private fun TimeEditor(label: String, value: String, enabled: Boolean, onChange:
         onValueChange = onChange,
         enabled = enabled,
         singleLine = true,
-        modifier = Modifier.fillMaxWidth().height(42.dp).onFocusChanged { onFocus(it.isFocused) },
+        modifier = Modifier.fillMaxWidth().height(46.dp).onFocusChanged { onFocus(it.isFocused) },
         leadingIcon = { Icon(Icons.Default.Schedule, null, modifier = Modifier.size(16.dp)) },
         label = { Text(label, fontSize = 8.sp) },
         textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 10.sp),
-        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = VECyan, unfocusedBorderColor = VEBlueBorder, focusedTextColor = VEText, unfocusedTextColor = VEText, disabledTextColor = VEMuted, disabledBorderColor = VEBlueBorder.copy(alpha=.4f))
+        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = VECyanBright, unfocusedBorderColor = VEBlueBorder.copy(alpha=.9f), focusedTextColor = VEText, unfocusedTextColor = VEText, disabledTextColor = Color(0xFF7FA7C4), disabledBorderColor = VEBlueBorder.copy(alpha=.65f), focusedLabelColor = VECyanSoft, unfocusedLabelColor = VEText2, disabledLabelColor = Color(0xFF6F94AE), focusedLeadingIconColor = VECyanSoft, unfocusedLeadingIconColor = VEText2, disabledLeadingIconColor = Color(0xFF6F94AE))
     )
 }
 
