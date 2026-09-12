@@ -19,7 +19,12 @@ on:
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/HiddenWindowsProcess.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/YtDlpUpdater.kt'
       - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorEngine.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorPreview.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorProcess.kt'
       - 'tools/integrate-v8-extractor-tab.py'
+      - 'tools/integrate-video-editor-tab.py'
       - 'tools/patch-extractor-generic-html.py'
       - 'tools/patch-extractor-live-current-point.py'
       - 'tools/patch-extractor-youtube-live-status.py'
@@ -238,13 +243,13 @@ jobs:
           $zip='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip'
           $sha='Monitor-de-Noticias-V8-Extrator-Videos-v3.0.1-Windows-Portable.zip.sha256'
           $buildSha='${{ github.sha }}'
-          $notes="Preview visual: Extrator com layout naval/HUD da Imagem 1 e Editor PDF com layout da Imagem 2, preservando as funções existentes. Extrator com cinco binários portáteis, subprocessos ocultos, YouTube Live, H.264, R7/Record, Globoplay interno e atualizador seguro. Proxy próprio do Extrator removido. Build SHA: $buildSha."
+          $notes="Preview visual: Extrator com layout naval/HUD da Imagem 1, Editor PDF com layout da Imagem 2 e Editor de Vídeo com layout profissional inspirado na referência VideoMaster PRO, preservando os motores e funções existentes. Extrator com cinco binários portáteis, subprocessos ocultos, YouTube Live, H.264, R7/Record, Globoplay interno e atualizador seguro. Editor de Vídeo com preview, timeline visual, IN/OUT e exportação por corte preciso. Build SHA: $buildSha."
           if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){
             gh release upload $tag $zip $sha --repo tysudess/noticias-monitor --clobber
             if($LASTEXITCODE -ne 0){throw 'Falha ao substituir assets da preview; release anterior foi preservada.'}
-            gh release edit $tag --repo tysudess/noticias-monitor --target work/v8-extrator-v301-tab --prerelease --title 'Monitor V8 + Extrator de Vídeos v3.0.1 — Preview Portable' --notes $notes
+            gh release edit $tag --repo tysudess/noticias-monitor --target work/v8-extrator-v301-tab --prerelease --title 'Monitor V8 + Extrator + Editor de Vídeo — Preview Portable' --notes $notes
           } else {
-            gh release create $tag $zip $sha --repo tysudess/noticias-monitor --target work/v8-extrator-v301-tab --prerelease --title 'Monitor V8 + Extrator de Vídeos v3.0.1 — Preview Portable' --notes $notes
+            gh release create $tag $zip $sha --repo tysudess/noticias-monitor --target work/v8-extrator-v301-tab --prerelease --title 'Monitor V8 + Extrator + Editor de Vídeo — Preview Portable' --notes $notes
           }
 
       - name: Upload artifact
