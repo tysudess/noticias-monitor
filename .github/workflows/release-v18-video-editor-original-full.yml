@@ -6,6 +6,9 @@ on:
       - work/v18-video-editor-original-full
     paths:
       - '.github/workflows/release-v18-video-editor-original-full.yml'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt'
+      - 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/LegacyVideoEditorHostController.kt'
+      - 'desktop/src/main/python/video_editor_full_host.py'
 
 permissions:
   contents: write
