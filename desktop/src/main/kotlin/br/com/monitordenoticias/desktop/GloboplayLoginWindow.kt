@@ -17,6 +17,7 @@ import javax.swing.JTextArea
 import javax.swing.SwingUtilities
 import javax.swing.filechooser.FileNameExtensionFilter
 
+// WebView removido intencionalmente: o Globoplay não renderiza de forma confiável no JavaFX WebView.
 internal class GloboplayLoginWindow(
     private val owner: Window?,
     private val engine: ExtractorVideoEngine,
