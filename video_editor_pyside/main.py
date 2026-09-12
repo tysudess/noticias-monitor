@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from PySide6.QtCore import Qt, QUrl, QRectF, Signal
-from PySide6.QtGui import QAction, QBrush, QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
@@ -46,7 +46,6 @@ BLUE = "#168fff"
 BLUE_2 = "#37a6ff"
 GREEN = "#4ed69e"
 RED = "#e25f65"
-CYAN = "#38dde8"
 
 
 def format_time(ms: int) -> str:
@@ -82,7 +81,7 @@ def discover_app_root() -> Path:
     candidates = [exe_dir, exe_dir.parent, exe_dir.parent.parent, exe_dir.parent.parent.parent, cwd, cwd.parent]
     seen = set()
     for candidate in candidates:
-        if not candidate or candidate in seen:
+        if candidate in seen:
             continue
         seen.add(candidate)
         if (candidate / "bin" / "ffmpeg.exe").exists() or (candidate / "MonitorDeNoticias.exe").exists():
@@ -133,11 +132,11 @@ def parse_fps(value: str) -> float:
         return 0.0
     try:
         if "/" in value:
-            a, b = value.split("/", 1)
-            den = float(b)
-            if den == 0:
+            num, den = value.split("/", 1)
+            den_f = float(den)
+            if den_f == 0:
                 return 0.0
-            return float(a) / den
+            return float(num) / den_f
         return float(value)
     except Exception:
         return 0.0
@@ -145,16 +144,14 @@ def parse_fps(value: str) -> float:
 
 def probe_video(path: Path) -> VideoInfo:
     if not FFPROBE.exists():
-        return VideoInfo(0, 0, 0, 0.0, "video", None)
-    command = [
-        str(FFPROBE),
-        "-v", "error",
-        "-print_format", "json",
-        "-show_format",
-        "-show_streams",
-        str(path),
-    ]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=60, **hide_console_kwargs())
+        raise RuntimeError(f"ffprobe.exe não encontrado em {BIN_DIR}")
+    result = subprocess.run(
+        [str(FFPROBE), "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        **hide_console_kwargs(),
+    )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "Falha ao analisar vídeo.")
     data = json.loads(result.stdout)
@@ -164,7 +161,8 @@ def probe_video(path: Path) -> VideoInfo:
     video_codec = "video"
     audio_codec: Optional[str] = None
     for stream in data.get("streams", []):
-        if stream.get("codec_type") == "video" and video_codec == "video":
+        codec_type = stream.get("codec_type")
+        if codec_type == "video" and video_codec == "video":
             video_codec = (stream.get("codec_name") or "video").lower()
             width = int(stream.get("width") or 0)
             height = int(stream.get("height") or 0)
@@ -173,8 +171,10 @@ def probe_video(path: Path) -> VideoInfo:
                 duration = max(duration, float(stream.get("duration") or 0.0))
             except Exception:
                 pass
-        elif stream.get("codec_type") == "audio" and not audio_codec:
+        elif codec_type == "audio" and not audio_codec:
             audio_codec = (stream.get("codec_name") or "audio").lower()
+    if duration <= 0:
+        raise RuntimeError("Não foi possível determinar a duração do vídeo.")
     return VideoInfo(int(duration * 1000), width, height, fps, video_codec, audio_codec)
 
 
@@ -187,7 +187,6 @@ class TimelineWidget(QWidget):
         self.clips: List[Clip] = []
         self.playhead_ms = 0
         self.selected_index = -1
-        self.pixels_per_second = 8.0
         self.setMinimumHeight(170)
         self.setMouseTracking(True)
         self.setCursor(Qt.PointingHandCursor)
@@ -197,7 +196,6 @@ class TimelineWidget(QWidget):
 
     def set_clips(self, clips: List[Clip]) -> None:
         self.clips = clips
-        self.updateGeometry()
         self.update()
 
     def set_playhead(self, ms: int) -> None:
@@ -207,10 +205,6 @@ class TimelineWidget(QWidget):
     def set_selected(self, index: int) -> None:
         self.selected_index = index
         self.update()
-
-    def sizeHint(self):  # noqa: N802 - Qt naming
-        width = max(900, int((self.total_duration() / 1000.0) * self.pixels_per_second) + 220)
-        return super().sizeHint().expandedTo(self.minimumSizeHint()).grownBy(self.contentsMargins()).expandedTo(self.minimumSize()).boundedTo(self.maximumSize()).expandedTo(self.minimumSize()).expandedTo(self.minimumSize()) if False else self.minimumSizeHint().expandedTo(self.minimumSize())
 
     def _timeline_rect(self) -> QRectF:
         return QRectF(170, 35, max(650, self.width() - 190), 100)
@@ -241,7 +235,7 @@ class TimelineWidget(QWidget):
             cursor += width
         return -1
 
-    def paintEvent(self, event):  # noqa: N802 - Qt naming
+    def paintEvent(self, event):  # noqa: N802
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -250,7 +244,7 @@ class TimelineWidget(QWidget):
         rect = self._timeline_rect()
         painter.setPen(QPen(QColor(BORDER), 1))
         painter.setBrush(QBrush(QColor("#0a1320")))
-        painter.drawRoundedRect(rect.adjusted(0, 0, 0, 0), 4, 4)
+        painter.drawRoundedRect(rect, 4, 4)
 
         painter.setFont(QFont("Segoe UI", 9))
         painter.setPen(QColor(MUTED))
@@ -258,39 +252,36 @@ class TimelineWidget(QWidget):
         painter.drawText(18, 110, "♫  Áudio 1")
 
         total = max(1, self.total_duration())
-        ruler_y = 27
         marks = 6 if total > 60000 else 5
         for i in range(marks + 1):
             t = int(total * i / max(1, marks))
             x = self._x_for_time(t)
             painter.setPen(QPen(QColor(BORDER), 1))
-            painter.drawLine(int(x), ruler_y, int(x), 135)
+            painter.drawLine(int(x), 27, int(x), 135)
             painter.setPen(QColor(MUTED))
             painter.drawText(int(x) + 4, 25, format_time(t))
 
-        if self.clips:
+        if not self.clips:
+            painter.setPen(QColor(FADED))
+            painter.drawText(rect, Qt.AlignCenter, "Adicione vídeos para aparecerem na timeline")
+        else:
             cursor = rect.left()
             for index, clip in enumerate(self.clips):
                 width = max(28.0, rect.width() * (clip.duration_ms / total))
                 video_rect = QRectF(cursor + 3, 50, width - 6, 36)
                 audio_rect = QRectF(cursor + 3, 96, width - 6, 28)
                 selected = index == self.selected_index
-
                 painter.setPen(QPen(QColor(BLUE_2 if selected else BORDER), 2 if selected else 1))
                 painter.setBrush(QBrush(QColor(BLUE if selected else "#123d6a")))
                 painter.drawRoundedRect(video_rect, 4, 4)
                 painter.setPen(QColor(TEXT))
                 painter.drawText(video_rect.adjusted(8, 0, -8, 0), Qt.AlignVCenter | Qt.AlignLeft, f"{index + 1}. {clip.path.name}")
-
                 painter.setPen(QPen(QColor("#0b777b"), 1))
                 painter.setBrush(QBrush(QColor(0, 160, 170, 65)))
                 painter.drawRoundedRect(audio_rect, 4, 4)
                 painter.setPen(QColor(MUTED))
                 painter.drawText(audio_rect, Qt.AlignCenter, "Áudio original" if clip.info.has_audio else "Sem áudio")
                 cursor += width
-        else:
-            painter.setPen(QColor(FADED))
-            painter.drawText(rect, Qt.AlignCenter, "Adicione vídeos para aparecerem na timeline")
 
         play_x = self._x_for_time(self.playhead_ms)
         painter.setPen(QPen(QColor(BLUE_2), 3))
@@ -298,7 +289,7 @@ class TimelineWidget(QWidget):
         painter.setBrush(QBrush(QColor(BLUE_2)))
         painter.drawRoundedRect(QRectF(play_x - 4, 32, 8, 9), 3, 3)
 
-    def mousePressEvent(self, event):  # noqa: N802 - Qt naming
+    def mousePressEvent(self, event):  # noqa: N802
         x = float(event.position().x())
         y = float(event.position().y())
         index = self._clip_at(x, y)
@@ -316,7 +307,6 @@ class MainWindow(QMainWindow):
         self.resize(1600, 920)
         self.clips: List[Clip] = []
         self.selected_index = -1
-        self.sequence_mode = False
         self.updating_slider = False
 
         self.player = QMediaPlayer(self)
@@ -335,6 +325,9 @@ class MainWindow(QMainWindow):
         self.apply_theme()
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Pronto. Abra um ou mais vídeos.")
+
+    def is_playing(self) -> bool:
+        return self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
 
     def apply_theme(self) -> None:
         self.setStyleSheet(f"""
@@ -385,15 +378,15 @@ class MainWindow(QMainWindow):
         top_l.addWidget(logo)
         top_l.addLayout(title_box)
         top_l.addStretch(1)
-        self.btn_open = QPushButton("▭  Abrir Vídeo")
-        self.btn_open.clicked.connect(self.open_files)
-        top_l.addWidget(self.btn_open)
-        self.btn_save = QPushButton("▣  Salvar Projeto")
-        self.btn_save.clicked.connect(lambda: self.info_box("Esta função não existe no motor atual: Salvar Projeto."))
-        top_l.addWidget(self.btn_save)
-        self.btn_settings = QPushButton("⚙  Configurações")
-        self.btn_settings.clicked.connect(lambda: self.info_box("Esta função não existe no motor atual: Configurações."))
-        top_l.addWidget(self.btn_settings)
+        btn_open = QPushButton("▭  Abrir Vídeo")
+        btn_open.clicked.connect(self.open_files)
+        top_l.addWidget(btn_open)
+        btn_save = QPushButton("▣  Salvar Projeto")
+        btn_save.clicked.connect(lambda: self.info_box("Esta função não existe no motor atual: Salvar Projeto."))
+        top_l.addWidget(btn_save)
+        btn_settings = QPushButton("⚙  Configurações")
+        btn_settings.clicked.connect(lambda: self.info_box("Esta função não existe no motor atual: Configurações."))
+        top_l.addWidget(btn_settings)
         main.addWidget(top, 0)
 
         center = QHBoxLayout()
@@ -478,9 +471,9 @@ class MainWindow(QMainWindow):
         prev_header.addWidget(prev_title)
         prev_header.addWidget(self.preview_meta)
         prev_header.addStretch(1)
-        self.engine_badge = QLabel("QMediaPlayer")
-        self.engine_badge.setStyleSheet(f"color:{MUTED}; background:#09121f; border:1px solid {BORDER}; border-radius:6px; padding:7px 12px;")
-        prev_header.addWidget(self.engine_badge)
+        engine_badge = QLabel("QMediaPlayer")
+        engine_badge.setStyleSheet(f"color:{MUTED}; background:#09121f; border:1px solid {BORDER}; border-radius:6px; padding:7px 12px;")
+        prev_header.addWidget(engine_badge)
         preview_l.addLayout(prev_header)
         self.video_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         preview_l.addWidget(self.video_widget, 1)
@@ -546,12 +539,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(text)
 
     def open_files(self) -> None:
-        files, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Abrir vídeos",
-            str(Path.home()),
-            "Vídeos (*.mp4 *.mkv *.webm *.mov *.avi *.m4v)",
-        )
+        files, _ = QFileDialog.getOpenFileNames(self, "Abrir vídeos", str(Path.home()), "Vídeos (*.mp4 *.mkv *.webm *.mov *.avi *.m4v)")
         if not files:
             return
         added = 0
@@ -563,8 +551,6 @@ class MainWindow(QMainWindow):
                 continue
             try:
                 info = probe_video(path)
-                if info.duration_ms <= 0:
-                    raise RuntimeError("Não foi possível determinar a duração.")
                 self.clips.append(Clip(path=path, info=info))
                 added += 1
             except Exception as exc:
@@ -580,7 +566,8 @@ class MainWindow(QMainWindow):
     def refresh_media(self) -> None:
         self.media_list.clear()
         for index, clip in enumerate(self.clips):
-            item = QListWidgetItem(f"{index + 1}. {clip.path.name}\n{clip.info.width}×{clip.info.height} • {format_time(clip.duration_ms)} • {'áudio' if clip.info.has_audio else 'sem áudio'}")
+            audio = "áudio" if clip.info.has_audio else "sem áudio"
+            item = QListWidgetItem(f"{index + 1}. {clip.path.name}\n{clip.info.width}×{clip.info.height} • {format_time(clip.duration_ms)} • {audio}")
             item.setData(Qt.UserRole, index)
             self.media_list.addItem(item)
         self.media_count.setText(f"{len(self.clips)} clipe(s)")
@@ -592,8 +579,7 @@ class MainWindow(QMainWindow):
         items = self.media_list.selectedItems()
         if not items:
             return
-        index = int(items[0].data(Qt.UserRole))
-        self.select_clip(index)
+        self.select_clip(int(items[0].data(Qt.UserRole)))
 
     def select_clip(self, index: int) -> None:
         if not (0 <= index < len(self.clips)):
@@ -604,13 +590,14 @@ class MainWindow(QMainWindow):
             self.media_list.setCurrentRow(index)
         clip = self.clips[index]
         self.preview_meta.setText(f"{clip.info.width}×{clip.info.height} • {clip.info.fps:.2f} fps")
+        audio = "Sim - " + clip.info.audio_codec.upper() if clip.info.audio_codec else "Não"
         self.info_label.setText(
             f"Arquivo: {clip.path.name}\n"
             f"Duração: {format_time(clip.duration_ms)}\n"
             f"Resolução: {clip.info.width}×{clip.info.height}\n"
             f"FPS: {clip.info.fps:.2f}\n"
             f"Codec: {clip.info.video_codec.upper()}\n"
-            f"Áudio: {'Sim - ' + clip.info.audio_codec.upper() if clip.info.audio_codec else 'Não'}"
+            f"Áudio: {audio}"
         )
         self.load_clip(index, autoplay=False)
 
@@ -657,7 +644,7 @@ class MainWindow(QMainWindow):
         global_ms = max(0, min(int(global_ms), self.total_duration()))
         index, local = self.clip_at_global(global_ms)
         if index != self.selected_index:
-            self.load_clip(index, autoplay=self.player.playbackState() == QMediaPlayer.PlayingState)
+            self.load_clip(index, autoplay=self.is_playing())
         self.player.setPosition(local)
         self.timeline.set_playhead(global_ms)
         self.current_label.setText(format_time(global_ms))
@@ -665,15 +652,14 @@ class MainWindow(QMainWindow):
             self.slider.setValue(global_ms)
 
     def slider_seek_released(self) -> None:
-        value = self.slider.value()
         self.updating_slider = False
-        self.seek_global(value)
+        self.seek_global(self.slider.value())
 
     def toggle_play(self) -> None:
         if not self.clips:
             self.statusBar().showMessage("Abra um vídeo antes de reproduzir.")
             return
-        if self.player.playbackState() == QMediaPlayer.PlayingState:
+        if self.is_playing():
             self.player.pause()
             self.play_btn.setText("▶")
             return
@@ -693,7 +679,7 @@ class MainWindow(QMainWindow):
             return
         clip = self.clips[self.selected_index]
         if local_ms >= clip.end_ms:
-            if self.player.playbackState() == QMediaPlayer.PlayingState:
+            if self.is_playing():
                 self.play_next_clip()
             return
         global_ms = self.global_start_for_clip(self.selected_index) + max(0, local_ms - clip.start_ms)
@@ -702,7 +688,7 @@ class MainWindow(QMainWindow):
         self.slider.setValue(global_ms)
 
     def on_media_status_changed(self, status) -> None:
-        if status == QMediaPlayer.EndOfMedia and self.player.playbackState() == QMediaPlayer.PlayingState:
+        if status == QMediaPlayer.MediaStatus.EndOfMedia and self.is_playing():
             self.play_next_clip()
 
     def play_next_clip(self) -> None:
@@ -715,9 +701,10 @@ class MainWindow(QMainWindow):
         self.load_clip(next_index, autoplay=True)
         self.media_list.setCurrentRow(next_index)
 
-    def on_player_error(self, error, error_string: str) -> None:
-        if error_string:
-            self.statusBar().showMessage(f"Erro do player QtMultimedia: {error_string}")
+    def on_player_error(self, error, error_string: str = "") -> None:
+        message = error_string or self.player.errorString()
+        if message:
+            self.statusBar().showMessage(f"Erro do player QtMultimedia: {message}")
 
     def toggle_mute(self) -> None:
         muted = self.audio.isMuted()
@@ -732,24 +719,17 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "FFmpeg ausente", f"ffmpeg.exe não encontrado em {BIN_DIR}")
             return
         clip = self.clips[self.selected_index]
-        out = EXPORTS_DIR / f"{clip.path.stem}_corte_{format_time(clip.start_ms).replace(':','-').replace('.','-')}_{format_time(clip.end_ms).replace(':','-').replace('.','-')}.mp4"
+        stamp_in = format_time(clip.start_ms).replace(':', '-').replace('.', '-')
+        stamp_out = format_time(clip.end_ms).replace(':', '-').replace('.', '-')
+        out = EXPORTS_DIR / f"{clip.path.stem}_corte_{stamp_in}_{stamp_out}.mp4"
         command = [
-            str(FFMPEG),
-            "-y",
-            "-i", str(clip.path),
+            str(FFMPEG), "-y", "-i", str(clip.path),
             "-ss", seconds_arg(clip.start_ms),
             "-t", seconds_arg(clip.duration_ms),
-            "-map", "0:v:0",
-            "-map", "0:a?",
+            "-map", "0:v:0", "-map", "0:a?",
             "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "20",
-            "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-b:a", "160k",
-            "-movflags", "+faststart",
-            str(out),
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(out),
         ]
         self.statusBar().showMessage("Exportando trecho selecionado...")
         try:
