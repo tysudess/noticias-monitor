@@ -25,9 +25,9 @@ private object VideoEditorJavaFxToolkit {
         if (initialized.get()) return
         synchronized(lock) {
             if (initialized.get()) return
-            val startToolkit = { JFXPanel() }
+            val startToolkit = Runnable { JFXPanel() }
             if (SwingUtilities.isEventDispatchThread()) {
-                startToolkit()
+                startToolkit.run()
             } else {
                 SwingUtilities.invokeAndWait(startToolkit)
             }
