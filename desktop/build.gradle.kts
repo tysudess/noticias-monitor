@@ -48,13 +48,15 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
     implementation("org.jsoup:jsoup:1.18.3")
     implementation("org.json:json:20240303")
+    implementation("net.java.dev.jna:jna:5.14.0")
+    implementation("net.java.dev.jna:jna-platform:5.14.0")
     implementation("org.xerial:sqlite-jdbc:3.46.1.3")
     implementation("org.apache.pdfbox:pdfbox:3.0.3")
     implementation("com.twelvemonkeys.imageio:imageio-webp:3.12.0")
     implementation("com.twelvemonkeys.imageio:imageio-tiff:3.12.0")
     implementation("net.sf.kxml:kxml2:2.3.0")
 
-    // JavaFX é compartilhado pelo login Globoplay e pelo preview embutido do Editor de Vídeo.
+    // JavaFX continua disponível para recursos legados do Monitor, como o login Globoplay.
     implementation("org.openjfx:javafx-base:21.0.10:win")
     implementation("org.openjfx:javafx-graphics:21.0.10:win")
     implementation("org.openjfx:javafx-controls:21.0.10:win")
