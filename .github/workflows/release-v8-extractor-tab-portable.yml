@@ -67,17 +67,15 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Aplicar integração completa do Extrator
-        timeout-minutes: 10
+      - name: Aplicar workspaces do Extrator e Editor
+        timeout-minutes: 5
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          python tools/integrate-v8-extractor-tab.py
-          if($LASTEXITCODE -ne 0){throw 'Falha em integrate-v8-extractor-tab.py'}
-          python tools/patch-extractor-generic-html.py
-          if($LASTEXITCODE -ne 0){throw 'Falha em patch-extractor-generic-html.py'}
-          python tools/patch-extractor-hidden-process.py
-          if($LASTEXITCODE -ne 0){throw 'Falha em patch-extractor-hidden-process.py'}
+          python tools/patch-extractor-dedicated-workspace.py
+          if($LASTEXITCODE -ne 0){throw 'Falha em patch-extractor-dedicated-workspace.py'}
+          python tools/integrate-video-editor-tab.py
+          if($LASTEXITCODE -ne 0){throw 'Falha em integrate-video-editor-tab.py'}
 
       - name: Garantir que lógica base do Editor PDF não mudou pelo Extrator
         shell: pwsh
