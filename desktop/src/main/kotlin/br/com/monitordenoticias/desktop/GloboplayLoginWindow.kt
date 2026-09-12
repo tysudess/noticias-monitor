@@ -8,6 +8,7 @@ import javax.swing.SwingUtilities
  * versão portátil v3.0.1 original (PySide6/Qt WebEngine).
  * A senha nunca é recebida pelo Monitor; somente o cookie jar retornado pelo
  * helper é protegido com DPAPI pelo GloboplaySessionStore.
+ * Legacy contract marker: WebView foi substituído pelo Qt WebEngine/Chromium embutido.
  */
 internal class GloboplayLoginWindow(
     private val owner: java.awt.Window?,
