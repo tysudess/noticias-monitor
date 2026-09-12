@@ -1,0 +1,182 @@
+name: Release V18 Exact Original Video Editor
+
+on:
+  push:
+    branches:
+      - work/v18-video-editor-original-full
+    paths:
+      - '.github/workflows/release-v18-video-editor-original-full.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v18-video-editor-original-full
+          fetch-depth: 0
+
+      - name: Protect unrelated approved modules
+        shell: pwsh
+        run: |
+          $changed = @(git diff --name-only work/v17-qt-preview-engine...HEAD)
+          $forbidden = $changed | Where-Object { $_ -match 'ExtractorVideo|PdfEditor|PDFEditor|pdf_editor' }
+          if ($forbidden) {
+            Write-Host ($forbidden -join "`n")
+            throw 'V18 alterou Extrator de Vídeos ou Editor de PDF. Build bloqueado.'
+          }
+          $allowed = $changed | Where-Object { $_ -notmatch 'VideoEditor|video_editor|LegacyVideoEditor|release-v18' }
+          if ($allowed) {
+            Write-Host 'Arquivos adicionais alterados:'
+            Write-Host ($allowed -join "`n")
+          }
+
+      - name: Fetch exact original editor sources
+        shell: pwsh
+        run: |
+          $legacyCommit = '92f031c22cf8c23c2f5dd15a1857a6df4186b97e'
+          New-Item -ItemType Directory -Force -Path legacy_build | Out-Null
+          $base = "https://raw.githubusercontent.com/tysudess/extrator-video-windows/$legacyCommit"
+          Invoke-WebRequest "$base/advanced_editor.py" -OutFile 'legacy_build/advanced_editor.py'
+          Invoke-WebRequest "$base/advanced_editor_v300.py" -OutFile 'legacy_build/advanced_editor_v300.py'
+          Invoke-WebRequest "$base/range_slider.py" -OutFile 'legacy_build/range_slider.py'
+          Invoke-WebRequest "$base/main.py" -OutFile 'legacy_build/main.py'
+          Copy-Item 'desktop/src/main/python/video_editor_full_host.py' 'legacy_build/video_editor_full_host.py' -Force
+
+          $expected = @{
+            'legacy_build/advanced_editor.py' = '24c723c9f40946d1c13de0b9e23e55a182581e2d'
+            'legacy_build/advanced_editor_v300.py' = '1165b87cce01a282b783bb3d0a83ede1de771e3d'
+            'legacy_build/range_slider.py' = '9cc93a9cbb52b386c4c3823cb6a2748a68f120e0'
+            'legacy_build/main.py' = '489c3cd6b87d57a397c7a3ba804631b5e59a1ba5'
+          }
+          foreach ($entry in $expected.GetEnumerator()) {
+            $actual = (git hash-object $entry.Key).Trim()
+            if ($actual -ne $entry.Value) { throw "Fonte antiga divergente: $($entry.Key) => $actual" }
+          }
+
+      - name: Extract exact legacy application stylesheet
+        shell: pwsh
+        run: |
+          @'
+          import ast
+          from pathlib import Path
+
+          source = Path('legacy_build/main.py').read_text(encoding='utf-8-sig')
+          module = ast.parse(source)
+          value = None
+          for node in module.body:
+              if isinstance(node, ast.Assign):
+                  for target in node.targets:
+                      if isinstance(target, ast.Name) and target.id == 'FUTURE_STYLESHEET':
+                          value = ast.literal_eval(node.value)
+                          break
+              if value is not None:
+                  break
+          if not isinstance(value, str) or not value.strip():
+              raise SystemExit('FUTURE_STYLESHEET não encontrado no programa antigo.')
+          Path('legacy_build/legacy_theme.py').write_text('FUTURE_STYLESHEET = ' + repr(value) + '\n', encoding='utf-8')
+          '@ | Set-Content 'extract_legacy_theme.py' -Encoding utf8
+          python extract_legacy_theme.py
+
+      - name: Validate exact editor contract
+        shell: pwsh
+        run: |
+          $base = Get-Content 'legacy_build/advanced_editor.py' -Raw
+          $v300 = Get-Content 'legacy_build/advanced_editor_v300.py' -Raw
+          $range = Get-Content 'legacy_build/range_slider.py' -Raw
+          $hostSource = Get-Content 'legacy_build/video_editor_full_host.py' -Raw
+          if ($base -notmatch 'class AdvancedVideoEditorWidget\(QWidget\)') { throw 'AdvancedVideoEditorWidget original ausente.' }
+          if ($base -notmatch 'QMediaPlayer' -or $base -notmatch 'QAudioOutput' -or $base -notmatch 'QVideoWidget') { throw 'Motor multimídia original ausente.' }
+          if ($base -notmatch 'setInterval\(55\)') { throw 'Timer original de 55 ms ausente.' }
+          if ($base -notmatch 'class SmartExportWorker\(QThread\)') { throw 'SmartExportWorker original ausente.' }
+          if ($base -notmatch 'class TimelineWidget\(QWidget\)') { throw 'TimelineWidget original ausente.' }
+          if ($v300 -notmatch 'class AdvancedVideoEditorWidget300') { throw 'Editor v3.0 com undo ausente.' }
+          if ($range -notmatch 'class RangeSlider\(QWidget\)') { throw 'RangeSlider original ausente.' }
+          if ($hostSource -notmatch 'AdvancedVideoEditorWidget300') { throw 'Host não está usando o editor final original.' }
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install exact legacy runtime
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install PySide6==6.9.1 pyinstaller==6.15.0
+
+      - name: Build exact legacy editor host
+        shell: pwsh
+        run: |
+          python -m py_compile legacy_build/advanced_editor.py legacy_build/advanced_editor_v300.py legacy_build/range_slider.py legacy_build/legacy_theme.py legacy_build/video_editor_full_host.py
+          pyinstaller --noconfirm --clean --windowed --onedir --name video-editor-host --contents-directory _internal --paths legacy_build legacy_build/video_editor_full_host.py
+          if (-not (Test-Path 'dist/video-editor-host/video-editor-host.exe')) { throw 'video-editor-host.exe não foi gerado.' }
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Monitor tab container
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Rebuild portable without touching extractor
+        shell: pwsh
+        run: |
+          $baseUrl = 'https://github.com/tysudess/noticias-monitor/releases/download/v16-video-preview-cursor-filename-20260912/Monitor-de-Noticias-V16-Editor-de-Video-Preview-Cursor-Nome-Windows-Portable.zip'
+          Invoke-WebRequest -Uri $baseUrl -OutFile base.zip
+          Expand-Archive base.zip -DestinationPath base -Force
+
+          $newRoot = 'desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if (-not (Test-Path "$newRoot/MonitorDeNoticias.exe")) { throw 'Novo Monitor não foi gerado.' }
+          Copy-Item "$newRoot/*" 'base' -Recurse -Force
+
+          Remove-Item 'base/bin/video-preview-host' -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item 'base/bin/video-preview-host.exe' -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path 'base/bin/video-editor-host' | Out-Null
+          Copy-Item 'dist/video-editor-host/*' 'base/bin/video-editor-host' -Recurse -Force
+
+          foreach ($required in @(
+            'MonitorDeNoticias.exe',
+            'bin/ffmpeg.exe',
+            'bin/ffprobe.exe',
+            'bin/video-editor-host/video-editor-host.exe'
+          )) {
+            if (-not (Test-Path (Join-Path 'base' $required))) { throw "Portable incompleto: $required" }
+          }
+
+      - name: Smoke-test original editor host
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'base/bin/video-editor-host/video-editor-host.exe'
+          $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          Start-Sleep -Seconds 6
+          if ($p.HasExited) { throw "Editor original encerrou prematuramente com código $($p.ExitCode)." }
+          Stop-Process -Id $p.Id -Force
+
+      - name: Package and publish V18
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = 'Monitor-de-Noticias-V18-Editor-de-Video-Original-Completo-Windows-Portable.zip'
+          Compress-Archive -Path 'base/*' -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          $tag = 'v18-video-editor-original-full-20260912'
+          if (gh release view $tag --repo tysudess/noticias-monitor 2>$null) {
+            gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag
+          }
+          gh release create $tag $zip "$zip.sha256" --repo tysudess/noticias-monitor --target work/v18-video-editor-original-full --title 'Monitor V18 — Editor de Vídeo Original Completo — Windows Portable' --notes 'A aba Editor de Vídeo agora hospeda o AdvancedVideoEditorWidget300 original do programa extrator-video-windows v3.0.1, usando exatamente advanced_editor.py, advanced_editor_v300.py e range_slider.py do commit 92f031c22cf8c23c2f5dd15a1857a6df4186b97e. O Extrator de Vídeos e o Editor de PDF não foram alterados.'
+          Write-Host "SHA256=$hash"
