@@ -19,11 +19,20 @@ import javax.swing.SwingUtilities
 
 private object VideoEditorJavaFxToolkit {
     private val initialized = AtomicBoolean(false)
+    private val lock = Any()
 
     fun ensureStarted() {
-        if (initialized.compareAndSet(false, true)) {
-            JFXPanel()
-            Platform.setImplicitExit(false)
+        if (initialized.get()) return
+        synchronized(lock) {
+            if (initialized.get()) return
+            val startToolkit = { JFXPanel() }
+            if (SwingUtilities.isEventDispatchThread()) {
+                startToolkit()
+            } else {
+                SwingUtilities.invokeAndWait(startToolkit)
+            }
+            Platform.runLater { Platform.setImplicitExit(false) }
+            initialized.set(true)
         }
     }
 }
@@ -39,14 +48,26 @@ internal class VideoEditorPreviewController {
 
     fun attach(target: JFXPanel) {
         VideoEditorJavaFxToolkit.ensureStarted()
+        target.background = java.awt.Color.BLACK
+        target.isOpaque = true
+        target.isDoubleBuffered = true
         panel = target
-        Platform.runLater { Platform.setImplicitExit(false) }
+        Platform.runLater {
+            Platform.setImplicitExit(false)
+            if (target.scene == null) {
+                target.scene = Scene(StackPane().apply { style = "-fx-background-color: #02060B;" }, 960.0, 540.0, javafx.scene.paint.Color.BLACK)
+            }
+        }
     }
 
     fun load(file: File) {
         VideoEditorJavaFxToolkit.ensureStarted()
         Platform.runLater {
             runCatching {
+                val target = panel ?: error("Painel de preview ainda não foi inicializado.")
+                target.background = java.awt.Color.BLACK
+                target.isOpaque = true
+
                 player?.stop()
                 player?.dispose()
 
@@ -56,14 +77,23 @@ internal class VideoEditorPreviewController {
                     isPreserveRatio = true
                     isSmooth = true
                 }
-                val root = StackPane(view).apply { style = "-fx-background-color: #02060B;" }
+                val root = StackPane().apply {
+                    style = "-fx-background-color: #02060B;"
+                    children.add(view)
+                }
                 view.fitWidthProperty().bind(root.widthProperty())
                 view.fitHeightProperty().bind(root.heightProperty())
-                panel?.scene = Scene(root, 960.0, 540.0, javafx.scene.paint.Color.BLACK)
+                val scene = Scene(root, 960.0, 540.0, javafx.scene.paint.Color.BLACK).apply {
+                    fill = javafx.scene.paint.Color.BLACK
+                }
+                target.scene = scene
+                target.revalidate()
+                target.repaint()
                 player = next
 
                 next.setOnReady {
                     val total = next.totalDuration.toMillis().toLong().coerceAtLeast(0L)
+                    next.seek(Duration.ZERO)
                     dispatch { onReady?.invoke(total) }
                 }
                 next.currentTimeProperty().addListener { _, _, value ->
@@ -87,7 +117,14 @@ internal class VideoEditorPreviewController {
 
     fun play() {
         VideoEditorJavaFxToolkit.ensureStarted()
-        Platform.runLater { player?.play() }
+        Platform.runLater {
+            val next = player
+            if (next == null) {
+                dispatch { onError?.invoke("Nenhum preview carregado para reproduzir.") }
+            } else {
+                next.play()
+            }
+        }
     }
 
     fun pause() {
@@ -106,7 +143,7 @@ internal class VideoEditorPreviewController {
             runCatching { player?.stop() }
             runCatching { player?.dispose() }
             player = null
-            panel?.scene = null
+            panel?.scene = Scene(StackPane().apply { style = "-fx-background-color: #02060B;" }, 960.0, 540.0, javafx.scene.paint.Color.BLACK)
         }
     }
 
@@ -123,7 +160,11 @@ internal fun VideoEditorPreview(controller: VideoEditorPreviewController, modifi
     SwingPanel(
         factory = {
             VideoEditorJavaFxToolkit.ensureStarted()
-            JFXPanel().also(controller::attach)
+            JFXPanel().apply {
+                background = java.awt.Color.BLACK
+                isOpaque = true
+                isDoubleBuffered = true
+            }.also(controller::attach)
         },
         modifier = modifier,
         background = Color.Black
