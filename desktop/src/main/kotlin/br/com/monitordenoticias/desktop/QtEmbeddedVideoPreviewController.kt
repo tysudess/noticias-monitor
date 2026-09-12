@@ -71,10 +71,13 @@ internal class QtEmbeddedVideoPreviewController {
 
     private fun findHostExe(): File {
         val base = File(System.getProperty("user.dir"))
+        val parent = base.parentFile ?: base
         val candidates = listOf(
+            File(base, "bin/video-preview-host/video-preview-host.exe"),
             File(base, "bin/video-preview-host.exe"),
             File(base, "video-preview-host.exe"),
-            File(base.parentFile ?: base, "bin/video-preview-host.exe")
+            File(parent, "bin/video-preview-host/video-preview-host.exe"),
+            File(parent, "bin/video-preview-host.exe")
         )
         return candidates.firstOrNull { it.isFile }
             ?: throw IllegalStateException("video-preview-host.exe não encontrado no Portable.")
