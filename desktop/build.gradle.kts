@@ -60,6 +60,9 @@ dependencies {
     implementation("org.openjfx:javafx-controls:21.0.10:win")
     implementation("org.openjfx:javafx-swing:21.0.10:win")
     implementation("org.openjfx:javafx-web:21.0.10:win")
+
+    // Preview interno do Editor de Vídeo. Sem player ou instalação externa.
+    implementation("org.openjfx:javafx-media:21.0.10:win")
 }
 
 compose.desktop {

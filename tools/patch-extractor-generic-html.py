@@ -79,3 +79,9 @@ paths_patch = ROOT / 'tools/patch-extractor-portable-paths.py'
 if not paths_patch.exists():
     raise SystemExit('patch-extractor-portable-paths.py ausente.')
 runpy.run_path(str(paths_patch), run_name='__main__')
+
+# Integração isolada do Editor de Vídeo: apenas navegação, sem tocar no motor/tela do Extrator.
+video_editor_patch = ROOT / 'tools/integrate-video-editor-tab.py'
+if not video_editor_patch.exists():
+    raise SystemExit('integrate-video-editor-tab.py ausente.')
+runpy.run_path(str(video_editor_patch), run_name='__main__')
