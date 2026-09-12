@@ -72,7 +72,8 @@ private enum class V5Section(val label: String, val subtitle: String, val icon: 
     STOP("Parar buscas", "Interrompa buscas manuais em andamento", Icons.Default.StopCircle),
     SETTINGS("Configurações", "Automação, proxy, inicialização e operação do aplicativo", Icons.Default.Settings),
     PDF_EDITOR("Editor de PDF", "Monte, reorganize, recorte e exporte PDFs e imagens", Icons.Default.PictureAsPdf),
-    EXTRACTOR("Extrator de Vídeos", "Baixe vídeos com o fluxo direto v3.0.1", Icons.Default.Download)
+    EXTRACTOR("Extrator de Vídeos", "Baixe vídeos com o fluxo direto v3.0.1", Icons.Default.Download),
+    VIDEO_EDITOR("Editor de Vídeo", "Edite sequências, cortes e exportações de vídeo", Icons.Default.Movie)
 }
 
 private enum class V5SourceTab { NEWS, VIDEOS, SPECIAL }
@@ -141,12 +142,16 @@ private fun V5App(c: DesktopControllerV5) {
         }
     }
 
-    if (section == V5Section.PDF_EDITOR) {
+    if (section == V5Section.PDF_EDITOR || section == V5Section.VIDEO_EDITOR) {
         Column(Modifier.fillMaxSize().background(V5Bg)) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 V5Sidebar(section, { section = it }, c, tick)
                 Box(Modifier.weight(1f).fillMaxHeight()) {
-                    PdfEditorScreenV2 { section = V5Section.HOME }
+                    when (section) {
+              V5Section.PDF_EDITOR -> PdfEditorScreenV2 { section = V5Section.HOME }
+              V5Section.VIDEO_EDITOR -> VideoEditorScreen { section = V5Section.HOME }
+              else -> Unit
+          }
                 }
             }
             V5Footer(c, tick)
