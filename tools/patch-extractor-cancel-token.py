@@ -30,10 +30,17 @@ new_after = '''            if (downloadToken != operationToken) return@launch\n 
 if old_after in src:
     src = src.replace(old_after, new_after, 1)
 
-old_cancel = '''                            onClick = {\n                                engine.cancel()\n                                busy = false\n                                status = "Download cancelado."\n                            },'''
-new_cancel = '''                            onClick = {\n                                downloadToken += 1L\n                                engine.cancel()\n                                busy = false\n                                status = "Download cancelado."\n                            },'''
-if old_cancel in src:
-    src = src.replace(old_cancel, new_cancel, 1)
+# Layout antigo.
+old_cancel_legacy = '''                            onClick = {\n                                engine.cancel()\n                                busy = false\n                                status = "Download cancelado."\n                            },'''
+new_cancel_legacy = '''                            onClick = {\n                                downloadToken += 1L\n                                engine.cancel()\n                                busy = false\n                                status = "Download cancelado."\n                            },'''
+if old_cancel_legacy in src:
+    src = src.replace(old_cancel_legacy, new_cancel_legacy, 1)
+
+# Layout naval/HUD atual.
+old_cancel_hud = '''                        onCancel = {\n                            engine.cancel()\n                            busy = false\n                            status = "Download cancelado."\n                        },'''
+new_cancel_hud = '''                        onCancel = {\n                            downloadToken += 1L\n                            engine.cancel()\n                            busy = false\n                            status = "Download cancelado."\n                        },'''
+if old_cancel_hud in src:
+    src = src.replace(old_cancel_hud, new_cancel_hud, 1)
 
 SCREEN.write_text(src, encoding='utf-8')
 updated = SCREEN.read_text(encoding='utf-8')
@@ -41,4 +48,4 @@ assert 'mutableLongStateOf(0L)' in updated
 assert 'operationToken' in updated
 assert 'downloadToken != operationToken' in updated
 assert 'downloadToken += 1L' in updated
-print('Cancelamento protegido contra callbacks/resultados obsoletos de downloads anteriores.')
+print('Cancelamento protegido contra callbacks/resultados obsoletos nos layouts clássico e naval.')
