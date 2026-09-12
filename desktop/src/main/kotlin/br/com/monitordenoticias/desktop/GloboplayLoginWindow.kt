@@ -1,43 +1,33 @@
 package br.com.monitordenoticias.desktop
 
-import javafx.application.Platform
-import javafx.embed.swing.JFXPanel
-import javafx.scene.Scene
-import javafx.scene.web.WebView
 import java.awt.BorderLayout
+import java.awt.Desktop
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Window
-import java.net.Authenticator
-import java.net.CookieHandler
-import java.net.CookieManager
-import java.net.CookiePolicy
-import java.net.HttpCookie
-import java.net.PasswordAuthentication
+import java.io.File
 import java.net.URI
 import javax.swing.JButton
 import javax.swing.JDialog
+import javax.swing.JFileChooser
 import javax.swing.JLabel
 import javax.swing.JPanel
+import javax.swing.JScrollPane
+import javax.swing.JTextArea
 import javax.swing.SwingUtilities
+import javax.swing.filechooser.FileNameExtensionFilter
 
 internal class GloboplayLoginWindow(
     private val owner: Window?,
     private val engine: ExtractorVideoEngine,
-    private val proxyUrl: String,
+    @Suppress("UNUSED_PARAMETER") private val proxyUrl: String,
     private val onSessionChanged: (Boolean, String) -> Unit
 ) {
     private val store = GloboplaySessionStore(engine.appDir.toFile())
-    private val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
-    private var previousCookieHandler: CookieHandler? = null
-    private var previousAuthenticator: Authenticator? = null
-    private val previousProxyProperties = linkedMapOf<String, String?>()
     private var dialog: JDialog? = null
+    private var pendingCookies: String? = null
 
     fun open() {
-        if (!Platform.isFxApplicationThread()) {
-            runCatching { Platform.setImplicitExit(false) }
-        }
         SwingUtilities.invokeLater { buildAndShow() }
     }
 
@@ -46,22 +36,42 @@ internal class GloboplayLoginWindow(
             dialog?.toFront()
             return
         }
-        applyNetworkContext()
 
-        val fxPanel = JFXPanel()
-        val status = JLabel("Faça login apenas pela página oficial do Globoplay. O Monitor não armazena sua senha.")
+        val status = JLabel("Use o navegador normal do Windows para fazer login no Globoplay.")
         val openButton = JButton("ABRIR GLOBOPLAY")
+        val importButton = JButton("IMPORTAR COOKIES.TXT")
         val saveButton = JButton("SALVAR SESSÃO E VOLTAR")
         val closeButton = JButton("FECHAR")
 
-        val d = JDialog(owner, "Login Globoplay — Extrator de Vídeos", DialogModality.MODELESS.awtValue).apply {
-            layout = BorderLayout(8, 8)
-            minimumSize = Dimension(980, 720)
-            preferredSize = Dimension(1120, 820)
+        val instructions = JTextArea(
+            """
+            Login seguro do Globoplay
+
+            1. Clique em ABRIR GLOBOPLAY.
+            2. Faça login normalmente no site oficial usando seu navegador.
+            3. Exporte os cookies do Globoplay em formato Netscape (cookies.txt).
+            4. Clique em IMPORTAR COOKIES.TXT e selecione esse arquivo.
+            5. Clique em SALVAR SESSÃO E VOLTAR.
+
+            O Monitor filtra apenas cookies dos domínios Globo/Globoplay e salva a sessão usando a proteção DPAPI do Windows.
+            Sua senha não é lida nem armazenada pelo Monitor.
+            """.trimIndent()
+        ).apply {
+            isEditable = false
+            lineWrap = true
+            wrapStyleWord = true
+            border = null
+        }
+
+        val d = JDialog(owner, "Login Globoplay — Extrator de Vídeos", java.awt.Dialog.ModalityType.MODELESS).apply {
+            layout = BorderLayout(10, 10)
+            minimumSize = Dimension(720, 420)
+            preferredSize = Dimension(820, 480)
             add(status, BorderLayout.NORTH)
-            add(fxPanel, BorderLayout.CENTER)
+            add(JScrollPane(instructions), BorderLayout.CENTER)
             add(JPanel(FlowLayout(FlowLayout.RIGHT)).apply {
                 add(openButton)
+                add(importButton)
                 add(saveButton)
                 add(closeButton)
             }, BorderLayout.SOUTH)
@@ -69,25 +79,50 @@ internal class GloboplayLoginWindow(
         }
         dialog = d
 
-        fun loadHome() {
-            Platform.runLater {
-                val webView = fxPanel.scene?.root as? WebView ?: return@runLater
-                webView.engine.load("https://globoplay.globo.com/")
+        openButton.addActionListener {
+            val result = runCatching {
+                check(Desktop.isDesktopSupported()) { "O navegador padrão do Windows não está disponível." }
+                val desktop = Desktop.getDesktop()
+                check(desktop.isSupported(Desktop.Action.BROWSE)) { "Ação de abrir navegador não está disponível." }
+                desktop.browse(URI("https://globoplay.globo.com/"))
             }
+            status.text = result.fold(
+                onSuccess = { "Globoplay aberto no navegador. Faça login e depois importe o cookies.txt." },
+                onFailure = { "Não foi possível abrir o navegador: ${it.message.orEmpty()}" }
+            )
         }
 
-        Platform.runLater {
-            val webView = WebView()
-            webView.engine.isJavaScriptEnabled = true
-            fxPanel.scene = Scene(webView)
-            webView.engine.load("https://globoplay.globo.com/")
+        importButton.addActionListener {
+            val chooser = JFileChooser(File(System.getProperty("user.home", "."))).apply {
+                dialogTitle = "Selecionar cookies.txt do Globoplay"
+                fileFilter = FileNameExtensionFilter("Arquivo de cookies (*.txt)", "txt")
+                isAcceptAllFileFilterUsed = true
+            }
+            if (chooser.showOpenDialog(d) != JFileChooser.APPROVE_OPTION) return@addActionListener
+
+            val selected = chooser.selectedFile
+            val result = runCatching {
+                require(selected.isFile) { "Arquivo não encontrado." }
+                require(selected.length() in 1..5_000_000) { "Arquivo de cookies vazio ou grande demais." }
+                sanitizeNetscapeCookies(selected.readText(Charsets.UTF_8))
+            }
+            result.fold(
+                onSuccess = { sanitized ->
+                    pendingCookies = sanitized
+                    val count = sanitized.lineSequence().count { it.isNotBlank() && !it.startsWith("# Netscape") && !it.startsWith("# Generated") }
+                    status.text = "$count cookies Globo/Globoplay importados. Agora clique em SALVAR SESSÃO E VOLTAR."
+                },
+                onFailure = {
+                    pendingCookies = null
+                    status.text = "Falha ao importar cookies: ${it.message.orEmpty()}"
+                }
+            )
         }
 
-        openButton.addActionListener { loadHome() }
         saveButton.addActionListener {
-            val netscape = buildNetscapeCookieJar()
-            if (netscape.lineSequence().count { it.isNotBlank() && !it.startsWith("#") } == 0) {
-                status.text = "Nenhum cookie do Globoplay foi capturado. Conclua o login e tente salvar novamente."
+            val netscape = pendingCookies
+            if (netscape.isNullOrBlank()) {
+                status.text = "Importe primeiro um cookies.txt válido do Globoplay."
                 return@addActionListener
             }
             val result = store.saveNetscapeCookies(netscape)
@@ -103,114 +138,43 @@ internal class GloboplayLoginWindow(
                 }
             )
         }
+
         closeButton.addActionListener { close() }
         d.addWindowListener(object : java.awt.event.WindowAdapter() {
-            override fun windowClosed(e: java.awt.event.WindowEvent?) = restoreNetworkContext()
-            override fun windowClosing(e: java.awt.event.WindowEvent?) = restoreNetworkContext()
+            override fun windowClosed(e: java.awt.event.WindowEvent?) {
+                dialog = null
+                pendingCookies = null
+            }
         })
         d.pack()
         d.setLocationRelativeTo(owner)
         d.isVisible = true
     }
 
-    private fun close() {
-        SwingUtilities.invokeLater {
-            dialog?.dispose()
-            dialog = null
-            restoreNetworkContext()
-        }
-    }
-
-    private fun applyNetworkContext() {
-        previousCookieHandler = CookieHandler.getDefault()
-        CookieHandler.setDefault(cookieManager)
-        previousAuthenticator = Authenticator.getDefault()
-
-        val keys = listOf(
-            "http.proxyHost", "http.proxyPort", "https.proxyHost", "https.proxyPort",
-            "socksProxyHost", "socksProxyPort"
-        )
-        keys.forEach { previousProxyProperties[it] = System.getProperty(it) }
-        keys.forEach { System.clearProperty(it) }
-
-        if (proxyUrl.isBlank()) return
-        runCatching {
-            val uri = URI(proxyUrl.trim())
-            val host = uri.host ?: return@runCatching
-            val port = if (uri.port > 0) uri.port else if (uri.scheme.equals("https", true)) 443 else 8080
-            if (uri.scheme.equals("socks5", true) || uri.scheme.equals("socks", true)) {
-                System.setProperty("socksProxyHost", host)
-                System.setProperty("socksProxyPort", port.toString())
-            } else {
-                System.setProperty("http.proxyHost", host)
-                System.setProperty("http.proxyPort", port.toString())
-                System.setProperty("https.proxyHost", host)
-                System.setProperty("https.proxyPort", port.toString())
+    private fun sanitizeNetscapeCookies(raw: String): String {
+        val accepted = raw.lineSequence()
+            .map { it.trimEnd() }
+            .filter { it.isNotBlank() }
+            .filterNot { it.startsWith("#") && !it.startsWith("#HttpOnly_") }
+            .mapNotNull { line ->
+                val fields = line.split('\t')
+                if (fields.size < 7) return@mapNotNull null
+                val domainToken = fields[0]
+                val host = domainToken.removePrefix("#HttpOnly_").trim().trimStart('.').lowercase()
+                if (!isAllowedGloboHost(host)) return@mapNotNull null
+                line
             }
-            val userInfo = uri.userInfo.orEmpty()
-            if (userInfo.isNotBlank()) {
-                val user = userInfo.substringBefore(':')
-                val pass = userInfo.substringAfter(':', "")
-                Authenticator.setDefault(object : Authenticator() {
-                    override fun getPasswordAuthentication(): PasswordAuthentication =
-                        PasswordAuthentication(user, pass.toCharArray())
-                })
-            }
+            .distinct()
+            .toList()
+
+        require(accepted.isNotEmpty()) {
+            "O arquivo não contém cookies dos domínios globo.com/globoplay.com em formato Netscape."
         }
-    }
-
-    private fun restoreNetworkContext() {
-        runCatching { CookieHandler.setDefault(previousCookieHandler) }
-        runCatching { Authenticator.setDefault(previousAuthenticator) }
-        previousProxyProperties.forEach { (key, value) ->
-            if (value == null) System.clearProperty(key) else System.setProperty(key, value)
+        return buildString {
+            appendLine("# Netscape HTTP Cookie File")
+            appendLine("# Generated by Monitor de Notícias — Extrator de Vídeos")
+            accepted.forEach { appendLine(it) }
         }
-    }
-
-    private data class CookieJarEntry(val cookie: HttpCookie, val originHost: String?)
-
-    private fun buildNetscapeCookieJar(): String {
-        val now = System.currentTimeMillis() / 1000L
-        val cookieStore = cookieManager.cookieStore
-        val entries = mutableListOf<CookieJarEntry>()
-
-        cookieStore.cookies.forEach { cookie ->
-            val explicitDomain = cookie.domain.orEmpty()
-            if (explicitDomain.isNotBlank() && isAllowedGloboHost(explicitDomain)) {
-                entries += CookieJarEntry(cookie, null)
-            }
-        }
-
-        cookieStore.getURIs().forEach { uri ->
-            val originHost = uri.host.orEmpty().lowercase().trim('.')
-            if (!isAllowedGloboHost(originHost)) return@forEach
-            cookieStore.get(uri)
-                .filter { it.domain.isNullOrBlank() }
-                .forEach { entries += CookieJarEntry(it, originHost) }
-        }
-
-        val body = entries.asSequence()
-            .filter { it.cookie.name.isNotBlank() }
-            .distinctBy { entry ->
-                val domainKey = entry.cookie.domain?.takeIf { it.isNotBlank() } ?: entry.originHost.orEmpty()
-                listOf(domainKey.lowercase(), entry.cookie.path.orEmpty(), entry.cookie.name).joinToString("\t")
-            }
-            .joinToString("\n") { entry ->
-                val c = entry.cookie
-                val explicitDomain = c.domain?.takeIf { it.isNotBlank() }
-                val domain = if (explicitDomain != null) {
-                    val clean = explicitDomain.trim().trimStart('.')
-                    ".$clean"
-                } else {
-                    entry.originHost ?: error("Cookie host-only sem origem conhecida.")
-                }
-                val includeSubdomains = if (explicitDomain != null) "TRUE" else "FALSE"
-                val path = c.path?.takeIf { it.isNotBlank() } ?: "/"
-                val secure = if (c.secure) "TRUE" else "FALSE"
-                val expires = if (c.maxAge > 0) now + c.maxAge else 0L
-                listOf(domain, includeSubdomains, path, secure, expires.toString(), c.name, c.value).joinToString("\t")
-            }
-        return "# Netscape HTTP Cookie File\n# Generated by Monitor de Notícias — Extrator de Vídeos\n$body\n"
     }
 
     private fun isAllowedGloboHost(value: String): Boolean {
@@ -219,7 +183,11 @@ internal class GloboplayLoginWindow(
             host == "globoplay.com" || host.endsWith(".globoplay.com")
     }
 
-    private enum class DialogModality(val awtValue: java.awt.Dialog.ModalityType) {
-        MODELESS(java.awt.Dialog.ModalityType.MODELESS)
+    private fun close() {
+        SwingUtilities.invokeLater {
+            dialog?.dispose()
+            dialog = null
+            pendingCookies = null
+        }
     }
 }
