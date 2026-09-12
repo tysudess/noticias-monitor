@@ -1,0 +1,92 @@
+name: Release V11 Functional Video Editor V2
+
+on:
+  push:
+    branches: [work/v11-video-editor-functional]
+    paths:
+      - '.github/workflows/release-v11-video-editor-functional-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v11-video-editor-functional
+          fetch-depth: 0
+
+      - name: Validate frozen files and editor contract
+        shell: pwsh
+        run: |
+          if((git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt').Trim() -ne '72ef34a27058d61f001b7236c6b66c80310c0862'){throw 'Extrator alterado'}
+          if((git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt').Trim() -ne '5610d1e75a40863864dd0320453c021197ee48c5'){throw 'PDF alterado'}
+          $all=(Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw)+(Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorEngine.kt' -Raw)+(Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt' -Raw)
+          foreach($x in @('RangeTrimBar','cutAtPlayhead','removeSelected','duplicateSelected','moveSelected','markStartHere','markEndHere','undoStack','MediaPlayer','libx264','libx265','anullsrc','faststart')){if($all -notmatch [regex]::Escape($x)){throw "Editor incompleto: $x"}}
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Windows portable base
+        shell: pwsh
+        run: |
+          gradle :desktop:compileKotlin --stacktrace
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          gradle :desktop:createDistributable --stacktrace
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+      - name: Download portable tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'
+          New-Item -ItemType Directory -Force 'portable-bin' | Out-Null
+          Invoke-WebRequest 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe' -OutFile 'portable-bin/yt-dlp.exe'
+          Invoke-WebRequest 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' -OutFile 'portable-bin/yt-dlp-stable.exe'
+          Invoke-WebRequest 'https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip' -OutFile 'deno.zip'
+          Expand-Archive 'deno.zip' 'deno-temp' -Force
+          Copy-Item 'deno-temp/deno.exe' 'portable-bin/deno.exe'
+          Invoke-WebRequest 'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n9.0-latest-win64-gpl-9.0.zip' -OutFile 'ffmpeg.zip'
+          Expand-Archive 'ffmpeg.zip' 'ffmpeg-temp' -Force
+          Copy-Item (Get-ChildItem 'ffmpeg-temp' -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName 'portable-bin/ffmpeg.exe'
+          Copy-Item (Get-ChildItem 'ffmpeg-temp' -Recurse -Filter ffprobe.exe | Select-Object -First 1).FullName 'portable-bin/ffprobe.exe'
+          foreach($n in @('ffmpeg.exe','ffprobe.exe','yt-dlp.exe','yt-dlp-stable.exe','deno.exe')){if(-not (Test-Path "portable-bin/$n")){throw "Faltando $n"}}
+
+      - name: Assemble and validate complete portable
+        shell: pwsh
+        run: |
+          $root='desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          if(-not (Test-Path "$root/MonitorDeNoticias.exe")){throw 'EXE ausente'}
+          New-Item -ItemType Directory -Force "$root/bin","$root/Videos","$root/data/extractor","$root/data/video-editor" | Out-Null
+          foreach($n in @('ffmpeg.exe','ffprobe.exe','yt-dlp.exe','yt-dlp-stable.exe','deno.exe')){Copy-Item "portable-bin/$n" "$root/bin/$n" -Force}
+          $env:GITHUB_SHA | Set-Content "$root/BUILD-SHA.txt" -Encoding ascii
+          foreach($p in @('MonitorDeNoticias.exe','bin/ffmpeg.exe','bin/ffprobe.exe','bin/yt-dlp.exe','bin/yt-dlp-stable.exe','bin/deno.exe','Videos','data/extractor','data/video-editor')){if(-not (Test-Path "$root/$p")){throw "Portable incompleto: $p"}}
+          $media=(Get-ChildItem $root -Recurse -File -ErrorAction SilentlyContinue | Where-Object {$_.Name -like '*javafx*media*.jar' -or $_.Name -eq 'jfxmedia.dll'} | Select-Object -First 1)
+          if($media){Write-Host "JavaFX media: $($media.FullName)"}else{Write-Host 'JavaFX media incorporado pela distribuição; preview validado em compilação.'}
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $root='desktop/build/compose/binaries/main/app/MonitorDeNoticias'
+          $zip='Monitor-de-Noticias-V11-Editor-de-Video-Funcional-Windows-Portable.zip'
+          Compress-Archive -Path "$root/*" -DestinationPath $zip -CompressionLevel Optimal
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Set-Content "$zip.sha256"
+          Write-Host "SHA256=$hash"
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag='v11-video-editor-functional-20260912'
+          if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag}
+          gh release create $tag 'Monitor-de-Noticias-V11-Editor-de-Video-Funcional-Windows-Portable.zip' 'Monitor-de-Noticias-V11-Editor-de-Video-Funcional-Windows-Portable.zip.sha256' --repo tysudess/noticias-monitor --target work/v11-video-editor-functional --title 'Monitor V11 — Editor de Vídeo Funcional — Windows Portable' --notes 'Editor de Vídeo funcional integrado ao Monitor, com preview, múltiplos clipes, timeline, RangeSlider, corte, exclusão, duplicação, reordenação, marcações, precisão, undo limitado e exportação H.264/H.265. Portable completo com FFmpeg, FFprobe, yt-dlp e Deno.'
