@@ -9,6 +9,7 @@ import javax.swing.SwingUtilities
  * A senha nunca é recebida pelo Monitor; somente o cookie jar retornado pelo
  * helper é protegido com DPAPI pelo GloboplaySessionStore.
  * Legacy contract marker: WebView foi substituído pelo Qt WebEngine/Chromium embutido.
+ * UI do helper: ABRIR GLOBOPLAY | SALVAR SESSÃO E VOLTAR | FECHAR.
  */
 internal class GloboplayLoginWindow(
     private val owner: java.awt.Window?,
