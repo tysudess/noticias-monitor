@@ -23,13 +23,14 @@ import java.io.File
 /**
  * Preview interno do Editor de Vídeo sem JavaFX Media.
  *
- * O JavaFX Media estava abrindo o painel, mas em alguns portables/Windows ficava branco
- * mesmo com MP4/H.264 compatível. Este controlador apenas exibe imagens JPEG geradas
- * pelo FFmpeg no tempo atual. O motor de corte/exportação continua separado e usando
- * o arquivo original.
+ * O JavaFX Media/MediaView ficou instável no portable em alguns Windows. Este controlador
+ * exibe imagens JPEG já geradas pelo FFmpeg em uma sequência de preview. Durante o play
+ * ele não chama FFmpeg; apenas escolhe o frame em cache correspondente ao tempo atual.
+ * O motor de corte/exportação continua separado e usando o arquivo original.
  */
 internal class VideoEditorPreviewController {
     @Volatile private var source: File? = null
+    @Volatile private var sequence: VideoEditorFrameSequence? = null
 
     var frameFile by mutableStateOf<File?>(null)
         private set
@@ -45,10 +46,31 @@ internal class VideoEditorPreviewController {
 
     fun load(file: File) {
         source = file
+        sequence = null
         loaded = true
         frameFile = null
         frameVersion++
         onReady?.invoke(0L)
+    }
+
+    fun loadSequence(file: File, frameSequence: VideoEditorFrameSequence) {
+        source = file
+        sequence = frameSequence
+        loaded = true
+        frameFile = null
+        frameVersion++
+        onReady?.invoke(frameSequence.durationMs)
+        showAt(0L)
+    }
+
+    fun showAt(positionMs: Long) {
+        val selected = sequence?.frameFor(positionMs)
+        if (selected == null) {
+            onPosition?.invoke(positionMs.coerceAtLeast(0L))
+            return
+        }
+        showFrame(selected)
+        onPosition?.invoke(positionMs.coerceAtLeast(0L))
     }
 
     fun showFrame(file: File) {
@@ -56,6 +78,7 @@ internal class VideoEditorPreviewController {
             onError?.invoke("Frame de preview não foi gerado.")
             return
         }
+        if (frameFile?.absolutePath == file.absolutePath && frameFile?.lastModified() == file.lastModified()) return
         frameFile = file
         frameVersion++
     }
@@ -70,6 +93,10 @@ internal class VideoEditorPreviewController {
             onError?.invoke("Nenhum preview carregado para reproduzir.")
             return
         }
+        if (sequence == null) {
+            onError?.invoke("Sequência de preview ainda não foi preparada.")
+            return
+        }
         onPlayingChanged?.invoke(true)
     }
 
@@ -78,12 +105,13 @@ internal class VideoEditorPreviewController {
     }
 
     fun seek(positionMs: Long) {
-        onPosition?.invoke(positionMs.coerceAtLeast(0L))
+        showAt(positionMs.coerceAtLeast(0L))
     }
 
     fun dispose() {
         pause()
         source = null
+        sequence = null
         loaded = false
         clearFrame()
     }
@@ -111,7 +139,7 @@ internal fun VideoEditorPreview(controller: VideoEditorPreviewController, modifi
             )
         } else {
             Text(
-                text = if (controller.loaded) "Gerando preview interno por FFmpeg..." else "Preview aguardando vídeo",
+                text = if (controller.loaded) "Preparando sequência de preview estável..." else "Preview aguardando vídeo",
                 color = Color.White.copy(alpha = 0.72f)
             )
         }
