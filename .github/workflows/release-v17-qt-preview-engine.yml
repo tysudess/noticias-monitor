@@ -23,11 +23,11 @@ jobs:
       - name: Validate proven-engine contract
         shell: pwsh
         run: |
-          $host = Get-Content 'desktop/src/main/python/video_preview_host.py' -Raw
+          $hostSource = Get-Content 'desktop/src/main/python/video_preview_host.py' -Raw
           $controller = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/QtEmbeddedVideoPreviewController.kt' -Raw
           $screen = Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
-          if ($host -notmatch 'QMediaPlayer' -or $host -notmatch 'QAudioOutput' -or $host -notmatch 'QVideoWidget') { throw 'Motor Qt antigo não está preservado.' }
-          if ($host -notmatch 'setInterval\(55\)') { throw 'Timer de 55 ms do motor antigo ausente.' }
+          if ($hostSource -notmatch 'QMediaPlayer' -or $hostSource -notmatch 'QAudioOutput' -or $hostSource -notmatch 'QVideoWidget') { throw 'Motor Qt antigo não está preservado.' }
+          if ($hostSource -notmatch 'setInterval\(55\)') { throw 'Timer de 55 ms do motor antigo ausente.' }
           if ($controller -notmatch 'video-preview-host/video-preview-host.exe') { throw 'Caminho onedir do host ausente.' }
           if ($screen -notmatch 'verticalScroll\(rememberScrollState\(\)\)') { throw 'Layout aprovado perdeu o scroll.' }
           if ($screen -notmatch 'height\(420\.dp\)') { throw 'Preview grande aprovado foi alterado.' }
