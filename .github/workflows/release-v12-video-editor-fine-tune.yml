@@ -1,0 +1,173 @@
+name: Release V12 Video Editor Fine Tune
+
+on:
+  push:
+    branches:
+      - work/v12-video-editor-fine-tune
+    paths:
+      - '.github/workflows/release-v12-video-editor-fine-tune.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v12-video-editor-fine-tune
+          fetch-depth: 0
+
+      - name: Protect functional backend and approved modules
+        shell: pwsh
+        run: |
+          $extractor=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt').Trim()
+          $pdf=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt').Trim()
+          $engine=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorEngine.kt').Trim()
+          $preview=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt').Trim()
+          if($extractor -ne '72ef34a27058d61f001b7236c6b66c80310c0862'){throw "Extrator alterado: $extractor"}
+          if($pdf -ne '5610d1e75a40863864dd0320453c021197ee48c5'){throw "PDF alterado: $pdf"}
+          if($engine -ne 'f7a1a9b278996c928741683c911376f06b6c91b6'){throw "Backend do Editor alterado: $engine"}
+          if($preview -ne '31ba194f865d8538dc26ce9bf41bb9b6e3ed33b4'){throw "Preview funcional alterado: $preview"}
+
+      - name: Apply visual fine tune idempotently
+        shell: pwsh
+        run: |
+          $script=@'
+          from pathlib import Path
+          p=Path('desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt')
+          s=p.read_text(encoding='utf-8')
+          replacements={
+            'Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),\n            verticalArrangement = Arrangement.spacedBy(9.dp)': 'Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp),\n            verticalArrangement = Arrangement.spacedBy(7.dp)',
+            'Modifier.fillMaxWidth().height(314.dp),': 'Modifier.fillMaxWidth().height(280.dp),',
+            'modifier = Modifier.width(330.dp),': 'modifier = Modifier.width(322.dp),',
+            'Modifier.fillMaxWidth().height(108.dp).clip(RoundedCornerShape(15.dp))': 'Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(15.dp))',
+            '.padding(horizontal = 16.dp, vertical = 11.dp)': '.padding(horizontal = 15.dp, vertical = 8.dp)',
+            'Modifier.size(50.dp).clip(RoundedCornerShape(12.dp))': 'Modifier.size(46.dp).clip(RoundedCornerShape(11.dp))',
+            'RoundedCornerShape(12.dp)),\n                contentAlignment = Alignment.Center\n            ) { Icon(Icons.Default.MovieCreation, null, tint = Color(0xFF082033), modifier = Modifier.size(28.dp)) }': 'RoundedCornerShape(11.dp)),\n                contentAlignment = Alignment.Center\n            ) { Icon(Icons.Default.MovieCreation, null, tint = Color(0xFF082033), modifier = Modifier.size(25.dp)) }',
+            'Spacer(Modifier.width(13.dp))': 'Spacer(Modifier.width(12.dp))',
+            'Text("EDITOR DE VÍDEO", color = VEText, fontSize = 28.sp': 'Text("EDITOR DE VÍDEO", color = VEText, fontSize = 26.sp',
+            'color = VEText2, fontSize = 11.sp)': 'color = VEText2, fontSize = 10.sp)',
+            'RadarGraphic(Modifier.align(Alignment.Center).size(103.dp))': 'RadarGraphic(Modifier.align(Alignment.Center).size(88.dp))',
+            'Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)': 'Modifier.align(Alignment.CenterEnd).padding(end = 10.dp)',
+            'ActionButton("ABRIR VÍDEO", Icons.Default.FolderOpen, true, gold = true, width = 145.dp': 'ActionButton("ABRIR VÍDEO", Icons.Default.FolderOpen, true, gold = true, width = 140.dp',
+            'ActionButton("Desfazer (Ctrl+Z)", Icons.Default.Undo, canUndo, width = 145.dp': 'ActionButton("Desfazer (Ctrl+Z)", Icons.Default.Undo, canUndo, width = 140.dp',
+            'ActionButton("Redefinir", Icons.Default.Refresh, true, width = 110.dp': 'ActionButton("Redefinir", Icons.Default.Refresh, true, width = 105.dp',
+            'Spacer(Modifier.height(8.dp))\n        Box(': 'Spacer(Modifier.height(6.dp))\n        Box(',
+            'modifier = Modifier.size(58.dp))': 'modifier = Modifier.size(52.dp))',
+            'Modifier.size(44.dp).clip(CircleShape)': 'Modifier.size(42.dp).clip(CircleShape)',
+            'modifier = Modifier.size(25.dp))': 'modifier = Modifier.size(23.dp))',
+            'modifier = Modifier.width(200.dp))': 'modifier = Modifier.width(180.dp))',
+            'modifier = Modifier.width(82.dp)': 'modifier = Modifier.width(76.dp)',
+            'Text("Defina os pontos de início e fim do trecho desejado.", color = VEMuted, fontSize = 9.sp)\n        Spacer(Modifier.height(7.dp))': 'Text("Defina os pontos de início e fim do trecho desejado.", color = VEMuted, fontSize = 9.sp)\n        Spacer(Modifier.height(5.dp))',
+            'Spacer(Modifier.height(6.dp)); TimeEditor("Fim"': 'Spacer(Modifier.height(5.dp)); TimeEditor("Fim"',
+            'Spacer(Modifier.height(6.dp)); TimeEditor("Duração"': 'Spacer(Modifier.height(5.dp)); TimeEditor("Duração"',
+            'Spacer(Modifier.height(6.dp))\n        Row(horizontalArrangement': 'Spacer(Modifier.height(5.dp))\n        Row(horizontalArrangement',
+            'NeonPanel(Modifier.fillMaxWidth().height(260.dp))': 'NeonPanel(Modifier.fillMaxWidth().height(218.dp))',
+            'modifier = Modifier.width(90.dp)': 'modifier = Modifier.width(82.dp)',
+            'Column(Modifier.fillMaxWidth().height(108.dp))': 'Column(Modifier.fillMaxWidth().height(82.dp))',
+            'Row(Modifier.fillMaxWidth().height(24.dp)': 'Row(Modifier.fillMaxWidth().height(20.dp)',
+            'Modifier.fillMaxWidth().height(34.dp).background(Color(0xFF041B2E)': 'Modifier.fillMaxWidth().height(30.dp).background(Color(0xFF041B2E)',
+            'Box(Modifier.fillMaxWidth().height(34.dp).background(Color(0xFF041B2E)': 'Box(Modifier.fillMaxWidth().height(30.dp).background(Color(0xFF041B2E)',
+            'NeonPanel(Modifier.fillMaxWidth().height(132.dp))': 'NeonPanel(Modifier.fillMaxWidth().height(96.dp))',
+            'modifier = Modifier.width(210.dp).height(48.dp)': 'modifier = Modifier.width(200.dp).height(40.dp)',
+            'Modifier.fillMaxWidth().height(52.dp).onFocusChanged': 'Modifier.fillMaxWidth().height(42.dp).onFocusChanged',
+            'Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xF5073556), Color(0xFA041F36)))).padding(12.dp)': 'Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xF5073556), Color(0xFA041F36)))).padding(10.dp)',
+            'Modifier.fillMaxWidth().height(38.dp) else Modifier.width(width).height(38.dp)': 'Modifier.fillMaxWidth().height(36.dp) else Modifier.width(width).height(36.dp)',
+            'modifier.height(34.dp).clip(RoundedCornerShape(8.dp))': 'modifier.height(30.dp).clip(RoundedCornerShape(8.dp))',
+            'Modifier.height(32.dp).clip(RoundedCornerShape(7.dp))': 'Modifier.height(30.dp).clip(RoundedCornerShape(7.dp))',
+            'Modifier.height(28.dp).widthIn(min=42.dp)': 'Modifier.height(26.dp).widthIn(min=40.dp)',
+            'Modifier.height(36.dp).clip(RoundedCornerShape(8.dp))': 'Modifier.height(32.dp).clip(RoundedCornerShape(8.dp))'
+          }
+          changed=0
+          for old,new in replacements.items():
+              if old in s:
+                  s=s.replace(old,new,1)
+                  changed+=1
+              elif new not in s:
+                  raise SystemExit('Contrato visual não encontrado: '+old[:90])
+          p.write_text(s,encoding='utf-8')
+          print(f'Ajustes visuais aplicados/confirmados: {changed}/{len(replacements)}')
+          '@
+          $script | python -
+
+      - name: Validate visual geometry and frozen backend
+        shell: pwsh
+        run: |
+          $s=Get-Content 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt' -Raw
+          foreach($x in @('height(92.dp)','height(280.dp)','width(322.dp)','height(218.dp)','height(96.dp)','height(42.dp)','height(82.dp)')){if($s -notmatch [regex]::Escape($x)){throw "Geometria não aplicada: $x"}}
+          $engine=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorEngine.kt').Trim()
+          $preview=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoPreviewController.kt').Trim()
+          if($engine -ne 'f7a1a9b278996c928741683c911376f06b6c91b6'){throw 'Backend funcional mudou.'}
+          if($preview -ne '31ba194f865d8538dc26ce9bf41bb9b6e3ed33b4'){throw 'Preview funcional mudou.'}
+
+      - name: Commit fine tune
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add desktop/src/main/kotlin/br/com/monitordenoticias/desktop/VideoEditorScreen.kt
+          git diff --cached --check
+          if(-not (git diff --cached --quiet)){
+            git commit -m 'ui: fine tune Video Editor proportions to reference'
+            git push origin HEAD:work/v12-video-editor-fine-tune
+          }
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build Windows portable base
+        shell: pwsh
+        run: gradle :desktop:createDistributable --stacktrace
+
+      - name: Prepare complete portable tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'
+          New-Item -ItemType Directory -Force portable-bin | Out-Null
+          Invoke-WebRequest 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe' -OutFile 'portable-bin/yt-dlp.exe' -TimeoutSec 180
+          Invoke-WebRequest 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' -OutFile 'portable-bin/yt-dlp-stable.exe' -TimeoutSec 180
+          Invoke-WebRequest 'https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip' -OutFile deno.zip -TimeoutSec 180
+          Expand-Archive deno.zip deno-temp -Force; Copy-Item deno-temp/deno.exe portable-bin/deno.exe -Force
+          $sources=@('https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n9.0-latest-win64-gpl-9.0.zip','https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip')
+          $ok=$false
+          foreach($u in $sources){try{Invoke-WebRequest $u -OutFile ffmpeg.zip -TimeoutSec 240;if((Get-Item ffmpeg.zip).Length -gt 1000000){$ok=$true;break}}catch{Write-Warning $_.Exception.Message}}
+          if(-not $ok){throw 'Falha ao obter FFmpeg.'}
+          Expand-Archive ffmpeg.zip ffmpeg-temp -Force
+          Copy-Item (Get-ChildItem ffmpeg-temp -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName portable-bin/ffmpeg.exe -Force
+          Copy-Item (Get-ChildItem ffmpeg-temp -Recurse -Filter ffprobe.exe | Select-Object -First 1).FullName portable-bin/ffprobe.exe -Force
+
+      - name: Assemble and validate portable
+        shell: pwsh
+        run: |
+          $root='desktop/build/compose/binaries/main/app/MonitorDeNoticias'; $bin=Join-Path $root bin
+          if(-not(Test-Path (Join-Path $root 'MonitorDeNoticias.exe'))){throw 'EXE ausente.'}
+          New-Item -ItemType Directory -Force $bin,(Join-Path $root Videos),(Join-Path $root 'data/extractor'),(Join-Path $root 'data/video-editor') | Out-Null
+          foreach($n in @('yt-dlp.exe','yt-dlp-stable.exe','ffmpeg.exe','ffprobe.exe','deno.exe')){Copy-Item (Join-Path portable-bin $n) (Join-Path $bin $n) -Force;if((Get-Item (Join-Path $bin $n)).Length -lt 100000){throw "Binário inválido: $n"}}
+          $extractor=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/ExtractorVideoScreen.kt').Trim(); if($extractor -ne '72ef34a27058d61f001b7236c6b66c80310c0862'){throw 'Extrator regrediu.'}
+          $pdf=(git hash-object 'desktop/src/main/kotlin/br/com/monitordenoticias/desktop/PdfEditorScreenV2.kt').Trim(); if($pdf -ne '5610d1e75a40863864dd0320453c021197ee48c5'){throw 'PDF regrediu.'}
+
+      - name: Package ZIP and SHA-256
+        shell: pwsh
+        run: |
+          $root='desktop/build/compose/binaries/main/app/MonitorDeNoticias'; $zip='Monitor-de-Noticias-V12-Editor-de-Video-Ajuste-Fino-Windows-Portable.zip'
+          if(Test-Path $zip){Remove-Item $zip -Force}
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower(); "$hash  $zip" | Set-Content "$zip.sha256"; Write-Host "SHA256=$hash"
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag='v12-video-editor-fine-tune-20260912'
+          if(gh release view $tag --repo tysudess/noticias-monitor 2>$null){gh release delete $tag --repo tysudess/noticias-monitor --yes --cleanup-tag}
+          gh release create $tag 'Monitor-de-Noticias-V12-Editor-de-Video-Ajuste-Fino-Windows-Portable.zip' 'Monitor-de-Noticias-V12-Editor-de-Video-Ajuste-Fino-Windows-Portable.zip.sha256' --repo tysudess/noticias-monitor --target work/v12-video-editor-fine-tune --title 'Monitor V12 — Editor de Vídeo Ajuste Fino — Windows Portable' --notes 'Ajuste fino exclusivamente visual do Editor de Vídeo: proporções verticais, cabeçalho, preview, marcação rápida, timeline e exportação compactados para aproximar a referência e manter toda a interface visível. Backend funcional V11, Preview, Extrator e PDF preservados por hash.'
