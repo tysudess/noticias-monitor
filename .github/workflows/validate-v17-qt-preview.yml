@@ -1,25 +1,11 @@
-name: Validate V17 Qt Preview
+name: Archived — Validate V17 Qt Preview
 
 on:
-  push:
-    branches:
-      - work/v17-qt-preview-engine
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  validate:
-    runs-on: windows-latest
+  archived:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
-      - name: Compile Monitor with Qt bridge
-        shell: pwsh
-        run: gradle :desktop:compileKotlin --stacktrace
+      - name: Archived workflow
+        run: echo "Historical V17 validation only. Use Release Windows Portable V19 for current builds."
