@@ -33,6 +33,22 @@ editor_src = EDITOR_SCREEN.read_text(encoding='utf-8')
 editor_src = editor_src.replace('info?.format ?: input.extension.uppercase()', 'input.extension.uppercase()')
 EDITOR_SCREEN.write_text(editor_src, encoding='utf-8')
 
+# Correção de preview: alguns MP4/H.264 passam no ffprobe, mas o JavaFX Media pode ficar em tela branca
+# dependendo do perfil/pixel format. O preview passa sempre por proxy MP4 compatível gerado pelo FFmpeg.
+# O corte/exportação continua usando o arquivo original; somente a reprodução interna usa o proxy.
+engine_src = EDITOR_ENGINE.read_text(encoding='utf-8')
+old_preview_direct = '''            if (canPlayDirectly(input, info)) {
+                update(100, "Preview pronto.")
+                return@runCatching input
+            }
+
+'''
+if old_preview_direct in engine_src:
+    engine_src = engine_src.replace(old_preview_direct, '', 1)
+else:
+    raise SystemExit('Bloco de preview direto não encontrado; integração bloqueada para não adivinhar o motor.')
+EDITOR_ENGINE.write_text(engine_src, encoding='utf-8')
+
 src = DASH.read_text(encoding='utf-8')
 
 if 'VIDEO_EDITOR("Editor de Vídeo"' not in src:
@@ -57,10 +73,12 @@ for path, before in protected_before.items():
 
 updated = DASH.read_text(encoding='utf-8')
 updated_editor = EDITOR_SCREEN.read_text(encoding='utf-8')
+updated_engine = EDITOR_ENGINE.read_text(encoding='utf-8')
 assert 'VIDEO_EDITOR("Editor de Vídeo"' in updated
 assert 'else if (section == V5Section.VIDEO_EDITOR)' in updated
 assert 'VideoEditorScreen { section = V5Section.HOME }' in updated
 assert 'EXTRACTOR("Extrator de Vídeos"' in updated
 assert 'PDF_EDITOR("Editor de PDF"' in updated
 assert 'info?.format' not in updated_editor
-print('Editor de Vídeo integrado em tela cheia; PDF e motor/tela do Extrator permaneceram byte a byte intactos.')
+assert 'return@runCatching input' not in updated_engine
+print('Editor de Vídeo integrado em tela cheia; preview forçado por proxy compatível; PDF e motor/tela do Extrator permaneceram byte a byte intactos.')
